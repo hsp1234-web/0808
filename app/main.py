@@ -87,6 +87,14 @@ async def get_task_status(task_id: str):
     return JSONResponse(content=status_info)
 
 
+@app.get("/api/health")
+async def health_check():
+    """
+    提供一個簡單的健康檢查端點，供看門狗機制或其他監控服務使用。
+    """
+    return {"status": "ok"}
+
+
 # 為了讓 Colab 或其他啟動器可以直接執行，我們可以加入這段
 if __name__ == "__main__":
     import uvicorn
