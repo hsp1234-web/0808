@@ -2,63 +2,85 @@
 import time
 from pathlib import Path
 import os
+import queue
+import logging
 
-# 匯入我們共享的佇列、結果儲存區和轉錄器實例
+# 匯入我們共享的佇列、結果儲存區、轉錄器實例以及新的狀態管理器
 from .queue import task_queue
 from . import result_store
 from .core.transcriber import transcriber_instance
+from .state import update_worker_status
+
+# 為此模組建立一個專用的 logger
+log = logging.getLogger('worker')
 
 def run_worker():
     """
     背景工作者的主函式。
-    它會持續從任務佇列中獲取任務並執行。
+    它會持續從任務佇列中獲取任務、執行，並透過共享狀態模組回報其狀態。
     """
-    print("🚀 [Worker] 背景工作者已啟動，等待轉錄任務...")
+    log.info("背景工作者已啟動，準備與監控核心同步...")
+    update_worker_status('idle') # 初始狀態為閒置
 
     while True:
         try:
-            # 從佇列中獲取任務，這是一個阻塞操作
-            # 如果佇列為空，它會一直等待直到有新項目
-            task_id, file_path_str = task_queue.get()
+            # 從佇列中獲取任務，設定 1 秒的超時
+            # 如果 1 秒內沒有任務，會引發 queue.Empty 異常
+            task_id, file_path_str = task_queue.get(timeout=1)
+
+            # --- 任務處理路徑 ---
+            # 收到任務，立即更新狀態為「忙碌」
+            update_worker_status('busy')
+            log.info(f"收到新任務 (ID: {task_id})，進入忙碌狀態。")
             file_path = Path(file_path_str)
 
-            print(f"👷 [Worker] 收到新任務 (ID: {task_id})，檔案: {file_path.name}")
+            try:
+                # 1. 更新任務狀態為「處理中」
+                result_store.set_status(task_id, "processing")
 
-            # 1. 更新狀態為「處理中」
-            result_store.set_status(task_id, "processing")
+                # 2. 執行耗時的轉錄任務
+                transcript = transcriber_instance.transcribe(file_path)
 
-            # 2. 執行耗時的轉錄任務
-            transcript = transcriber_instance.transcribe(file_path)
+                # 3. 根據轉錄結果更新最終狀態
+                if "轉錄失敗" in transcript:
+                    result_store.set_status(task_id, "error", result=transcript)
+                    log.error(f"任務處理失敗 (ID: {task_id})")
+                else:
+                    result_store.set_status(task_id, "complete", result=transcript)
+                    log.info(f"任務處理完成 (ID: {task_id})")
 
-            # 3. 根據轉錄結果更新最終狀態
-            if "轉錄失敗" in transcript:
-                result_store.set_status(task_id, "error", result=transcript)
-                print(f"❌ [Worker] 任務處理失敗 (ID: {task_id})")
-            else:
-                result_store.set_status(task_id, "complete", result=transcript)
-                print(f"✅ [Worker] 任務處理完成 (ID: {task_id})")
+            except Exception as e:
+                # 處理任務時的內部錯誤
+                log.critical(f"處理任務 {task_id} 時發生致命錯誤: {e}", exc_info=True)
+                if 'task_id' in locals():
+                    result_store.set_status(task_id, "error", result=f"工作者發生未預期錯誤: {e}")
+
+            finally:
+                # 4. 清理臨時檔案
+                try:
+                    if 'file_path' in locals() and file_path.exists():
+                        os.remove(file_path)
+                        log.info(f"已刪除臨時檔案: {file_path.name}")
+                except Exception as e:
+                    log.error(f"刪除臨時檔案 {file_path.name} 時出錯: {e}")
+
+                # 標記任務為完成
+                task_queue.task_done()
+
+                # 任務結束，切換回閒置狀態，準備接收下一個任務
+                log.info(f"任務 {task_id} 流程結束，返回待命狀態。")
+                update_worker_status('idle')
+
+        except queue.Empty:
+            # --- 閒置路徑 ---
+            # 佇列為空，表示工作者目前閒置。更新狀態並發送心跳。
+            update_worker_status('idle')
+            log.info("... 待命中，心跳...")
+            # 迴圈將繼續，1秒後再次檢查佇列
+            continue
 
         except Exception as e:
-            # 全域的錯誤處理，以防萬一
-            task_id_for_error = 'unknown'
-            if 'task_id' in locals():
-                task_id_for_error = task_id
-                result_store.set_status(task_id, "error", result=f"工作者發生未預期錯誤: {e}")
-
-            print(f"💥 [Worker] 處理任務 {task_id_for_error} 時發生致命錯誤: {e}")
-            # 建議在生產環境中加入更詳細的日誌記錄
-
-        finally:
-            # 4. 清理臨時檔案
-            try:
-                if 'file_path' in locals() and file_path.exists():
-                    os.remove(file_path)
-                    print(f"🗑️ [Worker] 已刪除臨時檔案: {file_path.name}")
-            except Exception as e:
-                print(f"🔥 [Worker] 刪除臨時檔案 {file_path.name} 時出錯: {e}")
-
-            # 標記任務為完成 (對於 queue.Queue 不是嚴格必要，但對於 queue.JoinableQueue 是)
-            task_queue.task_done()
-
-            # 短暫休眠，避免在極端情況下空轉CPU
-            time.sleep(0.1)
+            # --- 全域錯誤路徑 ---
+            log.critical(f"發生了非預期的全域錯誤: {e}", exc_info=True)
+            update_worker_status('idle') # 嘗試恢復到閒置狀態
+            time.sleep(1) # 短暫休眠以避免快速的錯誤迴圈

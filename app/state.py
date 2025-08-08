@@ -1,37 +1,49 @@
-# app/state.py
+# coding: utf-8
+"""
+app/state.py
+
+說明:
+本模組用於定義一個全域共享的狀態物件，以便在應用程式的不同部分
+（例如，主監控腳本和背景工作者）之間安全地傳遞資訊。
+
+主要功能：
+- 提供一個集中式的字典來儲存應用程式狀態，如工作者的忙碌/閒置狀態和心跳時間。
+- 使用執行緒鎖 (threading.Lock) 來確保對共享狀態的存取是執行緒安全的，防止競態條件。
+"""
 import time
 import threading
 
-# 建立一個執行緒安全的鎖，用於保護對共享狀態的存取
+# 執行緒鎖，用於保護對 `shared_state` 的並行存取
 state_lock = threading.Lock()
 
-# 共享狀態物件
-# 我們將其初始化為閒置狀態，因為 worker 啟動時還沒有任務
+# 全域共享狀態字典
+# - worker_status: 工作者的目前狀態 ('idle', 'busy', 'starting', 'stopping')
+# - last_heartbeat: 工作者上次回報心跳的 UNIX 時間戳
 shared_state = {
-    # 'IDLE' (閒置) 或 'BUSY' (忙碌)
-    "worker_status": "IDLE",
-    # 記錄 worker 上次活動 (接到任務或回報心跳) 的時間戳
+    "worker_status": "starting",
     "last_heartbeat": time.time()
 }
 
-def update_worker_status(status: str):
+def update_worker_status(status: str, heartbeat: bool = True):
     """
-    安全地更新 worker 的狀態和心跳時間。
+    安全地更新工作者的狀態。
 
     Args:
-        status (str): 新的狀態，應為 'IDLE' 或 'BUSY'。
+        status (str): 新的狀態 ('idle', 'busy', 'stopping')。
+        heartbeat (bool): 是否同時更新心跳時間戳。
     """
+    global shared_state
     with state_lock:
         shared_state["worker_status"] = status
-        shared_state["last_heartbeat"] = time.time()
+        if heartbeat:
+            shared_state["last_heartbeat"] = time.time()
 
-def get_worker_status():
+def get_worker_state() -> dict:
     """
-    安全地讀取 worker 的完整狀態。
+    安全地獲取整個工作者狀態的副本。
 
     Returns:
-        dict: 包含 'worker_status' 和 'last_heartbeat' 的字典。
+        dict: 目前共享狀態的一個淺層副本。
     """
     with state_lock:
-        # 回傳一個副本以防止外部修改
         return shared_state.copy()
