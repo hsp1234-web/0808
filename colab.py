@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V65.5 作戰指揮中心 (加速安裝版)                🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V0.0.8 通用啟動器                              🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V65 更新日誌:                                                      ║
-# ║   - **V65.5**: 增強代理連結獲取邏輯，確保重試機制穩定。            ║
-# ║   - **V65.4**: 動態尋找可用埠號，解決「地址已被使用」的錯誤。        ║
-# ║   - **V65.3**: 改用 `uv venv` 建立虛擬環境，解決 Colab `ensurepip` 問題。║
-# ║   - **V65.2**: 修正 `subprocess` 中的路徑解析，改用相對路徑。        ║
-# ║   - **V65.1**: 增加 `git clone` 前的強制刪除，避免路徑已存在錯誤。   ║
-# ║   - **V65.0**: 引入核心啟動器 `scripts/launch.py`，統一執行環境。      ║
+# ║ - V0.0.8 更新日誌:                                                   ║
+# ║   - **架構**：實現啟動器與後端應用解耦。                           ║
+# ║   - **穩定性**：修復代理連結競爭條件 Bug。                         ║
+# ║   - **通用性**：移除所有硬編碼的依賴安裝，交由後端腳本自我管理。   ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V65.5 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 - V0.0.8 通用啟動器 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -189,22 +186,7 @@ class ServerManager:
             result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
 
-            self._log_manager.log("INFO", "📦 正在安裝核心依賴 (from requirements.txt)...")
-            pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"]
-            pip_result = subprocess.run(pip_command, cwd=str(project_path), check=False, capture_output=True, text=True, encoding='utf-8')
-            if pip_result.returncode != 0:
-                self._log_manager.log("CRITICAL", f"核心依賴安裝失敗:\n{pip_result.stderr}")
-                return
-            self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
-
-            self._log_manager.log("INFO", "📦 正在安裝轉錄工作者依賴 (from requirements-worker.txt)...")
-            pip_worker_command = [sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-worker.txt"]
-            pip_worker_result = subprocess.run(pip_worker_command, cwd=str(project_path), check=False, capture_output=True, text=True, encoding='utf-8')
-            if pip_worker_result.returncode != 0:
-                self._log_manager.log("CRITICAL", f"轉錄工作者依賴安裝失敗:\n{pip_worker_result.stderr}")
-                return
-            self._log_manager.log("SUCCESS", "✅ 轉錄工作者依賴安裝完成。")
-
+            self._log_manager.log("INFO", "✅ Git 倉庫下載完成。依賴安裝將由啟動器處理。")
             launcher_script_path = project_path / "scripts" / "launch.py"
             if not launcher_script_path.is_file(): self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return
 
@@ -214,12 +196,20 @@ class ServerManager:
                 launch_command, cwd=str(project_path),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
-            self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
+            self._log_manager.log("INFO", f"子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
             for line in iter(self.server_process.stdout.readline, ''):
                 if self._stop_event.is_set(): break
                 self._log_manager.log("DEBUG", line.strip())
-                if "Uvicorn running on" in line:
-                    self._stats['status'] = "✅ 伺服器運行中"; self._log_manager.log("SUCCESS", "伺服器已就緒！"); self.server_ready_event.set()
+                if "PHOENIX_SERVER_READY_FOR_COLAB" in line:
+                    self._stats['status'] = "✅ 伺服器運行中"; self._log_manager.log("SUCCESS", "伺服器已就緒！收到握手信號！"); self.server_ready_event.set()
+                    # 收到信號後，我們不再需要監聽此進程的輸出，但要讓它繼續運行
+                    break
+
+            # 移出迴圈，以處理信號收到後或迴圈結束後的情況
+            # 如果事件未設定，表示進程可能在發送信號前就已終止
+            if not self.server_ready_event.is_set():
+                 self._log_manager.log("WARN", "子進程已終止，但未收到就緒信號。")
+
             self.server_process.wait()
             if not self.server_ready_event.is_set(): self._stats['status'] = "❌ 伺服器啟動失敗"; self._log_manager.log("CRITICAL", "伺服器進程在就緒前已終止。")
         except Exception as e: self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")

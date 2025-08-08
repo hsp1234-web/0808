@@ -112,9 +112,24 @@ def main():
     parser.add_argument("--exit-after-test", action="store_true", help="測試完成後自動關閉伺服器 (僅在 --run-test 啟用時有效)。")
     args = parser.parse_args()
 
-    log.info("==================================================")
-    log.info("🚀 正在啟動核心服務 (單進程，多執行緒模式)...")
-    log.info("==================================================")
+    # --- 自我依賴安裝 ---
+    log.info("--- [1/4] 正在檢查並安裝依賴 ---")
+    try:
+        log.info("📦 正在安裝核心依賴 (from requirements.txt)...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], check=True)
+        log.info("✅ 核心依賴安裝完成。")
+
+        log.info("📦 正在安裝轉錄工作者依賴 (from requirements-worker.txt)...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-worker.txt"], check=True)
+        log.info("✅ 轉錄工作者依賴安裝完成。")
+    except subprocess.CalledProcessError as e:
+        log.critical(f"❌ 依賴安裝失敗，請檢查 requirements 檔案。錯誤: {e}")
+        sys.exit(1)
+    except FileNotFoundError:
+        log.critical("❌ 找不到 requirements.txt 或 requirements-worker.txt，無法安裝依賴。")
+        sys.exit(1)
+
+    log.info("--- [2/4] 正在啟動核心服務 (單進程，多執行緒模式)...")
 
     # 1. 啟動背景工作者執行緒
     worker_thread = threading.Thread(target=run_worker, name="WorkerThread", daemon=True)
@@ -140,6 +155,9 @@ def main():
     if not wait_for_server_ready(args.port):
         log.critical("無法啟動伺服器，正在終止應用程式。")
         sys.exit(1)
+
+    # --- 發送就緒信號給 Colab ---
+    print("PHOENIX_SERVER_READY_FOR_COLAB", flush=True)
 
     # 5. 如果使用者指定，則執行端對端測試
     if args.run_test:
