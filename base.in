@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+pytz
+psutil
+sqlalchemy
+pyyaml
+aiofiles
+faster-whisper
+ffmpeg-python
+python-multipart
+typer
+duckdb
+fredapi
+yfinance
