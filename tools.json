@@ -1,0 +1,9 @@
+{
+    "transcriber": {
+        "description": "The core speech-to-text transcription tool using faster-whisper.",
+        "dependencies": [
+            "faster-whisper",
+            "opencc-python-reimplemented"
+        ]
+    }
+}
