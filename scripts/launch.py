@@ -6,6 +6,9 @@ import threading
 import time
 import logging
 import argparse
+import subprocess
+import socket
+
 # --- 配置日誌系統 ---
 # 設定日誌記錄器，確保我們的日誌能和 Uvicorn 的日誌一起穩定輸出。
 logging.basicConfig(
@@ -14,7 +17,7 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 # 為我們的腳本建立一個專用的 logger
-log = logging.getLogger('local_run')
+log = logging.getLogger('launch')
 
 
 # --- 設定 sys.path ---
@@ -26,6 +29,20 @@ if project_root not in sys.path:
 # --- 現在可以安全地匯入 ---
 from app.state import get_worker_state
 from app.worker import run_worker
+
+def wait_for_server_ready(port: int, timeout: int = 15) -> bool:
+    """等待 Uvicorn 伺服器就緒，直到可以建立連線。"""
+    log.info(f"正在等待伺服器在埠號 {port} 上就緒...")
+    start_time = time.monotonic()
+    while time.monotonic() - start_time < timeout:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                log.info("✅ 伺服器已就緒！")
+                return True
+        except (socket.timeout, ConnectionRefusedError):
+            time.sleep(0.5)
+    log.error(f"❌ 等待伺服器就緒超時 ({timeout}秒)。")
+    return False
 
 def monitor_worker_thread():
     """
@@ -87,9 +104,12 @@ def main():
     """
     應用程式主入口。
     採用「單一進程，多執行緒」架構，穩定地啟動所有服務。
+    可以選擇性地執行端對端測試。
     """
-    parser = argparse.ArgumentParser(description="啟動核心服務與 Uvicorn 伺服器。")
+    parser = argparse.ArgumentParser(description="啟動核心服務、Uvicorn 伺服器並可選擇性執行測試。")
     parser.add_argument("--port", type=int, default=8000, help="Uvicorn 伺服器要監聽的埠號。")
+    parser.add_argument("--run-test", action="store_true", help="啟動後執行端對端測試。")
+    parser.add_argument("--exit-after-test", action="store_true", help="測試完成後自動關閉伺服器 (僅在 --run-test 啟用時有效)。")
     args = parser.parse_args()
 
     log.info("==================================================")
@@ -97,7 +117,6 @@ def main():
     log.info("==================================================")
 
     # 1. 啟動背景工作者執行緒
-    # daemon=True 確保主執行緒退出時，此執行緒也會被自動終止
     worker_thread = threading.Thread(target=run_worker, name="WorkerThread", daemon=True)
     worker_thread.start()
     log.info("背景工作者 (Worker) 執行緒已啟動。")
@@ -107,25 +126,59 @@ def main():
     monitor_thread.start()
     log.info("智慧監控 (Watchdog) 執行緒已啟動。")
 
-    # 3. 在主執行緒中啟動 Uvicorn 伺服器
-    # 這是一個阻塞操作，它會佔據主執行緒，直到使用者按下 Ctrl+C
-    log.info(f"準備在主執行緒中以埠號 {args.port} 啟動 Uvicorn 伺服器...")
-    log.info("使用 Ctrl+C 來停止所有服務。")
+    # 3. 在背景執行緒中啟動 Uvicorn 伺服器
+    server_thread = threading.Thread(
+        target=uvicorn.run,
+        kwargs={"app": "app.main:app", "host": "0.0.0.0", "port": args.port, "log_level": "info"},
+        daemon=True,
+        name="UvicornThread"
+    )
+    server_thread.start()
+    log.info(f"Uvicorn 伺服器執行緒已啟動，準備在埠號 {args.port} 上監聽。")
 
-    try:
-        uvicorn.run(
-            "app.main:app",
-            host="0.0.0.0",
-            port=args.port,
-            log_level="info"
+    # 4. 等待伺服器就緒
+    if not wait_for_server_ready(args.port):
+        log.critical("無法啟動伺服器，正在終止應用程式。")
+        sys.exit(1)
+
+    # 5. 如果使用者指定，則執行端對端測試
+    if args.run_test:
+        log.info("--- [開始執行端對端測試] ---")
+        test_script_path = os.path.join(project_root, "scripts", "run_e2e_test.py")
+        result = subprocess.run(
+            [sys.executable, test_script_path, "--port", str(args.port)],
+            capture_output=True, text=True, encoding='utf-8'
         )
+
+        # 將測試腳本的輸出直接打印到主控台
+        print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
+
+        if result.returncode == 0:
+            log.info("--- [端對端測試成功通過] ---")
+            if args.exit_after_test:
+                log.info("測試成功，根據 --exit-after-test 選項，應用程式將在 3 秒後關閉。")
+                time.sleep(3)
+                sys.exit(0)
+        else:
+            log.critical("--- [端對端測試失敗] ---")
+            if args.exit_after_test:
+                log.error("測試失敗，根據 --exit-after-test 選項，應用程式將在 3 秒後關閉。")
+                time.sleep(3)
+                sys.exit(1)
+
+    # 6. 如果沒有自動退出，則保持主執行緒存活，等待使用者中斷
+    log.info("✅ 所有服務已啟動。應用程式正在運行...")
+    log.info("使用 Ctrl+C 來停止所有服務。")
+    try:
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        log.info("收到使用者中斷信號 (Ctrl+C)。")
-    except Exception as e:
-        log.error(f"Uvicorn 伺服器發生未預期錯誤: {e}", exc_info=True)
+        log.info("\n收到使用者中斷信號 (Ctrl+C)... 正在關閉應用程式。")
     finally:
-        log.info("應用程式正在關閉。再見！")
-        # 由於背景執行緒都是 daemon，它們會隨主執行緒的退出而自動終止，無需手動管理。
+        log.info("應用程式已關閉。再見！")
+        # 由於所有背景執行緒都是 daemon，它們會隨主執行緒的退出而自動終止。
 
 if __name__ == "__main__":
     main()
