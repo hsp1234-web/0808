@@ -16,14 +16,19 @@ from typing import Dict, Any
 _results: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
 
-def set_status(task_id: str, status: str, result: Any = None):
-    """設定指定任務的狀態和結果。"""
+def set_status(task_id: str, status: str, result: Any = None, detail: str = None):
+    """設定指定任務的狀態、結果和詳細資訊。"""
     with _lock:
         if task_id not in _results:
-            _results[task_id] = {}
+            _results[task_id] = {"status": "pending", "result": None, "detail": ""}
+
         _results[task_id]['status'] = status
+
         if result is not None:
             _results[task_id]['result'] = result
+
+        if detail is not None:
+            _results[task_id]['detail'] = detail
 
 def get_status(task_id: str) -> Dict[str, Any] | None:
     """取得指定任務的狀態和結果。"""

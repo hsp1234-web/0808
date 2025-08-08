@@ -92,43 +92,102 @@
         </header>
 
         <!-- 主工作區 -->
-        <div class="space-y-6">
-            <!-- 上傳與設定區 -->
-            <label id="upload-area" for="audio-file-input" class="phoenix-glass-effect rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 dark:hover:border-sky-500 transition-all border-2 border-dashed border-gray-400/50 dark:border-gray-600/50">
-                <i data-lucide="upload" class="lucide lucide-upload text-5xl phoenix-gemini-gradient-text mb-4"></i>
-                <h2 id="filename-display" class="text-xl font-semibold text-[color:var(--text-color)] mb-2">點擊此處或拖曳檔案以上傳</h2>
-                <p id="instruction-text" class="text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等音訊格式</p>
-                <input type="file" id="audio-file-input" accept="audio/*" class="hidden">
-            </label>
-
-            <!-- 開始轉錄按鈕 -->
-            <div class="text-center">
-                <button id="start-transcription-btn" disabled class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg inline-flex items-center transition-all text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none">
-                    <i data-lucide="play-circle" class="w-6 h-6 mr-3"></i>
-                    <span>>> 開始轉錄 <<</span>
-                </button>
+        <div>
+            <!-- 分頁導覽 -->
+            <div class="mb-4 border-b border-gray-200 dark:border-gray-700">
+                <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="tab-navigation" role="tablist">
+                    <li role="presentation">
+                        <button class="inline-block p-4 border-b-2 rounded-t-lg" id="console-tab" type="button" role="tab">主控台</button>
+                    </li>
+                    <li role="presentation">
+                        <button class="inline-block p-4 border-b-2 rounded-t-lg" id="settings-tab" type="button" role="tab">詳細設定</button>
+                    </li>
+                </ul>
             </div>
 
-            <!-- 結果顯示區 -->
-            <div id="result-section" class="phoenix-glass-effect rounded-xl flex flex-col min-h-[300px]">
-                <div class="p-4 flex-grow overflow-y-auto">
-                    <pre id="transcript-output" class="whitespace-pre-wrap text-[color:var(--text-color)] leading-relaxed">請先上傳音訊檔案，然後點擊「開始轉錄」。</pre>
-                </div>
-                <!-- 底部控制列 -->
-                <div class="p-3 border-t dark:border-gray-700/50 flex items-center justify-between gap-4">
-                    <div id="status-indicator" class="text-sm font-semibold text-gray-500 flex items-center gap-2">
-                       <i data-lucide="info" class="w-4 h-4"></i>
-                       <span>待命中</span>
+            <!-- 分頁內容 -->
+            <div id="tab-content">
+                <!-- 主控台分頁 -->
+                <div id="console-panel" role="tabpanel" aria-labelledby="console-tab">
+                    <div class="space-y-6">
+                        <!-- 上傳與設定區 -->
+                        <label id="upload-area" for="audio-file-input" class="phoenix-glass-effect rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 dark:hover:border-sky-500 transition-all border-2 border-dashed border-gray-400/50 dark:border-gray-600/50">
+                            <i data-lucide="upload" class="lucide lucide-upload text-5xl phoenix-gemini-gradient-text mb-4"></i>
+                            <h2 id="filename-display" class="text-xl font-semibold text-[color:var(--text-color)] mb-2">點擊此處或拖曳檔案以上傳</h2>
+                            <p id="instruction-text" class="text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等音訊格式</p>
+                            <input type="file" id="audio-file-input" accept="audio/*" class="hidden">
+                        </label>
+
+                        <!-- 開始轉錄按鈕 -->
+                        <div class="text-center">
+                            <button id="start-transcription-btn" disabled class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg inline-flex items-center transition-all text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none">
+                                <i data-lucide="play-circle" class="w-6 h-6 mr-3"></i>
+                                <span>>> 開始轉錄 <<</span>
+                            </button>
+                        </div>
+
+                        <!-- 進度顯示區 -->
+                        <div id="progress-section" class="space-y-2 hidden pt-4">
+                            <div class="flex justify-between mb-1">
+                                <span id="progress-text" class="text-base font-medium text-blue-700 dark:text-white">處理中...</span>
+                                <span id="progress-percentage" class="text-sm font-medium text-blue-700 dark:text-white">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 結果顯示區 -->
+                        <div id="result-section" class="phoenix-glass-effect rounded-xl flex flex-col min-h-[300px]">
+                            <div class="p-4 flex-grow overflow-y-auto">
+                                <pre id="transcript-output" class="whitespace-pre-wrap text-[color:var(--text-color)] leading-relaxed">請先上傳音訊檔案，然後點擊「開始轉錄」。</pre>
+                            </div>
+                            <!-- 底部控制列 -->
+                            <div class="p-3 border-t dark:border-gray-700/50 flex items-center justify-between gap-4">
+                                <div id="status-indicator" class="text-sm font-semibold text-gray-500 flex items-center gap-2">
+                                   <i data-lucide="info" class="w-4 h-4"></i>
+                                   <span>待命中</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                     <button id="copy-btn" class="bg-gray-200 dark:bg-gray-700 hover:bg-sky-500/80 dark:hover:bg-sky-500 text-gray-800 dark:text-gray-100 font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                                        <i data-lucide="copy" class="lucide lucide-copy w-4 h-4 mr-2"></i>
+                                        <span>複製</span>
+                                    </button>
+                                    <button id="save-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                                        <i data-lucide="save" class="lucide lucide-save w-4 h-4 mr-2"></i>
+                                        <span>儲存</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                         <button id="copy-btn" class="bg-gray-200 dark:bg-gray-700 hover:bg-sky-500/80 dark:hover:bg-sky-500 text-gray-800 dark:text-gray-100 font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
-                            <i data-lucide="copy" class="lucide lucide-copy w-4 h-4 mr-2"></i>
-                            <span>複製</span>
-                        </button>
-                        <button id="save-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
-                            <i data-lucide="save" class="lucide lucide-save w-4 h-4 mr-2"></i>
-                            <span>儲存</span>
-                        </button>
+                </div>
+
+                <!-- 詳細設定分頁 -->
+                <div id="settings-panel" class="hidden" role="tabpanel" aria-labelledby="settings-tab">
+                    <div class="phoenix-glass-effect rounded-xl p-6 space-y-6">
+                        <div>
+                            <label for="model-select" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">模型選擇 (Model)</label>
+                            <select id="model-select" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+                                <option value="tiny">Tiny (最快速度 / Fastest)</option>
+                                <option value="base">Base (通用基礎 / General)</option>
+                                <option value="small">Small (速度與品質均衡 / Balanced)</option>
+                                <option value="medium" selected>Medium (推薦 / Recommended)</option>
+                                <option value="large">Large (最高品質 / Highest Quality)</option>
+                            </select>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">模型越大，品質越高，但處理速度越慢。Medium 為多數場景下的推薦選項。</p>
+                        </div>
+                        <div>
+                            <label for="language-select" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">語言選擇 (Language)</label>
+                            <select id="language-select" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+                                <option value="zh" selected>繁體中文 (Traditional Chinese)</option>
+                                <option value="en">English</option>
+                                <option value="ja">日本語 (Japanese)</option>
+                                <option value="ko">한국어 (Korean)</option>
+                                <option value="yue">粵語 (Cantonese)</option>
+                            </select>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">指定音訊中的主要語言以提高辨識準確率。若不確定，可留空由模型自動偵測。</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -147,6 +206,12 @@
         const FONT_LEVELS = [50, 60, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200];
         let currentFontLevelIndex = 5;
 
+        // --- 通用日誌函式 ---
+        function logEvent(message, data = {}) {
+            const timestamp = new Date().toISOString();
+            console.log(`[${timestamp}] LOG: ${message}`, data);
+        }
+
         function applyTheme(theme) {
             htmlEl.classList.toggle('dark', theme === 'dark');
             localStorage.setItem('color-theme', theme);
@@ -164,12 +229,19 @@
         }
 
         themeToggleBtn.addEventListener('click', () => {
-            const isDark = htmlEl.classList.toggle('dark');
-            applyTheme(isDark ? 'dark' : 'light');
+            const isDark = htmlEl.classList.contains('dark');
+            logEvent(`Theme toggle clicked. New theme: ${!isDark ? 'dark' : 'light'}`);
+            applyTheme(!isDark ? 'dark' : 'light');
         });
 
-        fontIncreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex + 1));
-        fontDecreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex - 1));
+        fontIncreaseBtn.addEventListener('click', () => {
+            logEvent('Font increase clicked.');
+            applyFontSize(currentFontLevelIndex + 1);
+        });
+        fontDecreaseBtn.addEventListener('click', () => {
+            logEvent('Font decrease clicked.');
+            applyFontSize(currentFontLevelIndex - 1)
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             const savedTheme = localStorage.getItem('color-theme');
@@ -193,9 +265,54 @@
             const statusIndicator = document.getElementById('status-indicator');
             const copyBtn = document.getElementById('copy-btn');
             const saveBtn = document.getElementById('save-btn');
+            const modelSelect = document.getElementById('model-select');
+            const languageSelect = document.getElementById('language-select');
 
             let selectedFile = null;
             let pollingInterval = null;
+
+            // --- 通用日誌函式 (再次宣告以確保在此 script block 中可用) ---
+            function logEvent(message, data = {}) {
+                const timestamp = new Date().toISOString();
+                console.log(`[${timestamp}] LOG: ${message}`, data);
+            }
+
+            // --- 分頁介面邏輯 ---
+            const consoleTab = document.getElementById('console-tab');
+            const settingsTab = document.getElementById('settings-tab');
+            const consolePanel = document.getElementById('console-panel');
+            const settingsPanel = document.getElementById('settings-panel');
+            const tabs = [
+                { button: consoleTab, panel: consolePanel, name: '主控台' },
+                { button: settingsTab, panel: settingsPanel, name: '詳細設定' }
+            ];
+            function switchTab(selectedTab) {
+                tabs.forEach(tab => {
+                    const isSelected = tab.button === selectedTab;
+                    tab.panel.classList.toggle('hidden', !isSelected);
+                    tab.button.setAttribute('aria-selected', isSelected);
+                    // Active styles
+                    tab.button.classList.toggle('text-blue-600', isSelected);
+                    tab.button.classList.toggle('border-blue-600', isSelected);
+                    tab.button.classList.toggle('dark:text-blue-500', isSelected);
+                    tab.button.classList.toggle('dark:border-blue-500', isSelected);
+                    // Inactive styles
+                    tab.button.classList.toggle('text-gray-500', !isSelected);
+                    tab.button.classList.toggle('border-transparent', !isSelected);
+                    tab.button.classList.toggle('hover:text-gray-600', !isSelected);
+                    tab.button.classList.toggle('hover:border-gray-300', !isSelected);
+                    tab.button.classList.toggle('dark:text-gray-400', !isSelected);
+                    tab.button.classList.toggle('dark:hover:text-gray-300', !isSelected);
+                });
+            }
+            tabs.forEach(tab => {
+                tab.button.addEventListener('click', () => {
+                    logEvent(`Tab clicked: ${tab.name}`);
+                    switchTab(tab.button);
+                });
+            });
+            // 初始顯示主控台
+            switchTab(consoleTab);
 
             // --- 狀態更新函式 ---
             function updateStatus(status, icon = 'info', color = 'text-gray-500') {
@@ -206,29 +323,45 @@
 
             // --- 輪詢函式 ---
             function pollStatus(taskId) {
-                // 清除舊的定時器
-                if (pollingInterval) {
-                    clearInterval(pollingInterval);
-                }
+                const progressSection = document.getElementById('progress-section');
+                const progressBar = document.getElementById('progress-bar');
+                const progressText = document.getElementById('progress-text');
+                const progressPercentage = document.getElementById('progress-percentage');
 
+                if (pollingInterval) { clearInterval(pollingInterval); }
                 pollingInterval = setInterval(async () => {
                     try {
                         const response = await fetch(`/api/status/${taskId}`);
                         if (!response.ok) {
-                            // 如果查詢失敗，但不是 404，就繼續輪詢
                             console.warn(`狀態查詢失敗 (HTTP ${response.status})，將於下一週期重試。`);
                             return;
                         }
-
                         const data = await response.json();
+                        const detail = data.detail || '';
 
                         switch (data.status) {
                             case 'pending':
                                 updateStatus('排隊等待中...', 'clock', 'text-gray-500');
+                                progressText.textContent = '排隊等待中...';
                                 break;
                             case 'processing':
-                                updateStatus('正在轉錄...', 'bot', 'text-purple-500');
-                                transcriptOutput.textContent = '模型正在處理中，請稍候...';
+                                updateStatus(`處理中: ${detail}`, 'bot', 'text-purple-500');
+                                transcriptOutput.textContent = `模型正在處理中，請稍候...\n詳細狀態: ${detail}`;
+                                progressText.textContent = detail;
+
+                                const progressMatch = detail.match(/(\d+)\s*\/\s*(\d+)/);
+                                if (progressMatch) {
+                                    const current = parseInt(progressMatch[1], 10);
+                                    const total = parseInt(progressMatch[2], 10);
+                                    const percentage = Math.round((current / total) * 100);
+                                    progressBar.style.width = `${percentage}%`;
+                                    progressPercentage.textContent = `${percentage}%`;
+                                } else {
+                                    // Indeterminate state for statuses without numbers
+                                    progressBar.style.width = '100%';
+                                    progressBar.classList.add('animate-pulse');
+                                    progressPercentage.textContent = '--%';
+                                }
                                 break;
                             case 'complete':
                                 clearInterval(pollingInterval);
@@ -236,6 +369,7 @@
                                 updateStatus('轉錄完成', 'check-circle-2', 'text-green-500');
                                 transcriptOutput.textContent = data.result || '轉錄完成，但未收到內容。';
                                 startBtn.disabled = false;
+                                progressSection.classList.add('hidden');
                                 break;
                             case 'error':
                                 clearInterval(pollingInterval);
@@ -243,22 +377,21 @@
                                 updateStatus('錯誤', 'x-circle', 'text-red-500');
                                 transcriptOutput.textContent = `轉錄失敗：\n${data.result}`;
                                 startBtn.disabled = false;
+                                progressSection.classList.add('hidden');
                                 break;
                         }
                     } catch (error) {
                         console.error('輪詢狀態時發生網路錯誤:', error);
-                        // 網路錯誤時可以選擇停止輪詢或繼續
-                        // clearInterval(pollingInterval);
-                        // updateStatus('網路錯誤', 'wifi-off', 'text-red-500');
-                        // startBtn.disabled = false;
                     }
-                }, 2000); // 每 2 秒查詢一次
+                }, 2000);
             }
 
             // --- 事件監聽器 ---
             fileInput.addEventListener('change', (event) => {
                 selectedFile = event.target.files[0];
                 if (selectedFile) {
+                    logEvent('File selected.', { name: selectedFile.name, size: selectedFile.size });
+                    document.getElementById('progress-section').classList.add('hidden');
                     filenameDisplay.textContent = selectedFile.name;
                     instructionText.textContent = `檔案大小: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`;
                     startBtn.disabled = false;
@@ -272,6 +405,22 @@
                     alert('請先選擇一個音訊檔案！');
                     return;
                 }
+                logEvent('Start Transcription button clicked.', {
+                    model: modelSelect.value,
+                    language: languageSelect.value
+                });
+
+                // --- Reset and show progress bar ---
+                const progressSection = document.getElementById('progress-section');
+                const progressBar = document.getElementById('progress-bar');
+                const progressText = document.getElementById('progress-text');
+                const progressPercentage = document.getElementById('progress-percentage');
+
+                progressBar.style.width = '0%';
+                progressPercentage.textContent = '0%';
+                progressText.textContent = '準備開始...';
+                progressBar.classList.remove('animate-pulse');
+                progressSection.classList.remove('hidden');
 
                 startBtn.disabled = true;
                 updateStatus('正在上傳...', 'upload-cloud', 'text-gray-500');
@@ -279,6 +428,8 @@
 
                 const formData = new FormData();
                 formData.append('file', selectedFile);
+                formData.append('model_size', modelSelect.value);
+                formData.append('language', languageSelect.value);
 
                 try {
                     const response = await fetch('/api/transcribe', {
@@ -292,16 +443,16 @@
                     }
 
                     const result = await response.json();
-
                     if (result.task_id) {
+                        logEvent('Transcription task submitted successfully.', { taskId: result.task_id });
                         updateStatus('任務已提交', 'send', 'text-blue-500');
                         transcriptOutput.textContent = '任務已成功提交，正在等待背景工作者處理...';
                         pollStatus(result.task_id);
                     } else {
                         throw new Error('後端未返回有效的任務 ID。');
                     }
-
                 } catch (error) {
+                    logEvent('Error submitting transcription task.', { error: error.message });
                     console.error('提交轉錄任務失敗:', error);
                     transcriptOutput.textContent = `提交失敗：\n${error.message}`;
                     updateStatus('提交錯誤', 'x-circle', 'text-red-500');
@@ -310,6 +461,7 @@
             });
 
             copyBtn.addEventListener('click', () => {
+                logEvent('Copy button clicked.');
                 const textToCopy = transcriptOutput.textContent;
                 if (!textToCopy) return;
                 navigator.clipboard.writeText(textToCopy).then(() => {
@@ -317,10 +469,15 @@
                     copyBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i><span>已複製！</span>`;
                     lucide.createIcons();
                     setTimeout(() => { copyBtn.innerHTML = originalHTML; lucide.createIcons(); }, 2000);
-                }).catch(err => { console.error('複製失敗:', err); alert('複製失敗，請手動複製。'); });
+                }).catch(err => {
+                    logEvent('Copy to clipboard failed.', { error: err });
+                    console.error('複製失敗:', err);
+                    alert('複製失敗，請手動複製。');
+                });
             });
 
             saveBtn.addEventListener('click', () => {
+                logEvent('Save button clicked.');
                 const textToDownload = transcriptOutput.textContent;
                 if (!textToDownload) return;
                 const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });

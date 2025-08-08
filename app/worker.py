@@ -5,11 +5,12 @@ import os
 import queue
 import logging
 
-# 匯入我們共享的佇列、結果儲存區、轉錄器實例以及新的狀態管理器
+# 匯入我們共享的佇列、結果儲存區、以及新的狀態管理器
 from .queue import task_queue
 from . import result_store
-from .core.transcriber import transcriber_instance
 from .state import update_worker_status
+# 現在我們可以安全地匯入單例，它會根據環境變數自動成為真實的或模擬的實例
+from .core.transcriber import transcriber_instance
 
 # 為此模組建立一個專用的 logger
 log = logging.getLogger('worker')
@@ -19,31 +20,39 @@ def run_worker():
     背景工作者的主函式。
     它會持續從任務佇列中獲取任務、執行，並透過共享狀態模組回報其狀態。
     """
+    # For clarity, we'll assign the global instance to a local variable.
+    # This instance will be either a real or a mock transcriber based on the env var.
+    transcriber = transcriber_instance
+
+    if os.environ.get("MOCK_TRANSCRIBER") == "true":
+        log.warning("⚠️ 警告：工作者正在以「模擬模式」運行！將不會執行任何真實的 AI 推理。")
+
     log.info("背景工作者已啟動，準備與監控核心同步...")
     update_worker_status('idle') # 初始狀態為閒置
 
     while True:
         try:
-            # 從佇列中獲取任務，設定 1 秒的超時
-            # 新的任務格式: (task_id, file_path, model_size, language)
             task_id, file_path_str, model_size, language = task_queue.get(timeout=1)
 
-            # --- 任務處理路徑 ---
-            # 收到任務，立即更新狀態為「忙碌」
             update_worker_status('busy')
             log.warning(f"🚚 收到新任務 (ID: {task_id})，進入忙碌狀態。")
             file_path = Path(file_path_str)
 
             try:
-                # 1. 更新任務狀態為「處理中」
-                result_store.set_status(task_id, "processing")
-                log.info(f"正在處理任務 {task_id} (模型: {model_size}, 語言: {language})...")
+                # 定義一個回呼函式，用於從轉錄器接收進度更新
+                def status_updater(detail_message: str):
+                    log.info(f"進度更新 (ID: {task_id}): {detail_message}")
+                    result_store.set_status(task_id, "processing", detail=detail_message)
 
-                # 2. 執行耗時的轉錄任務，傳入選項
-                transcript = transcriber_instance.transcribe(
+                # 1. 更新任務狀態為「處理中」，並傳入第一個狀態
+                status_updater("任務準備中...")
+
+                # 2. 執行耗時的轉錄任務，並傳入回呼函式
+                transcript = transcriber.transcribe(
                     audio_path=file_path,
                     model_size=model_size,
-                    language=language
+                    language=language,
+                    status_callback=status_updater
                 )
 
                 # 3. 根據轉錄結果更新最終狀態

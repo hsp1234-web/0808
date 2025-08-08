@@ -162,7 +162,25 @@ def main():
     # 5. 如果使用者指定，則執行端對端測試
     if args.run_test:
         log.info("--- [開始執行端對端測試] ---")
+        log.warning("⚠️ 偵測到 --run-test，將在模擬模式下執行測試。")
+
+        # 設定環境變數，讓工作者使用 MockTranscriber
+        os.environ['MOCK_TRANSCRIBER'] = 'true'
+
+        # --- 強制重載模組 ---
+        # 這是為了解決 Python 匯入快取導致的環境變數讀取問題。
+        # 我們強制 Python 重新讀取這些模組，以便新的環境變數生效。
+        import importlib
+        from app.core import transcriber
+        from app import worker
+        importlib.reload(transcriber)
+        importlib.reload(worker)
+        # --------------------
+
         test_script_path = os.path.join(project_root, "scripts", "run_e2e_test.py")
+
+        # 我們需要確保子進程也能繼承這個環境變數
+        # subprocess.run 預設會繼承，所以我們不需要做特別的處理
         result = subprocess.run(
             [sys.executable, test_script_path, "--port", str(args.port)],
             capture_output=True, text=True, encoding='utf-8'

@@ -1,0 +1,13 @@
+{
+  "name": "/app",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "jsdom": "^26.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

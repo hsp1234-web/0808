@@ -58,21 +58,17 @@ class Transcriber:
                 log.critical(f"❌ 載入 '{model_size}' 模型時發生未預期錯誤: {e}", exc_info=True)
                 raise e
 
-    def transcribe(self, audio_path: Path | str, model_size: str, language: str) -> str:
+    def transcribe(self, audio_path: Path | str, model_size: str, language: str, status_callback=None) -> str:
         """
-        執行音訊轉錄的核心方法。
-
-        Args:
-            audio_path (Path | str): 需要轉錄的音訊檔案路徑。
-            model_size (str): 要使用的 Whisper 模型大小 (例如 "tiny", "small")。
-            language (str): 要使用的語言代碼 (例如 "zh", "en")。
-
-        Returns:
-            str: 轉錄後的文字結果。
+        執行音訊轉錄的核心方法，並可選擇性地透過回呼函式回報進度。
         """
+        def report(status):
+            if status_callback:
+                status_callback(status)
+
         log.info(f"🎤 開始處理轉錄任務: {audio_path}")
+        report(f"載入 '{model_size}' 模型中...")
 
-        # 1. 根據指定大小載入或取得模型
         try:
             model = self._load_model(model_size)
         except Exception as e:
@@ -81,41 +77,79 @@ class Transcriber:
         if model is None:
             return f"轉錄失敗：模型 '{model_size}' 實例不存在。"
 
-        # 2. 執行轉錄
         try:
             start_time = time.time()
-            # 將 language 參數傳遞給 faster-whisper
-            segments, info = model.transcribe(str(audio_path), beam_size=5, language=language)
+            report("模型載入完成，開始轉錄...")
 
-            # 如果使用者指定了語言，我們就相信它。如果沒有，我們記錄偵測到的語言。
+            # 使用 word_timestamps=True 可以讓我們在未來實現更細緻的進度回報
+            segments, info = model.transcribe(str(audio_path), beam_size=5, language=language, word_timestamps=True)
+
             if language:
                 log.info(f"🌍 使用者指定語言: '{language}'，偵測到 '{info.language}' (機率: {info.language_probability:.2f})")
             else:
                 log.info(f"🌍 自動偵測到語言: '{info.language}' (機率: {info.language_probability:.2f})")
 
-            # 將所有片段組合成一個完整的字串
-            full_transcript = "".join(segment.text for segment in segments).strip()
+            # --- 進度回報 ---
+            # 建立一個包含所有音訊片段文字的生成器
+            segment_generator = (segment.text for segment in segments)
+            full_transcript = "".join(segment_generator).strip()
+
+            # (這裡的進度回報邏輯可以更複雜，例如根據時間戳，但目前保持簡單)
+            report("轉錄核心處理完成")
+
             duration = time.time() - start_time
             log.info(f"📝 轉錄完成。耗時: {duration:.2f} 秒。")
 
-            # 檢查是否需要進行繁簡轉換
             if language and language.lower().startswith('zh'):
+                report("繁簡轉換中...")
                 log.info("🔄 偵測到中文，正在執行繁體化處理...")
                 try:
                     cc = OpenCC('s2twp')
                     converted_transcript = cc.convert(full_transcript)
                     log.info("✅ 繁體化處理完成。")
+                    report("處理完成")
                     return converted_transcript
                 except Exception as e:
                     log.error(f"❌ 繁簡轉換時發生錯誤: {e}", exc_info=True)
-                    # 即使轉換失敗，也返回原始轉錄結果，確保流程不中斷
                     return full_transcript
             else:
+                report("處理完成")
                 return full_transcript
 
         except Exception as e:
             log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
             return f"轉錄失敗：處理過程中發生錯誤。錯誤: {e}"
 
-# 建立一個全域的單例，方便在應用的其他地方匯入和使用
-transcriber_instance = Transcriber()
+# 建立一個全域的單例，但僅在非模擬模式下
+import os
+if os.environ.get("MOCK_TRANSCRIBER") == "true":
+    # 在模擬模式下，我們將 transcriber_instance 設為 MockTranscriber 的一個實例
+    # 這樣 worker 就可以統一使用 transcriber_instance 這個變數名
+    transcriber_instance = MockTranscriber()
+else:
+    # 只有在真實模式下，才建立並載入真實的轉錄器實例
+    transcriber_instance = Transcriber()
+
+
+class MockTranscriber:
+    """一個用於測試的模擬轉錄器，它不會載入任何模型，只會模擬行為。"""
+    def transcribe(self, audio_path: str, model_size: str, language: str, status_callback=None):
+        """模擬轉錄過程，並透過回呼函式回報進度。"""
+        import time
+
+        def report(status):
+            if status_callback:
+                status_callback(status)
+
+        report("模擬：任務開始...")
+        time.sleep(0.1)
+        report("模擬：處理中 1/3")
+        time.sleep(0.1)
+        report("模擬：處理中 2/3")
+        time.sleep(0.1)
+        report("模擬：處理中 3/3")
+        time.sleep(0.1)
+        report("模擬：繁簡轉換中...")
+        time.sleep(0.1)
+
+        return f"這是一個來自模擬轉錄器的測試結果。音訊路徑: {audio_path}, 模型: {model_size}, 語言: {language}"
