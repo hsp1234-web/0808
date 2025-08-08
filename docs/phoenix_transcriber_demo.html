@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰轉錄儀 (靜態展示版)</title>
+    <!-- 引入 Tailwind CSS 以便快速建構介面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts (Noto Sans TC & Inter) 提供更美觀的字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 引入 Lucide Icons 提供圖示 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // 設定 Tailwind CSS 以便支援暗色模式
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        /* 基礎字體與主題設定 */
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 16px; /* 設定基準字體大小 */
+        }
+        /* 暗色模式下的背景與文字顏色 */
+        .dark body {
+            background-color: #131316;
+            color: #E8EAED;
+        }
+        /* 亮色模式下的背景與文字顏色 */
+        body {
+            background-color: #F8F9FA;
+            color: #202124;
+        }
+
+        /* 玻璃擬態效果，增加介面質感 */
+        .phoenix-glass-effect {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .dark .phoenix-glass-effect {
+            background: rgba(32, 33, 36, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* 漸層文字效果，增加視覺吸引力 */
+        .phoenix-gemini-gradient-text {
+            background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        /* 自定義滾動條樣式，美化介面 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
+        html.dark ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #A688FA, #89CFF0); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #F482A4, #A688FA); }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6 lg:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- 頂部標題與控制 -->
+        <header class="flex justify-between items-center mb-6">
+            <div class="flex items-center gap-3">
+                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs><linearGradient id="starGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#89CFF0;" /><stop offset="100%" style="stop-color:#A688FA;" /></linearGradient></defs>
+                    <path d="M19.95 9.49C20.25 8.95 20.25 8.05 19.95 7.51L17.24 2.9C16.94 2.37 16.32 2 15.65 2H8.35C7.68 2 7.06 2.37 6.76 2.9L4.05 7.51C3.75 8.05 3.75 8.95 4.05 9.49L8.35 17.1C8.65 17.63 9.27 18 9.94 18H14.06C14.73 18 15.35 17.63 15.65 17.1L19.95 9.49Z" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.35 17.1L4.05 9.49" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15.65 17.1L19.95 9.49" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22V18" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4.05 7.51L6.76 2.9" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M19.95 7.51L17.24 2.9" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <h1 class="text-xl sm:text-2xl font-bold">鳳凰 <span class="phoenix-gemini-gradient-text">音訊轉錄儀</span></h1>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-4">
+                <!-- 字體大小調整控制器 -->
+                <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-700/50 rounded-full p-1">
+                    <button id="font-decrease" class="p-1.5 rounded-full hover:bg-gray-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="zoom-out" class="w-5 h-5"></i>
+                    </button>
+                    <span id="font-level-indicator" class="text-xs font-bold w-10 text-center select-none">100%</span>
+                    <button id="font-increase" class="p-1.5 rounded-full hover:bg-gray-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="zoom-in" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-500/20 transition-colors">
+                    <i data-lucide="sun" class="lucide lucide-sun text-xl text-[color:var(--text-color)] block dark:hidden"></i>
+                    <i data-lucide="moon" class="lucide lucide-moon text-xl text-[color:var(--text-color)] hidden dark:block"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主工作區 -->
+        <div class="space-y-6">
+            <!-- 上傳與設定區 -->
+            <div class="phoenix-glass-effect rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                <i data-lucide="upload" class="lucide lucide-upload text-5xl phoenix-gemini-gradient-text mb-4"></i>
+                <h2 class="text-xl font-semibold text-[color:var(--text-color)] mb-2">已選擇檔案：Meeting_Minutes_Project_Alpha.m4a</h2>
+                <p class="text-gray-500 dark:text-gray-400">點擊下方按鈕開始轉錄</p>
+            </div>
+
+            <!-- 開始轉錄按鈕 -->
+            <div class="text-center">
+                <button id="start-transcription-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg inline-flex items-center transition-all text-lg shadow-lg hover:shadow-xl">
+                    <i data-lucide="play-circle" class="w-6 h-6 mr-3"></i>
+                    <span>>> 開始轉錄 <<</span>
+                </button>
+            </div>
+
+            <!-- 結果顯示區 (直接顯示) -->
+            <div id="result-section" class="phoenix-glass-effect rounded-xl flex flex-col min-h-[300px]">
+                <div class="p-4 flex-grow overflow-y-auto">
+                    <pre id="transcript-output" class="whitespace-pre-wrap text-[color:var(--text-color)] leading-relaxed">[00:00:01.123] 您好，這是一段由「鳳凰轉錄儀」產生的模擬語音轉錄結果。
+[00:00:08.456] 這個介面採用非阻塞設計，您可以同時上傳多個檔案，它們會依序進入佇列處理。
+[00:00:15.789] 轉錄完成後，結果會自動顯示在右側面板，方便您複製或下載。
+[00:00:22.500] 系統會模擬計算轉錄速率，讓您了解處理效率。
+[00:00:28.900] 這是一個靜態展示版本，所有元素都已預先載入，以呈現最終外觀。
+</pre>
+                </div>
+                <!-- 底部控制列 -->
+                <div class="p-3 border-t dark:border-gray-700/50 flex items-center justify-between gap-4">
+                    <div id="status-indicator" class="text-sm font-semibold text-green-500 flex items-center gap-2">
+                       <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                       <span>轉錄完成</span>
+                       <span class="font-mono text-xs">最終速率: 25.3x</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                         <button id="copy-btn" class="bg-gray-200 dark:bg-gray-700 hover:bg-sky-500/80 dark:hover:bg-sky-500 text-gray-800 dark:text-gray-100 font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                            <i data-lucide="copy" class="lucide lucide-copy w-4 h-4 mr-2"></i>
+                            <span>複製</span>
+                        </button>
+                        <button id="save-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                            <i data-lucide="save" class="lucide lucide-save w-4 h-4 mr-2"></i>
+                            <span>儲存</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM 元素參照 ---
+        const htmlEl = document.documentElement;
+        const bodyEl = document.body;
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const fontIncreaseBtn = document.getElementById('font-increase');
+        const fontDecreaseBtn = document.getElementById('font-decrease');
+        const fontLevelIndicator = document.getElementById('font-level-indicator');
+        const copyBtn = document.getElementById('copy-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const transcriptOutput = document.getElementById('transcript-output');
+
+        // --- 字體大小設定 ---
+        const FONT_LEVELS = [50, 60, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200];
+        const DEFAULT_FONT_LEVEL_INDEX = 5; // 預設為 100%
+        let currentFontLevelIndex = DEFAULT_FONT_LEVEL_INDEX;
+
+        // --- 通用核心函式 (保留UI互動功能) ---
+        function applyTheme(theme) {
+            htmlEl.classList.toggle('dark', theme === 'dark');
+            localStorage.setItem('color-theme', theme);
+            if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+        }
+
+        function applyFontSize(index) {
+            currentFontLevelIndex = Math.max(0, Math.min(index, FONT_LEVELS.length - 1));
+            const newPercentage = FONT_LEVELS[currentFontLevelIndex];
+            bodyEl.style.fontSize = `${16 * (newPercentage / 100)}px`; // 基於 16px 計算
+            fontLevelIndicator.textContent = `${newPercentage}%`;
+            fontDecreaseBtn.disabled = currentFontLevelIndex === 0;
+            fontIncreaseBtn.disabled = currentFontLevelIndex === FONT_LEVELS.length - 1;
+            localStorage.setItem('font-level-index', currentFontLevelIndex);
+        }
+
+        // --- 事件監聽器綁定 ---
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = htmlEl.classList.toggle('dark');
+            applyTheme(isDark ? 'dark' : 'light');
+        });
+
+        fontIncreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex + 1));
+        fontDecreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex - 1));
+
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = transcriptOutput.textContent;
+            if (!textToCopy) return;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i><span>已複製！</span>`;
+                lucide.createIcons();
+                setTimeout(() => { copyBtn.innerHTML = originalHTML; lucide.createIcons(); }, 2000);
+            }).catch(err => { console.error('複製失敗:', err); alert('複製失敗，請手動複製。'); });
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const textToDownload = transcriptOutput.textContent;
+            if (!textToDownload) return;
+            const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcript_static_demo.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // --- 初始化應用程式 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化主題
+            const savedTheme = localStorage.getItem('color-theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+
+            // 初始化字體大小
+            const savedFontLevelIndex = localStorage.getItem('font-level-index');
+            applyFontSize(savedFontLevelIndex ? parseInt(savedFontLevelIndex, 10) : DEFAULT_FONT_LEVEL_INDEX);
+        });
+    </script>
+</body>
+</html>
