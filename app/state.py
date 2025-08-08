@@ -17,24 +17,29 @@ import threading
 state_lock = threading.Lock()
 
 # 全域共享狀態字典
-# - worker_status: 工作者的目前狀態 ('idle', 'busy', 'starting', 'stopping')
+# - worker_status: 工作者的目前狀態 ('idle', 'busy', 'starting', 'stopping', 'installing', 'error')
 # - last_heartbeat: 工作者上次回報心跳的 UNIX 時間戳
+# - detail: 提供關於目前狀態的額外資訊 (例如，錯誤訊息)
 shared_state = {
     "worker_status": "starting",
-    "last_heartbeat": time.time()
+    "last_heartbeat": time.time(),
+    "detail": ""
 }
 
-def update_worker_status(status: str, heartbeat: bool = True):
+def update_worker_status(status: str, detail: str = None, heartbeat: bool = True):
     """
-    安全地更新工作者的狀態。
+    安全地更新工作者的狀態和詳細資訊。
 
     Args:
-        status (str): 新的狀態 ('idle', 'busy', 'stopping')。
+        status (str): 新的狀態。
+        detail (str, optional): 關於狀態的額外詳細資訊。如果為 None，則不會更新。
         heartbeat (bool): 是否同時更新心跳時間戳。
     """
     global shared_state
     with state_lock:
         shared_state["worker_status"] = status
+        if detail is not None:
+            shared_state["detail"] = detail
         if heartbeat:
             shared_state["last_heartbeat"] = time.time()
 

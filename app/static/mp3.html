@@ -91,6 +91,26 @@
             </div>
         </header>
 
+        <!-- 系統效能監控區 -->
+        <div id="system-stats-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 text-center">
+            <div class="phoenix-glass-effect rounded-lg p-3">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">CPU 使用率</h3>
+                <p id="cpu-stat" class="text-2xl font-bold phoenix-gemini-gradient-text">--%</p>
+            </div>
+            <div class="phoenix-glass-effect rounded-lg p-3">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">RAM 使用率</h3>
+                <p id="ram-stat" class="text-2xl font-bold phoenix-gemini-gradient-text">--%</p>
+            </div>
+            <div class="phoenix-glass-effect rounded-lg p-3">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">GPU 使用率</h3>
+                <p id="gpu-stat" class="text-2xl font-bold phoenix-gemini-gradient-text">N/A</p>
+            </div>
+        </div>
+        <div id="gpu-details-container" class="space-y-2 mb-6 hidden">
+            <!-- GPU 詳細資訊將動態插入此處 -->
+        </div>
+
+
         <!-- 主工作區 -->
         <div>
             <!-- 分頁導覽 -->
@@ -491,6 +511,56 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             });
+
+            // --- 系統效能輪詢邏輯 ---
+            const cpuStat = document.getElementById('cpu-stat');
+            const ramStat = document.getElementById('ram-stat');
+            const gpuStat = document.getElementById('gpu-stat');
+            const gpuDetailsContainer = document.getElementById('gpu-details-container');
+
+            async function pollSystemStats() {
+                try {
+                    const response = await fetch('/api/system_stats');
+                    if (!response.ok) {
+                        console.warn(`System stats fetch failed (HTTP ${response.status})`);
+                        return;
+                    }
+                    const stats = await response.json();
+
+                    cpuStat.textContent = `${stats.cpu_percent.toFixed(1)}%`;
+                    ramStat.textContent = `${stats.ram_percent.toFixed(1)}%`;
+
+                    if (stats.gpu_stats && stats.gpu_stats.length > 0) {
+                        const mainGpu = stats.gpu_stats[0];
+                        gpuStat.textContent = `${mainGpu.utilization_gpu_percent}%`;
+
+                        gpuDetailsContainer.classList.remove('hidden');
+                        gpuDetailsContainer.innerHTML = ''; // 清空舊內容
+                        stats.gpu_stats.forEach((gpu, index) => {
+                            const detailHtml = `
+                                <div class="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                    GPU ${index}: ${gpu.name} | VRAM: ${gpu.memory_used_mb}MB / ${gpu.memory_total_mb}MB (${gpu.memory_used_percent}%)
+                                </div>
+                            `;
+                            gpuDetailsContainer.innerHTML += detailHtml;
+                        });
+
+                    } else {
+                        gpuStat.textContent = 'N/A';
+                        gpuDetailsContainer.classList.add('hidden');
+                    }
+                } catch (error) {
+                    console.error('Polling system stats failed:', error);
+                    cpuStat.textContent = '錯誤';
+                    ramStat.textContent = '錯誤';
+                    gpuStat.textContent = '錯誤';
+                }
+            }
+
+            // 每 3 秒輪詢一次
+            setInterval(pollSystemStats, 3000);
+            // 頁面載入後立即執行一次
+            pollSystemStats();
         });
     </script>
 </body>

@@ -105,6 +105,47 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/api/system_stats")
+async def system_stats():
+    """
+    提供系統即時效能數據，包括 CPU、RAM 和 GPU。
+    """
+    import psutil
+    try:
+        # 嘗試匯入 pynvml，如果失敗，則無法監控 GPU
+        from pynvml.smi import nvidia_smi
+        nvsmi = nvidia_smi.getInstance()
+        gpu_available = True
+    except (ImportError, Exception):
+        gpu_available = False
+
+    stats = {
+        "cpu_percent": psutil.cpu_percent(),
+        "ram_percent": psutil.virtual_memory().percent,
+        "gpu_stats": []
+    }
+
+    if gpu_available:
+        try:
+            # .DeviceQuery() 的結果可能包含 'timestamp' 和 'driver_version'
+            gpu_info = nvsmi.DeviceQuery(['utilization.gpu', 'utilization.memory', 'memory.total', 'memory.used', 'driver_version', 'name'])
+            if 'gpu' in gpu_info:
+                 for gpu in gpu_info['gpu']:
+                    stats['gpu_stats'].append({
+                        "name": gpu.get('name', 'N/A'),
+                        "utilization_gpu_percent": gpu['utilization']['gpu_util'],
+                        "memory_used_percent": gpu['utilization']['memory_util'],
+                        "memory_total_mb": gpu['memory']['total'],
+                        "memory_used_mb": gpu['memory']['used']
+                    })
+        except Exception as e:
+            log.error(f"查詢 NVIDIA GPU 資訊時出錯: {e}")
+            # 即使出錯，也保持 gpu_stats 為空列表
+            pass
+
+    return JSONResponse(content=stats)
+
+
 # 為了讓 Colab 或其他啟動器可以直接執行，我們可以加入這段
 if __name__ == "__main__":
     import uvicorn

@@ -48,12 +48,14 @@ def run_worker():
                 status_updater("任務準備中...")
 
                 # 2. 執行耗時的轉錄任務，並傳入回呼函式
+                log.info(f"🚧 [PID:{os.getpid()}] 即將呼叫核心轉錄函式 (transcriber.transcribe)...")
                 transcript = transcriber.transcribe(
                     audio_path=file_path,
                     model_size=model_size,
                     language=language,
                     status_callback=status_updater
                 )
+                log.info(f"🎉 [PID:{os.getpid()}] 核心轉錄函式已成功返回。")
 
                 # 3. 根據轉錄結果更新最終狀態
                 if "轉錄失敗" in transcript:

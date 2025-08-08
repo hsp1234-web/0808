@@ -9,3 +9,7 @@ python-multipart
 
 # For e2e test script
 requests
+
+# For system stats monitoring
+psutil
+nvidia-ml-py
