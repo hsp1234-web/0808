@@ -1,0 +1,29 @@
+2025-08-08 10:59:38,178 - local_run - [INFO] ==================================================
+2025-08-08 10:59:38,179 - local_run - [INFO] 🚀 正在啟動核心服務 (單進程，多執行緒模式)...
+2025-08-08 10:59:38,179 - local_run - [INFO] ==================================================
+2025-08-08 10:59:38,180 - worker - [INFO] 背景工作者已啟動，準備與監控核心同步...
+2025-08-08 10:59:38,181 - local_run - [INFO] 背景工作者 (Worker) 執行緒已啟動。
+2025-08-08 10:59:38,183 - monitor - [INFO] 智慧監控已啟動...
+2025-08-08 10:59:38,183 - local_run - [INFO] 智慧監控 (Watchdog) 執行緒已啟動。
+2025-08-08 10:59:38,183 - local_run - [INFO] 準備在主執行緒中啟動 Uvicorn 伺服器...
+2025-08-08 10:59:38,183 - local_run - [INFO] 使用 Ctrl+C 來停止所有服務。
+2025-08-08 10:59:39,187 - worker - [INFO] ... 待命中，心跳...
+INFO:     Started server process [8747]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2025-08-08 10:59:40,188 - worker - [INFO] ... 待命中，心跳...
+✅ [API] 新任務已加入佇列 (ID: e91d71a6-b983-4523-b088-70b66599c257)
+INFO:     127.0.0.1:49622 - "POST /api/transcribe HTTP/1.1" 202 Accepted
+2025-08-08 10:59:40,507 - worker - [INFO] 收到新任務 (ID: e91d71a6-b983-4523-b088-70b66599c257)，進入忙碌狀態。
+🎤 [Transcriber] 開始處理轉錄任務: /app/app/temp_uploads/e91d71a6-b983-4523-b088-70b66599c257_dummy.wav
+🧠 [Transcriber] 模型尚未載入。開始執行首次載入...
+2025-08-08 10:59:45,186 - monitor - [INFO] 狀態: BUSY     | 心跳: 4.7s 前 (超時: 60s)
+✅ [Transcriber] 模型載入成功！耗時: 9.51 秒。
+2025-08-08 10:59:50,187 - faster_whisper - [INFO] Processing audio with duration 00:01.000
+2025-08-08 10:59:50,192 - monitor - [INFO] 狀態: BUSY     | 心跳: 9.7s 前 (超時: 60s)
+INFO:     127.0.0.1:55730 - "GET /api/status/e91d71a6-b983-4523-b088-70b66599c257 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [8747]
