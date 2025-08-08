@@ -1,0 +1,27 @@
+==================================================
+🚀 正在啟動 鳳凰轉錄儀 (附帶智慧監控模式)...
+==================================================
+🚀 [Worker] 背景工作者已啟動，等待轉錄任務...
+✅ [Monitor] 背景工作者 (Worker) 已在獨立執行緒中啟動。
+INFO:     Started server process [2999]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:58893 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2999]
+✅ [Monitor] Uvicorn 伺服器進程已啟動 (PID: 2999)。
+
+請在瀏覽器中開啟 http://127.0.0.1:58893 來存取介面。
+使用 Ctrl+C 來停止啟動器和所有服務。
+
+⏱️  [Monitor] 智慧監控已啟動，正在監控工作者心跳...
+🚨 [Monitor] 偵測到工作者無回應！
+   - 目前狀態: IDLE
+   - 上次心跳: Fri Aug  8 10:13:29 2025
+   - 超時設定: 5 秒
+💥 [Monitor] 正在強制終止所有服務...
+🛑 [Monitor] 已終止服務。監控器正在退出。
+... 正在優雅地關閉所有服務...
+✅ 所有服務已成功關閉。再見！
