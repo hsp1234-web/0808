@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 import logging
-
+import argparse
 # --- 配置日誌系統 ---
 # 設定日誌記錄器，確保我們的日誌能和 Uvicorn 的日誌一起穩定輸出。
 logging.basicConfig(
@@ -88,6 +88,10 @@ def main():
     應用程式主入口。
     採用「單一進程，多執行緒」架構，穩定地啟動所有服務。
     """
+    parser = argparse.ArgumentParser(description="啟動核心服務與 Uvicorn 伺服器。")
+    parser.add_argument("--port", type=int, default=8000, help="Uvicorn 伺服器要監聽的埠號。")
+    args = parser.parse_args()
+
     log.info("==================================================")
     log.info("🚀 正在啟動核心服務 (單進程，多執行緒模式)...")
     log.info("==================================================")
@@ -105,14 +109,14 @@ def main():
 
     # 3. 在主執行緒中啟動 Uvicorn 伺服器
     # 這是一個阻塞操作，它會佔據主執行緒，直到使用者按下 Ctrl+C
-    log.info("準備在主執行緒中啟動 Uvicorn 伺服器...")
+    log.info(f"準備在主執行緒中以埠號 {args.port} 啟動 Uvicorn 伺服器...")
     log.info("使用 Ctrl+C 來停止所有服務。")
 
     try:
         uvicorn.run(
             "app.main:app",
-            host="127.0.0.1",
-            port=8000,
+            host="0.0.0.0",
+            port=args.port,
             log_level="info"
         )
     except KeyboardInterrupt:
