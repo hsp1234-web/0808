@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰音訊轉錄儀</title>
+    <!-- 引入 Tailwind CSS 以便快速建構介面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts (Noto Sans TC & Inter) 提供更美觀的字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 引入 Lucide Icons 提供圖示 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // 設定 Tailwind CSS 以便支援暗色模式
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        /* 基礎字體與主題設定 */
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 16px; /* 設定基準字體大小 */
+        }
+        /* 暗色模式下的背景與文字顏色 */
+        .dark body {
+            background-color: #131316;
+            color: #E8EAED;
+        }
+        /* 亮色模式下的背景與文字顏色 */
+        body {
+            background-color: #F8F9FA;
+            color: #202124;
+        }
+
+        /* 玻璃擬態效果，增加介面質感 */
+        .phoenix-glass-effect {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .dark .phoenix-glass-effect {
+            background: rgba(32, 33, 36, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* 漸層文字效果，增加視覺吸引力 */
+        .phoenix-gemini-gradient-text {
+            background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        /* 自定義滾動條樣式，美化介面 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
+        html.dark ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #A688FA, #89CFF0); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #F482A4, #A688FA); }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6 lg:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- 頂部標題與控制 -->
+        <header class="flex justify-between items-center mb-6">
+            <div class="flex items-center gap-3">
+                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs><linearGradient id="starGradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#89CFF0;" /><stop offset="100%" style="stop-color:#A688FA;" /></linearGradient></defs>
+                    <path d="M19.95 9.49C20.25 8.95 20.25 8.05 19.95 7.51L17.24 2.9C16.94 2.37 16.32 2 15.65 2H8.35C7.68 2 7.06 2.37 6.76 2.9L4.05 7.51C3.75 8.05 3.75 8.95 4.05 9.49L8.35 17.1C8.65 17.63 9.27 18 9.94 18H14.06C14.73 18 15.35 17.63 15.65 17.1L19.95 9.49Z" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.35 17.1L4.05 9.49" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15.65 17.1L19.95 9.49" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22V18" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4.05 7.51L6.76 2.9" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M19.95 7.51L17.24 2.9" stroke="url(#starGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <h1 class="text-xl sm:text-2xl font-bold">鳳凰 <span class="phoenix-gemini-gradient-text">音訊轉錄儀</span></h1>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-4">
+                <!-- 字體大小調整控制器 -->
+                <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-700/50 rounded-full p-1">
+                    <button id="font-decrease" class="p-1.5 rounded-full hover:bg-gray-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="zoom-out" class="w-5 h-5"></i>
+                    </button>
+                    <span id="font-level-indicator" class="text-xs font-bold w-10 text-center select-none">100%</span>
+                    <button id="font-increase" class="p-1.5 rounded-full hover:bg-gray-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="zoom-in" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-500/20 transition-colors">
+                    <i data-lucide="sun" class="lucide lucide-sun text-xl text-[color:var(--text-color)] block dark:hidden"></i>
+                    <i data-lucide="moon" class="lucide lucide-moon text-xl text-[color:var(--text-color)] hidden dark:block"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主工作區 -->
+        <div class="space-y-6">
+            <!-- 上傳與設定區 -->
+            <label id="upload-area" for="audio-file-input" class="phoenix-glass-effect rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 dark:hover:border-sky-500 transition-all border-2 border-dashed border-gray-400/50 dark:border-gray-600/50">
+                <i data-lucide="upload" class="lucide lucide-upload text-5xl phoenix-gemini-gradient-text mb-4"></i>
+                <h2 id="filename-display" class="text-xl font-semibold text-[color:var(--text-color)] mb-2">點擊此處或拖曳檔案以上傳</h2>
+                <p id="instruction-text" class="text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等音訊格式</p>
+                <input type="file" id="audio-file-input" accept="audio/*" class="hidden">
+            </label>
+
+            <!-- 開始轉錄按鈕 -->
+            <div class="text-center">
+                <button id="start-transcription-btn" disabled class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg inline-flex items-center transition-all text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none">
+                    <i data-lucide="play-circle" class="w-6 h-6 mr-3"></i>
+                    <span>>> 開始轉錄 <<</span>
+                </button>
+            </div>
+
+            <!-- 結果顯示區 -->
+            <div id="result-section" class="phoenix-glass-effect rounded-xl flex flex-col min-h-[300px]">
+                <div class="p-4 flex-grow overflow-y-auto">
+                    <pre id="transcript-output" class="whitespace-pre-wrap text-[color:var(--text-color)] leading-relaxed">請先上傳音訊檔案，然後點擊「開始轉錄」。</pre>
+                </div>
+                <!-- 底部控制列 -->
+                <div class="p-3 border-t dark:border-gray-700/50 flex items-center justify-between gap-4">
+                    <div id="status-indicator" class="text-sm font-semibold text-gray-500 flex items-center gap-2">
+                       <i data-lucide="info" class="w-4 h-4"></i>
+                       <span>待命中</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                         <button id="copy-btn" class="bg-gray-200 dark:bg-gray-700 hover:bg-sky-500/80 dark:hover:bg-sky-500 text-gray-800 dark:text-gray-100 font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                            <i data-lucide="copy" class="lucide lucide-copy w-4 h-4 mr-2"></i>
+                            <span>複製</span>
+                        </button>
+                        <button id="save-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center transition-all">
+                            <i data-lucide="save" class="lucide lucide-save w-4 h-4 mr-2"></i>
+                            <span>儲存</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- UI 主題與字體大小控制 (保留) ---
+        const htmlEl = document.documentElement;
+        const bodyEl = document.body;
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const fontIncreaseBtn = document.getElementById('font-increase');
+        const fontDecreaseBtn = document.getElementById('font-decrease');
+        const fontLevelIndicator = document.getElementById('font-level-indicator');
+
+        const FONT_LEVELS = [50, 60, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200];
+        let currentFontLevelIndex = 5;
+
+        function applyTheme(theme) {
+            htmlEl.classList.toggle('dark', theme === 'dark');
+            localStorage.setItem('color-theme', theme);
+            if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+        }
+
+        function applyFontSize(index) {
+            currentFontLevelIndex = Math.max(0, Math.min(index, FONT_LEVELS.length - 1));
+            const newPercentage = FONT_LEVELS[currentFontLevelIndex];
+            bodyEl.style.fontSize = `${16 * (newPercentage / 100)}px`;
+            fontLevelIndicator.textContent = `${newPercentage}%`;
+            fontDecreaseBtn.disabled = currentFontLevelIndex === 0;
+            fontIncreaseBtn.disabled = currentFontLevelIndex === FONT_LEVELS.length - 1;
+            localStorage.setItem('font-level-index', currentFontLevelIndex);
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = htmlEl.classList.toggle('dark');
+            applyTheme(isDark ? 'dark' : 'light');
+        });
+
+        fontIncreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex + 1));
+        fontDecreaseBtn.addEventListener('click', () => applyFontSize(currentFontLevelIndex - 1));
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('color-theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+
+            const savedFontLevelIndex = localStorage.getItem('font-level-index');
+            applyFontSize(savedFontLevelIndex ? parseInt(savedFontLevelIndex, 10) : 5);
+        });
+    </script>
+
+    <script>
+        // --- 應用程式核心邏輯 (支援輪詢) ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM 元素參照 ---
+            const fileInput = document.getElementById('audio-file-input');
+            const startBtn = document.getElementById('start-transcription-btn');
+            const filenameDisplay = document.getElementById('filename-display');
+            const instructionText = document.getElementById('instruction-text');
+            const transcriptOutput = document.getElementById('transcript-output');
+            const statusIndicator = document.getElementById('status-indicator');
+            const copyBtn = document.getElementById('copy-btn');
+            const saveBtn = document.getElementById('save-btn');
+
+            let selectedFile = null;
+            let pollingInterval = null;
+
+            // --- 狀態更新函式 ---
+            function updateStatus(status, icon = 'info', color = 'text-gray-500') {
+                statusIndicator.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4"></i><span>${status}</span>`;
+                statusIndicator.className = `text-sm font-semibold ${color} flex items-center gap-2`;
+                lucide.createIcons();
+            }
+
+            // --- 輪詢函式 ---
+            function pollStatus(taskId) {
+                // 清除舊的定時器
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+
+                pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/status/${taskId}`);
+                        if (!response.ok) {
+                            // 如果查詢失敗，但不是 404，就繼續輪詢
+                            console.warn(`狀態查詢失敗 (HTTP ${response.status})，將於下一週期重試。`);
+                            return;
+                        }
+
+                        const data = await response.json();
+
+                        switch (data.status) {
+                            case 'pending':
+                                updateStatus('排隊等待中...', 'clock', 'text-gray-500');
+                                break;
+                            case 'processing':
+                                updateStatus('正在轉錄...', 'bot', 'text-purple-500');
+                                transcriptOutput.textContent = '模型正在處理中，請稍候...';
+                                break;
+                            case 'complete':
+                                clearInterval(pollingInterval);
+                                pollingInterval = null;
+                                updateStatus('轉錄完成', 'check-circle-2', 'text-green-500');
+                                transcriptOutput.textContent = data.result || '轉錄完成，但未收到內容。';
+                                startBtn.disabled = false;
+                                break;
+                            case 'error':
+                                clearInterval(pollingInterval);
+                                pollingInterval = null;
+                                updateStatus('錯誤', 'x-circle', 'text-red-500');
+                                transcriptOutput.textContent = `轉錄失敗：\n${data.result}`;
+                                startBtn.disabled = false;
+                                break;
+                        }
+                    } catch (error) {
+                        console.error('輪詢狀態時發生網路錯誤:', error);
+                        // 網路錯誤時可以選擇停止輪詢或繼續
+                        // clearInterval(pollingInterval);
+                        // updateStatus('網路錯誤', 'wifi-off', 'text-red-500');
+                        // startBtn.disabled = false;
+                    }
+                }, 2000); // 每 2 秒查詢一次
+            }
+
+            // --- 事件監聽器 ---
+            fileInput.addEventListener('change', (event) => {
+                selectedFile = event.target.files[0];
+                if (selectedFile) {
+                    filenameDisplay.textContent = selectedFile.name;
+                    instructionText.textContent = `檔案大小: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`;
+                    startBtn.disabled = false;
+                    transcriptOutput.textContent = '檔案已就緒，請點擊「開始轉錄」。';
+                    updateStatus('檔案已選擇', 'file-check', 'text-blue-500');
+                }
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (!selectedFile) {
+                    alert('請先選擇一個音訊檔案！');
+                    return;
+                }
+
+                startBtn.disabled = true;
+                updateStatus('正在上傳...', 'upload-cloud', 'text-gray-500');
+                transcriptOutput.textContent = '正在將檔案上傳至伺服器...';
+
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                try {
+                    const response = await fetch('/api/transcribe', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: '無法解析的錯誤回應' }));
+                        throw new Error(`伺服器錯誤: ${response.status} ${response.statusText} - ${errorData.detail}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (result.task_id) {
+                        updateStatus('任務已提交', 'send', 'text-blue-500');
+                        transcriptOutput.textContent = '任務已成功提交，正在等待背景工作者處理...';
+                        pollStatus(result.task_id);
+                    } else {
+                        throw new Error('後端未返回有效的任務 ID。');
+                    }
+
+                } catch (error) {
+                    console.error('提交轉錄任務失敗:', error);
+                    transcriptOutput.textContent = `提交失敗：\n${error.message}`;
+                    updateStatus('提交錯誤', 'x-circle', 'text-red-500');
+                    startBtn.disabled = false;
+                }
+            });
+
+            copyBtn.addEventListener('click', () => {
+                const textToCopy = transcriptOutput.textContent;
+                if (!textToCopy) return;
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    const originalHTML = copyBtn.innerHTML;
+                    copyBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i><span>已複製！</span>`;
+                    lucide.createIcons();
+                    setTimeout(() => { copyBtn.innerHTML = originalHTML; lucide.createIcons(); }, 2000);
+                }).catch(err => { console.error('複製失敗:', err); alert('複製失敗，請手動複製。'); });
+            });
+
+            saveBtn.addEventListener('click', () => {
+                const textToDownload = transcriptOutput.textContent;
+                if (!textToDownload) return;
+                const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const filename = selectedFile ? `${selectedFile.name.split('.').slice(0, -1).join('.')}_transcript.txt` : 'transcript.txt';
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        });
+    </script>
+</body>
+</html>

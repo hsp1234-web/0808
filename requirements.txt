@@ -1,3 +1,11 @@
+# Web Framework
 fastapi
+
+# ASGI Server
 uvicorn[standard]
+
+# For file uploads in FastAPI
 python-multipart
+
+# Transcription Engine
+faster-whisper
