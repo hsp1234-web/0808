@@ -6,9 +6,3 @@ uvicorn[standard]
 
 # For file uploads in FastAPI
 python-multipart
-
-# Transcription Engine
-faster-whisper
-
-# For HTTP requests in watchdog
-requests

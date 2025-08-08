@@ -188,6 +188,15 @@ class ServerManager:
             git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
             result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
+
+            self._log_manager.log("INFO", "📦 正在安裝核心依賴 (from requirements.txt)...")
+            pip_command = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+            pip_result = subprocess.run(pip_command, cwd=str(project_path), check=False, capture_output=True, text=True, encoding='utf-8')
+            if pip_result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"核心依賴安裝失敗:\n{pip_result.stderr}")
+                return
+            self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
+
             launcher_script_path = project_path / "scripts" / "launch.py"
             if not launcher_script_path.is_file(): self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return
 

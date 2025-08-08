@@ -2,7 +2,6 @@
 import time
 import threading
 from pathlib import Path
-from faster_whisper import WhisperModel
 
 class Transcriber:
     """
@@ -34,6 +33,9 @@ class Transcriber:
                 print("🧠 [Transcriber] 模型尚未載入。開始執行首次載入...")
                 start_time = time.time()
                 try:
+                    # 延遲載入：只在需要時才匯入
+                    from faster_whisper import WhisperModel
+
                     # 在此處定義模型的大小和設定
                     # 'tiny' 是一個非常小的模型，適合快速測試
                     # device='cpu' and compute_type='int8' 是為了在沒有 GPU 的環境下獲得較好的效能
