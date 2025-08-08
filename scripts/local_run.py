@@ -87,15 +87,12 @@ def start_test_and_shutdown():
 
     # --- 依賴安裝完畢，現在可以安全地匯入應用程式模組 ---
     import requests
-    from app.worker import run_worker
 
     print("\n--- [步驟 2/4] 正在啟動背景服務 ---")
-    # 1. 啟動背景工作者執行緒
-    worker_thread = threading.Thread(target=run_worker, daemon=True)
-    worker_thread.start()
-    print("✅ [Watchdog] 背景工作者 (Worker) 已在獨立執行緒中啟動。")
+    # 在新架構中，背景工作由 phoenix_runner 透過 FastAPI 觸發，不再需要手動啟動執行緒。
+    print("✅ [Watchdog] 新架構無需獨立啟動背景工作者。")
 
-    # 2. 準備伺服器啟動
+    # 1. 準備伺服器啟動
     host = "127.0.0.1"
     port = find_available_port()
     health_check_url = f"http://{host}:{port}/api/health"
