@@ -190,12 +190,20 @@ class ServerManager:
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
 
             self._log_manager.log("INFO", "📦 正在安裝核心依賴 (from requirements.txt)...")
-            pip_command = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+            pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"]
             pip_result = subprocess.run(pip_command, cwd=str(project_path), check=False, capture_output=True, text=True, encoding='utf-8')
             if pip_result.returncode != 0:
                 self._log_manager.log("CRITICAL", f"核心依賴安裝失敗:\n{pip_result.stderr}")
                 return
             self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
+
+            self._log_manager.log("INFO", "📦 正在安裝轉錄工作者依賴 (from requirements-worker.txt)...")
+            pip_worker_command = [sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-worker.txt"]
+            pip_worker_result = subprocess.run(pip_worker_command, cwd=str(project_path), check=False, capture_output=True, text=True, encoding='utf-8')
+            if pip_worker_result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"轉錄工作者依賴安裝失敗:\n{pip_worker_result.stderr}")
+                return
+            self._log_manager.log("SUCCESS", "✅ 轉錄工作者依賴安裝完成。")
 
             launcher_script_path = project_path / "scripts" / "launch.py"
             if not launcher_script_path.is_file(): self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return

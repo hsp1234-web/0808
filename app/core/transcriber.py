@@ -1,7 +1,10 @@
 # app/core/transcriber.py
 import time
 import threading
+import logging
 from pathlib import Path
+
+log = logging.getLogger('transcriber')
 
 class Transcriber:
     """
@@ -30,7 +33,7 @@ class Transcriber:
 
         with self._model_lock:
             if self._model is None:
-                print("🧠 [Transcriber] 模型尚未載入。開始執行首次載入...")
+                log.info("🧠 模型尚未載入。開始執行首次載入...")
                 start_time = time.time()
                 try:
                     # 延遲載入：只在需要時才匯入
@@ -42,9 +45,14 @@ class Transcriber:
                     model_size = "tiny"
                     self._model = WhisperModel(model_size, device="cpu", compute_type="int8")
                     duration = time.time() - start_time
-                    print(f"✅ [Transcriber] 模型載入成功！耗時: {duration:.2f} 秒。")
+                    log.info(f"✅ 模型載入成功！耗時: {duration:.2f} 秒。")
+                except ImportError as e:
+                    log.critical(f"❌ 模型載入失敗：缺少 'faster_whisper' 模組。請確認 'requirements-worker.txt' 已正確安裝。")
+                    log.critical(f"詳細錯誤: {e}")
+                    self._model = None
+                    raise e # 重新引發異常，讓呼叫者知道載入失敗
                 except Exception as e:
-                    print(f"❌ [Transcriber] 模型載入失敗: {e}")
+                    log.critical(f"❌ 模型載入時發生未預期錯誤: {e}", exc_info=True)
                     # 在生產環境中，這裡應該有更完善的錯誤處理
                     self._model = None
                     raise e
@@ -59,12 +67,13 @@ class Transcriber:
         Returns:
             str: 轉錄後的文字結果。
         """
-        print(f"🎤 [Transcriber] 開始處理轉錄任務: {audio_path}")
+        log.info(f"🎤 開始處理轉錄任務: {audio_path}")
 
         # 1. 確保模型已載入
         try:
             self._load_model()
         except Exception as e:
+            # 錯誤已在 _load_model 中被記錄，此處直接回傳給 worker
             return f"轉錄失敗：無法載入模型。錯誤: {e}"
 
         if self._model is None:
@@ -75,47 +84,19 @@ class Transcriber:
             start_time = time.time()
             segments, info = self._model.transcribe(str(audio_path), beam_size=5)
 
-            print(f"🌍 [Transcriber] 偵測到的語言: '{info.language}' (機率: {info.language_probability:.2f})")
+            log.info(f"🌍 偵測到的語言: '{info.language}' (機率: {info.language_probability:.2f})")
 
             # 將所有片段組合成一個完整的字串
             # 'segment.text' 已經包含了處理過的文字
             full_transcript = "".join(segment.text for segment in segments).strip()
 
             duration = time.time() - start_time
-            print(f"📝 [Transcriber] 轉錄完成。耗時: {duration:.2f} 秒。")
+            log.info(f"📝 轉錄完成。耗時: {duration:.2f} 秒。")
 
             return full_transcript
         except Exception as e:
-            print(f"❌ [Transcriber] 轉錄過程中發生錯誤: {e}")
+            log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
             return f"轉錄失敗：處理過程中發生錯誤。錯誤: {e}"
 
 # 建立一個全域的單例，方便在應用的其他地方匯入和使用
 transcriber_instance = Transcriber()
-
-# --- 本地測試用程式碼 ---
-if __name__ == '__main__':
-    print("--- 執行 Transcriber 模組本地測試 ---")
-
-    # 建立一個假的音訊檔案來測試 (在真實情境中，你需要一個真實的音訊檔)
-    # 這裡我們只測試載入和呼叫流程
-    fake_audio_file = Path("test_audio.wav")
-    if not fake_audio_file.exists():
-        print(f"警告：測試音訊檔 '{fake_audio_file}' 不存在，將無法執行完整轉錄測試。")
-        # 建立一個空檔案以模擬
-        fake_audio_file.touch()
-
-    # 第一次呼叫，應該會觸發模型載入
-    print("\n--- 第一次呼叫 transcribe() ---")
-    result1 = transcriber_instance.transcribe(fake_audio_file)
-    print(f"第一次轉錄結果 (預期為錯誤或空): {result1}")
-
-    print("\n--- 第二次呼叫 transcribe() ---")
-    # 第二次呼叫，應該會跳過模型載入
-    result2 = transcriber_instance.transcribe(fake_audio_file)
-    print(f"第二次轉錄結果 (預期為錯誤或空): {result2}")
-
-    # 清理測試檔案
-    if fake_audio_file.exists():
-        fake_audio_file.unlink()
-
-    print("\n--- 測試完成 ---")
