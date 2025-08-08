@@ -6,3 +6,6 @@ uvicorn[standard]
 
 # For file uploads in FastAPI
 python-multipart
+
+# For e2e test script
+requests

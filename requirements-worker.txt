@@ -1,2 +1,5 @@
 # Transcription Engine
 faster-whisper
+
+# For Chinese Traditional/Simplified conversion
+opencc-python-reimplemented
