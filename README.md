@@ -53,7 +53,7 @@
 |       `-- mp3.html        # 前端頁面
 |
 |-- scripts/ (開發/維護腳本)
-|   `-- run_dev.py          # 本地開發啟動器
+|   `-- local_run.py        # 本地開發啟動器
 |
 |-- docs/ (專案歷史文件)
 |-- tests/ (測試碼)

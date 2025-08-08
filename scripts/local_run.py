@@ -1,4 +1,4 @@
-# scripts/run_dev.py
+# scripts/local_run.py
 import uvicorn
 import os
 import sys
