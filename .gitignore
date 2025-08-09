@@ -24,3 +24,26 @@ Thumbs.db
 # AI Agent generated environments
 /baked_envs/
 /temp_build/
+
+# Python
+__pycache__/
+*.pyc
+
+# Database
+*.db
+*.db-*
+
+# Application Data
+/uploads/
+/transcripts/
+
+# Test & Verification Artifacts
+/test-results/
+/temp_test_outputs/
+frontend_verification.png
+dummy_audio.wav
+run_log.txt
+fake_audio.txt
+
+# Agent-specific
+/jules-scratch/

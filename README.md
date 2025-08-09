@@ -38,29 +38,33 @@
 
 ## 📁 檔案結構
 
-專案採用了清晰、分層的目錄結構，使程式碼更易於維護和擴展。
+專案採用了功能導向的扁平化結構，將主要服務和模組放置於根目錄。
 
 ```
 /
 |
-|-- app/  (核心應用程式目錄)
-|   |-- main.py             # Web 伺服器 (FastAPI)
-|   |-- worker.py           # 背景工作者
-|   |-- queue.py            # 任務佇列實現
-|   |-- core/
-|   |   `-- transcriber.py  # 核心轉錄邏輯
-|   `-- static/
-|       `-- mp3.html        # 前端頁面
+|-- api_server.py        # Web 伺服器 (FastAPI)，提供 API 和前端介面
+|-- worker.py            # 背景工作者，處理耗時的轉錄任務
+|-- orchestrator.py      # 系統協調器，負責啟動和監控服務
 |
-|-- scripts/ (開發/維護腳本)
-|   `-- run_dev.py          # 本地開發啟動器
+|-- static/              # 前端資源
+|   `-- mp3.html         # 主要的單頁應用程式介面
 |
-|-- docs/ (專案歷史文件)
-|-- tests/ (測試碼)
+|-- db/                  # 資料庫模組
+|   |-- database.py      # 資料庫連線和任務佇列邏輯
+|   `-- log_handler.py   # 資料庫日誌處理器
 |
-|-- .gitignore              # Git 忽略設定
-|-- colab.py                # Google Colab 啟動器
-`-- requirements.txt        # Python 依賴列表
+|-- tools/               # 核心工具與商業邏輯
+|   |-- transcriber.py   # 核心轉錄引擎 (Whisper)
+|   `-- mock_transcriber.py # 用於測試的模擬轉錄器
+|
+|-- tests/               # 測試碼
+|   |-- e2e.spec.js      # Playwright 端對端測試
+|   `-- test_worker.py   # Worker 單元測試
+|
+|-- verify_frontend.py   # 獨立的前端自動化驗證腳本
+|-- requirements.txt     # Python 依賴列表
+`-- README.md            # 就是這個檔案
 ```
 
 ---
@@ -92,6 +96,25 @@
     ```
 
 測試腳本位於 `tests/e2e.spec.js`。
+
+### 快速驗證腳本 (Python)
+
+除了上述基於 Node.js 的標準測試流程外，專案還提供了一個更為便捷的 Python 驗證腳本 `verify_frontend.py`。
+
+**用途**：
+這個腳本是一個完全獨立的端對端測試器。它會自動處理以下所有事務：
+1.  **啟動後端伺服器**：使用 `uvicorn` 啟動一個臨時的 API 伺服器。
+2.  **執行瀏覽器操作**：使用 Playwright 模擬使用者與 `mp3.html` 頁面的互動。
+3.  **功能驗證**：檢查日誌以確認按鈕點擊、檔案上傳等功能是否如預期般運作。
+4.  **產生結果**：成功時會產生一張 `frontend_verification.png` 螢幕截圖。
+5.  **自動清理**：測試結束後會自動關閉伺服器並刪除臨時檔案。
+
+**如何執行**：
+只需一行指令即可完成所有驗證：
+```bash
+python verify_frontend.py
+```
+這個腳本是進行快速、完整的前端功能回歸測試的理想選擇。
 
 ---
 
