@@ -21,6 +21,17 @@ logging.basicConfig(
 )
 log = logging.getLogger('worker')
 
+def setup_database_logging():
+    """設定資料庫日誌處理器。"""
+    try:
+        from db.log_handler import DatabaseLogHandler
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+            root_logger.addHandler(DatabaseLogHandler(source='worker'))
+            log.info("資料庫日誌處理器設定完成 (source: worker)。")
+    except Exception as e:
+        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+
 # --- 路徑設定 ---
 TOOLS_DIR = ROOT_DIR / "tools"
 TRANSCRIPTS_DIR = ROOT_DIR / "transcripts"
@@ -205,5 +216,8 @@ if __name__ == "__main__":
 
     # 在啟動主迴圈之前，先確保資料庫已初始化
     database.initialize_database()
+
+    # 然後設定日誌
+    setup_database_logging()
 
     main_loop(args.mock, args.poll_interval)

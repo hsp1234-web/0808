@@ -27,6 +27,17 @@ logging.basicConfig(
 )
 log = logging.getLogger('api_server')
 
+def setup_database_logging():
+    """設定資料庫日誌處理器。"""
+    try:
+        from db.log_handler import DatabaseLogHandler
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+            root_logger.addHandler(DatabaseLogHandler(source='api_server'))
+            log.info("資料庫日誌處理器設定完成 (source: api_server)。")
+    except Exception as e:
+        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+
 # 建立一個專門用來記錄前端操作的日誌器
 run_log_file = ROOT_DIR / "run_log.txt"
 action_log = logging.getLogger('frontend_action')
@@ -315,8 +326,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    log.info("🚀 啟動 API 伺服器 (v3)...")
     # 初始化資料庫
     database.initialize_database()
+
+    # 然後設定日誌
+    setup_database_logging()
+
+    log.info("🚀 啟動 API 伺服器 (v3)...")
     log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")
     uvicorn.run(app, host="0.0.0.0", port=args.port)

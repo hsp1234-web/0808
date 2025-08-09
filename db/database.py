@@ -77,7 +77,19 @@ def initialize_database():
                     UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
                 END;
             """)
-        log.info("✅ 資料庫初始化完成。`tasks` 資料表已存在。")
+            # 建立一個用於儲存系統日誌的資料表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS system_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    source TEXT NOT NULL,
+                    level TEXT NOT NULL,
+                    message TEXT
+                )
+            """)
+            # 為日誌表建立索引
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_log_source_level ON system_logs (source, level)")
+        log.info("✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。")
     except sqlite3.Error as e:
         log.error(f"初始化資料庫時發生錯誤: {e}")
     finally:

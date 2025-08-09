@@ -16,7 +16,7 @@ log = logging.getLogger('local_run')
 
 def install_dependencies():
     """安裝所有必要的依賴套件。"""
-    log.info("--- 步驟 0/5: 檢查並安裝依賴 ---")
+    log.info("--- 步驟 0/6: 檢查並安裝依賴 ---")
     requirements_files = ["requirements.txt", "requirements-worker.txt"]
     for req_file in requirements_files:
         log.info(f"正在安裝 {req_file}...")
@@ -36,7 +36,7 @@ def main():
     # 在每次執行前清理舊的資料庫，確保測試環境的純淨
     db_file = Path("db/queue.db")
     if db_file.exists():
-        log.info(f"--- 步驟 -1/5: 正在清理舊的資料庫檔案 ({db_file}) ---")
+        log.info(f"--- 步驟 -1/6: 正在清理舊的資料庫檔案 ({db_file}) ---")
         db_file.unlink()
         log.info("✅ 舊資料庫已刪除。")
 
@@ -46,7 +46,7 @@ def main():
     orchestrator_proc = None
     try:
         # 1. 啟動協調器 (在真實模式下)
-        log.info("--- 步驟 1/5: 啟動協調器 ---")
+        log.info("--- 步驟 1/6: 啟動協調器 ---")
         # 使用 --no-mock 參數，強制使用真實模式
         cmd = [sys.executable, "orchestrator.py", "--no-mock"]
         orchestrator_proc = subprocess.Popen(
@@ -59,7 +59,7 @@ def main():
         log.info(f"✅ 協調器已啟動 (PID: {orchestrator_proc.pid})")
 
         # 2. 等待 API 伺服器就緒並取得埠號
-        log.info("--- 步驟 2/5: 等待 API 伺服器就緒並取得埠號 ---")
+        log.info("--- 步驟 2/6: 等待 API 伺服器就緒並取得埠號 ---")
         api_port = None
         port_pattern = re.compile(r"API_PORT:\s*(\d+)")
         start_time = time.time()
@@ -100,7 +100,7 @@ def main():
              return
 
         # 3. 提交一個測試任務
-        log.info("--- 步驟 3/5: 提交一個測試任務 ---")
+        log.info("--- 步驟 3/6: 提交一個測試任務 ---")
         try:
             import requests
             api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
@@ -142,7 +142,7 @@ def main():
 
 
         # 4. 監聽心跳信號，直到偵測到 IDLE
-        log.info("--- 步驟 4/5: 監聽心跳，等待系統變為 IDLE ---")
+        log.info("--- 步驟 4/6: 監聽心跳，等待系統變為 IDLE ---")
         running_detected = False
         idle_after_running_detected = False
 
@@ -168,12 +168,45 @@ def main():
 
         if not idle_after_running_detected:
             log.error("❌ 測試流程結束，但未偵測到預期的『RUNNING -> IDLE』狀態轉換。")
+            raise RuntimeError("Test failed: Did not detect RUNNING -> IDLE transition.")
+
+        # 5. 驗證資料庫日誌
+        log.info("--- 步驟 5/6: 驗證資料庫日誌 ---")
+        try:
+            import sqlite3
+            # 在終止服務前，給資料庫一點時間完成最後的寫入
+            time.sleep(1)
+            db_conn = sqlite3.connect("db/queue.db")
+            cursor = db_conn.cursor()
+
+            # 檢查 orchestrator 的心跳日誌是否存在
+            cursor.execute("SELECT COUNT(*) FROM system_logs WHERE source = 'orchestrator' AND message LIKE '%HEARTBEAT%'")
+            orchestrator_logs_count = cursor.fetchone()[0]
+            if orchestrator_logs_count > 0:
+                log.info(f"✅ 驗證成功：在資料庫中找到 {orchestrator_logs_count} 筆 Orchestrator 心跳日誌。")
+            else:
+                raise ValueError("驗證失敗：未在資料庫中找到 Orchestrator 的心跳日誌。")
+
+            # 檢查 worker 的日誌是否存在
+            cursor.execute("SELECT COUNT(*) FROM system_logs WHERE source = 'worker'")
+            worker_logs_count = cursor.fetchone()[0]
+            if worker_logs_count > 0:
+                log.info(f"✅ 驗證成功：在資料庫中找到 {worker_logs_count} 筆 Worker 日誌。")
+            else:
+                raise ValueError("驗證失敗：未在資料庫中找到 Worker 的日誌。")
+
+            db_conn.close()
+            log.info("✅ 所有日誌驗證均已通過！")
+
+        except Exception as e:
+            log.error(f"❌ 驗證資料庫日誌時失敗: {e}", exc_info=True)
+            raise # 將錯誤再次拋出，以標記測試失敗
 
     except Exception as e:
         log.critical(f"💥 Local Test Runner 發生致命錯誤: {e}", exc_info=True)
     finally:
         if orchestrator_proc and orchestrator_proc.poll() is None:
-            log.info("--- 正在終止協調器 ---")
+            log.info("--- 步驟 6/6: 正在終止協調器 ---")
             orchestrator_proc.terminate()
             orchestrator_proc.wait(timeout=5)
         log.info("🏁 Local Test Runner 結束。")

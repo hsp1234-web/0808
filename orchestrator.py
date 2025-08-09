@@ -23,6 +23,17 @@ logging.basicConfig(
 )
 log = logging.getLogger('orchestrator')
 
+def setup_database_logging():
+    """設定資料庫日誌處理器。"""
+    try:
+        from db.log_handler import DatabaseLogHandler
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+            root_logger.addHandler(DatabaseLogHandler(source='orchestrator'))
+            log.info("資料庫日誌處理器設定完成 (source: orchestrator)。")
+    except Exception as e:
+        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+
 def stream_reader(stream, prefix):
     """一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。"""
     for line in iter(stream.readline, ''):
@@ -60,10 +71,13 @@ def main():
     )
     args = parser.parse_args()
 
-    log.info(f"🚀 協調器啟動。模式: {'模擬 (Mock)' if args.mock else '真實 (Real)'}")
-
     # 在啟動服務前，確保資料庫已初始化
     database.initialize_database()
+
+    # 然後設定日誌
+    setup_database_logging()
+
+    log.info(f"🚀 協調器啟動。模式: {'模擬 (Mock)' if args.mock else '真實 (Real)'}")
 
     processes = []
     threads = []
@@ -109,9 +123,9 @@ def main():
 
             # 心跳檢查
             if database.are_tasks_active():
-                print("HEARTBEAT: RUNNING", flush=True)
+                log.info("HEARTBEAT: RUNNING")
             else:
-                print("HEARTBEAT: IDLE", flush=True)
+                log.info("HEARTBEAT: IDLE")
 
             time.sleep(args.heartbeat_interval)
 
