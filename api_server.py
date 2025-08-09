@@ -3,6 +3,7 @@ import uuid
 import shutil
 import logging
 import json
+import subprocess
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -130,6 +131,42 @@ async def log_frontend_action(payload: Dict):
     """
     log.info(f"📝 收到前端操作日誌: {payload}")
     return {"status": "logged"}
+
+
+import psutil
+
+@app.get("/api/system_stats")
+async def get_system_stats():
+    """
+    獲取並回傳當前的系統資源使用狀態（CPU, RAM, GPU）。
+    """
+    # CPU
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+
+    # RAM
+    ram = psutil.virtual_memory()
+    ram_usage = ram.percent
+
+    # GPU (透過 nvidia-smi)
+    gpu_usage = None
+    try:
+        # 執行 nvidia-smi 命令
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, check=True
+        )
+        # 解析輸出
+        gpu_usage = float(result.stdout.strip())
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        # nvidia-smi 不存在或執行失敗
+        log.debug(f"無法獲取 GPU 資訊: {e}")
+        gpu_usage = None # 表示無 GPU 或無法讀取
+
+    return {
+        "cpu_usage": cpu_usage,
+        "ram_usage": ram_usage,
+        "gpu_usage": gpu_usage
+    }
 
 
 @app.get("/api/health")

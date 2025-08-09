@@ -43,7 +43,14 @@ def main():
     parser.add_argument(
         "--mock",
         action="store_true",
-        help="如果設置，則 worker 將以模擬模式運行。"
+        default=True, # 將模擬模式設為預設值
+        help="如果設置，則 worker 將以模擬模式運行。預設為啟用。"
+    )
+    parser.add_argument(
+        "--no-mock",
+        action="store_false",
+        dest="mock",
+        help="如果設置，則 worker 將以真實模式運行。"
     )
     parser.add_argument(
         "--heartbeat-interval",

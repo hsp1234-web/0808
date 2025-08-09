@@ -66,26 +66,57 @@ def process_task(task: dict, use_mock: bool):
             command.append(f"--language={language}")
 
         log.info(f"🔧 執行命令: {' '.join(command)}")
-        result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
 
-        # 4. 處理執行結果
-        if result.returncode == 0:
-            log.info(f"✅ 工具成功執行任務: {task_id}")
-            # 讀取轉錄結果
-            transcript = output_file.read_text(encoding='utf-8').strip()
-            # 將結果以 JSON 格式儲存
+        # 改用 Popen 進行非阻塞式讀取
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+        # 4. 即時讀取 stdout 來更新進度
+        full_stdout = []
+        full_stderr = []
+
+        # 使用緒來避免阻塞
+        def read_stderr():
+            for line in process.stderr:
+                full_stderr.append(line)
+                log.warning(f"[工具 stderr] {line.strip()}")
+
+        import threading
+        stderr_thread = threading.Thread(target=read_stderr)
+        stderr_thread.start()
+
+        for line in process.stdout:
+            full_stdout.append(line)
+            try:
+                # 解析 JSON 進度
+                progress_data = json.loads(line)
+                progress = progress_data.get("progress")
+                text = progress_data.get("text")
+                if progress is not None:
+                    log.info(f"📈 任務 {task_id} 進度: {progress}% - {text[:30]}...")
+                    database.update_task_progress(task_id, progress, text)
+            except json.JSONDecodeError:
+                # 不是 JSON 格式的日誌，直接印出
+                log.info(f"[工具 stdout] {line.strip()}")
+
+        process.wait()
+        stderr_thread.join()
+
+        # 5. 處理最終結果
+        if process.returncode == 0:
+            log.info(f"✅ 工具成功完成任務: {task_id}")
+            final_transcript = output_file.read_text(encoding='utf-8').strip()
             final_result = json.dumps({
-                "transcript": transcript,
-                "tool_stdout": result.stdout,
+                "transcript": final_transcript,
+                "tool_stdout": "".join(full_stdout),
             })
             database.update_task_status(task_id, 'completed', final_result)
         else:
-            log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {result.returncode}")
-            error_message = result.stderr or result.stdout or "未知錯誤"
+            log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {process.returncode}")
+            error_message = "".join(full_stderr) or "".join(full_stdout) or "未知錯誤"
             final_result = json.dumps({
                 "error": error_message,
-                "tool_stdout": result.stdout,
-                "tool_stderr": result.stderr
+                "tool_stdout": "".join(full_stdout),
+                "tool_stderr": "".join(full_stderr)
             })
             database.update_task_status(task_id, 'failed', final_result)
 

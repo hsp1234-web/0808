@@ -34,12 +34,69 @@
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等格式</p>
                 <input id="file-input" type="file" multiple class="hidden" @change="handleFileUpload">
             </label>
+
+            <!-- 選項 -->
+            <div class="phoenix-glass rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="model-select" class="block text-sm font-medium mb-1">模型大小</label>
+                    <select id="model-select" v-model="selectedModel" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
+                        <option value="tiny">Tiny (最快)</option>
+                        <option value="base">Base</option>
+                        <option value="small">Small</option>
+                        <option value="medium">Medium (建議)</option>
+                        <option value="large">Large (最準確)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="language-select" class="block text-sm font-medium mb-1">轉錄語言</label>
+                    <select id="language-select" v-model="selectedLanguage" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
+                        <option value="zh">繁體中文 (Traditional Chinese)</option>
+                        <option value="en">英文 (English)</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
-        <!-- 任務儀表板 -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- 進行中任務 -->
-            <div class="phoenix-glass rounded-xl p-4 sm:p-6">
+        <!-- 系統狀態 & 任務儀表板 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 系統狀態 -->
+            <div class="phoenix-glass rounded-xl p-4 sm:p-6 lg:col-span-1">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="activity" class="w-6 h-6"></i>系統狀態</h2>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between items-baseline mb-1">
+                            <span class="font-medium">CPU</span>
+                            <span class="text-sm font-bold">{{ systemStats.cpu_usage.toFixed(1) }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div class="bg-green-500 h-2.5 rounded-full" :style="{ width: systemStats.cpu_usage + '%' }"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-baseline mb-1">
+                            <span class="font-medium">RAM</span>
+                            <span class="text-sm font-bold">{{ systemStats.ram_usage.toFixed(1) }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div class="bg-yellow-500 h-2.5 rounded-full" :style="{ width: systemStats.ram_usage + '%' }"></div>
+                        </div>
+                    </div>
+                    <div v-if="systemStats.gpu_usage !== null">
+                        <div class="flex justify-between items-baseline mb-1">
+                            <span class="font-medium">GPU</span>
+                            <span class="text-sm font-bold">{{ systemStats.gpu_usage.toFixed(1) }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div class="bg-purple-500 h-2.5 rounded-full" :style="{ width: systemStats.gpu_usage + '%' }"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 任務儀表板 -->
+            <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <!-- 進行中任務 -->
+                <div class="phoenix-glass rounded-xl p-4 sm:p-6">
                 <h2 class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="loader-2" class="w-6 h-6 animate-spin"></i>進行中任務</h2>
                 <div id="ongoing-tasks" class="space-y-3 max-h-96 overflow-y-auto">
                     <div v-if="ongoingTasks.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -54,6 +111,9 @@
                         <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2 dark:bg-gray-700">
                             <div class="bg-blue-500 h-1.5 rounded-full" :style="{ width: task.progress + '%' }"></div>
                         </div>
+                        <p v-if="task.status === 'PROCESSING' && task.result && task.result.transcript" class="text-xs text-gray-500 dark:text-gray-400 mt-2 truncate">
+                            {{ task.result.transcript }}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -76,22 +136,26 @@
                         <input type="checkbox" class="w-5 h-5" @change="toggleSelection(task.id)">
                         <div class="flex-grow">
                             <p class="font-medium" :title="task.filename">{{ task.filename }}</p>
-                            <p class="text-xs" :class="task.statusColor">{{ task.statusText }}</p>
+                            <div class="flex items-center gap-2">
+                                <p class="text-xs" :class="task.statusColor">{{ task.statusText }}</p>
+                                <span v-if="task.speed" class="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">{{ task.speed }}x</span>
+                            </div>
                         </div>
-                        <button @click="previewTask = task" class="p-2 hover:bg-gray-500/10 rounded-full transition-colors">
+                        <button @click="openPreview(task)" class="p-2 hover:bg-gray-500/10 rounded-full transition-colors">
                             <i data-lucide="file-text" class="w-5 h-5"></i>
                         </button>
                     </div>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- 預覽 Modal -->
-        <div v-if="previewTask" @click.self="previewTask = null" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div v-if="previewTask" @click.self="closePreview" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div class="phoenix-glass rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
                 <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
                     <h3 class="text-lg font-semibold truncate">{{ previewTask.filename }}</h3>
-                    <button @click="previewTask = null" class="p-2 hover:bg-gray-500/20 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    <button @click="closePreview" class="p-2 hover:bg-gray-500/20 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
                 </div>
                 <div class="p-6 flex-grow overflow-y-auto">
                     <pre class="whitespace-pre-wrap text-sm">{{ previewTask.result || previewTask.error }}</pre>
@@ -109,21 +173,25 @@
                 const tasks = reactive({});
                 const previewTask = ref(null);
                 const selectedTasks = ref(new Set());
-                let pollingInterval = null;
+                const selectedModel = ref('medium');
+                const selectedLanguage = ref('zh');
+                const systemStats = reactive({ cpu_usage: 0, ram_usage: 0, gpu_usage: null });
+                let taskPollingInterval = null;
+                let statsPollingInterval = null;
 
                 const ongoingTasks = computed(() =>
-                    Object.values(tasks).filter(t => t.status !== 'COMPLETED' && t.status !== 'FAILED').sort((a,b) => b.startTime - a.startTime)
+                    Object.values(tasks).filter(t => t.status !== 'COMPLETED' && t.status !== 'FAILED').sort((a, b) => b.startTime - a.startTime)
                 );
 
                 const completedTasks = computed(() =>
-                    Object.values(tasks).filter(t => t.status === 'COMPLETED' || t.status === 'FAILED').sort((a,b) => b.endTime - a.endTime)
+                    Object.values(tasks).filter(t => t.status === 'COMPLETED' || t.status === 'FAILED').sort((a, b) => b.endTime - a.endTime)
                 );
 
                 const getStatusInfo = (task) => {
-                    switch(task.status) {
+                    switch (task.status) {
                         case 'UPLOADING': return { text: `上傳中 ${task.progress}%`, color: 'text-gray-500' };
                         case 'PENDING': return { text: '排隊中', color: 'text-gray-500' };
-                        case 'PROCESSING': return { text: '處理中', color: 'text-purple-500' };
+                        case 'PROCESSING': return { text: `處理中 ${task.progress || 0}%`, color: 'text-purple-500' };
                         case 'COMPLETED': return { text: '已完成', color: 'text-green-500' };
                         case 'FAILED': return { text: '失敗', color: 'text-red-500' };
                         default: return { text: '未知', color: 'text-yellow-500' };
@@ -136,37 +204,83 @@
                     statusColor: getStatusInfo(task).color
                 })));
 
-                const enhancedCompletedTasks = computed(() => completedTasks.value.map(task => ({
-                    ...task,
-                    statusText: getStatusInfo(task).text,
-                    statusColor: getStatusInfo(task).color
-                })));
+                const enhancedCompletedTasks = computed(() => completedTasks.value.map(task => {
+                    let speed = null;
+                    if (task.status === 'COMPLETED' && task.audioDuration && task.endTime && task.startTime) {
+                        const processingTime = (task.endTime - task.startTime) / 1000; // in seconds
+                        if (processingTime > 0) {
+                            speed = (task.audioDuration / processingTime).toFixed(1);
+                        }
+                    }
+                    return {
+                        ...task,
+                        statusText: getStatusInfo(task).text,
+                        statusColor: getStatusInfo(task).color,
+                        speed: speed
+                    };
+                }));
 
-                const handleFileUpload = (event) => {
+                const logAction = (action, details = {}) => {
+                    console.log(`Logging action: ${action}`, details);
+                    fetch('/log/action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, ...details })
+                    }).catch(error => console.error('Failed to log action:', error));
+                };
+
+                const getAudioDuration = (file) => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            audioContext.decodeAudioData(e.target.result,
+                                (buffer) => resolve(buffer.duration),
+                                (error) => reject(`無法解碼音訊檔案: ${error.err}`)
+                            );
+                        };
+                        reader.onerror = (e) => reject("讀取檔案失敗");
+                        reader.readAsArrayBuffer(file);
+                    });
+                };
+
+                const handleFileUpload = async (event) => {
                     const files = event.target.files;
                     if (!files.length) return;
 
                     for (const file of files) {
+                        logAction('file_selected', { filename: file.name, size: file.size });
                         const tempId = `temp_${Date.now()}_${Math.random()}`;
+
                         tasks[tempId] = {
                             id: tempId,
                             filename: file.name,
                             status: 'UPLOADING',
                             progress: 0,
-                            startTime: Date.now()
+                            startTime: Date.now(),
+                            audioDuration: null
                         };
+
+                        try {
+                            const duration = await getAudioDuration(file);
+                            tasks[tempId].audioDuration = duration;
+                            logAction('audio_duration_retrieved', { tempId, duration });
+                        } catch (error) {
+                            console.error(error);
+                            logAction('audio_duration_failed', { tempId, error });
+                        }
 
                         uploadFile(file, tempId);
                     }
-                    // Reset file input
                     event.target.value = '';
                 };
 
                 const uploadFile = (file, tempId) => {
+                    logAction('upload_started', { tempId: tempId, filename: file.name, model: selectedModel.value, language: selectedLanguage.value });
                     const formData = new FormData();
                     formData.append('file', file);
-                    // 在此可加入模型大小、語言等參數
-                    // formData.append('model_size', 'tiny');
+                    formData.append('model_size', selectedModel.value);
+                    formData.append('language', selectedLanguage.value);
 
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', '/api/transcribe', true);
@@ -182,9 +296,7 @@
                         if (xhr.status === 202) {
                             const response = JSON.parse(xhr.responseText);
                             const newTaskId = response.task_id;
-
-                            // Replace temp task with final task
-                            tasks[newTaskId] = { ...tasks[tempId], id: newTaskId, status: 'PENDING', progress: 100 };
+                            tasks[newTaskId] = { ...tasks[tempId], id: newTaskId, status: 'PENDING', progress: 0 };
                             delete tasks[tempId];
                         } else {
                             tasks[tempId].status = 'FAILED';
@@ -206,16 +318,15 @@
                     const tasksToPoll = Object.values(tasks).filter(t => t.status === 'PENDING' || t.status === 'PROCESSING');
                     if (tasksToPoll.length === 0) return;
 
-                    // 使用 Promise.all 並行處理所有請求，避免單一請求阻塞
                     const promises = tasksToPoll.map(task => (async () => {
                         try {
                             const response = await fetch(`/api/status/${task.id}`);
                             if (response.ok) {
                                 const data = await response.json();
                                 if (tasks[data.id]) {
-                                    // 使用 Object.assign 確保響應性
                                     const updateData = {
                                         status: data.status,
+                                        progress: data.progress,
                                         result: data.result,
                                         error: data.error,
                                     };
@@ -227,18 +338,12 @@
                             } else if (response.status === 404) {
                                 if (tasks[task.id]) {
                                     tasks[task.id].status = 'FAILED';
-                                    tasks[task.id].error = '任務 ID 在後端找不到，可能已過期或被清除。';
+                                    tasks[task.id].error = '任務 ID 在後端找不到。';
                                     tasks[task.id].endTime = Date.now();
                                 }
                             }
                         } catch (e) {
-                            console.error(`Polling error for task ${task.id}:`, e);
-                            // 也可以考慮在這裡設定任務為失敗狀態
-                            if (tasks[task.id]) {
-                                tasks[task.id].status = 'FAILED';
-                                tasks[task.id].error = '輪詢時發生網路錯誤。';
-                                tasks[task.id].endTime = Date.now();
-                            }
+                            console.error(`輪詢任務 ${task.id} 時出錯:`, e);
                         }
                     })());
 
@@ -248,16 +353,19 @@
                 const toggleSelection = (taskId) => {
                     if (selectedTasks.value.has(taskId)) {
                         selectedTasks.value.delete(taskId);
+                        logAction('deselected_task', { taskId });
                     } else {
                         selectedTasks.value.add(taskId);
+                        logAction('selected_task', { taskId });
                     }
                 };
 
                 const downloadSelected = () => {
+                    logAction('download_selected_clicked', { taskIds: Array.from(selectedTasks.value) });
                     selectedTasks.value.forEach(taskId => {
                         const task = tasks[taskId];
-                        if (task && task.status === 'COMPLETED') {
-                            const blob = new Blob([task.result], { type: 'text/plain;charset=utf-8' });
+                        if (task && task.status === 'COMPLETED' && task.result && task.result.transcript) {
+                            const blob = new Blob([task.result.transcript], { type: 'text/plain;charset=utf-8' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
@@ -270,24 +378,56 @@
                     });
                 };
 
+                const pollSystemStats = async () => {
+                    try {
+                        const response = await fetch('/api/system_stats');
+                        if (response.ok) {
+                            const data = await response.json();
+                            systemStats.cpu_usage = data.cpu_usage;
+                            systemStats.ram_usage = data.ram_usage;
+                            systemStats.gpu_usage = data.gpu_usage;
+                        }
+                    } catch (e) {
+                        console.error("無法獲取系統狀態:", e);
+                    }
+                };
 
                 onMounted(() => {
-                    // lucide.createIcons(); // 暫時禁用以進行偵錯
-                    pollingInterval = setInterval(pollTasks, 2000);
+                    taskPollingInterval = setInterval(pollTasks, 2000);
+                    statsPollingInterval = setInterval(pollSystemStats, 3000);
+                    pollSystemStats();
                 });
 
                 onUnmounted(() => {
-                    clearInterval(pollingInterval);
+                    clearInterval(taskPollingInterval);
+                    clearInterval(statsPollingInterval);
                 });
+
+                const openPreview = (task) => {
+                    logAction('preview_opened', { taskId: task.id, filename: task.filename });
+                    previewTask.value = task;
+                };
+
+                const closePreview = () => {
+                    if (previewTask.value) {
+                        logAction('preview_closed', { taskId: previewTask.value.id });
+                        previewTask.value = null;
+                    }
+                };
 
                 return {
                     ongoingTasks: enhancedOngoingTasks,
                     completedTasks: enhancedCompletedTasks,
                     previewTask,
                     selectedTasks,
+                    selectedModel,
+                    selectedLanguage,
+                    systemStats,
                     handleFileUpload,
                     toggleSelection,
-                    downloadSelected
+                    downloadSelected,
+                    openPreview,
+                    closePreview
                 };
             }
         }).mount('#app');

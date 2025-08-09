@@ -39,12 +39,22 @@ def initialize_database():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL UNIQUE,
                     status TEXT NOT NULL DEFAULT 'pending',
+                    progress INTEGER DEFAULT 0,
                     payload TEXT,
                     result TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            # Add progress column if it doesn't exist (for migration)
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN progress INTEGER DEFAULT 0")
+                log.info("欄位 'progress' 已成功新增至 'tasks' 資料表。")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e):
+                    pass # Column already exists, ignore
+                else:
+                    raise
             # 建立索引以加速查詢
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON tasks (status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_id ON tasks (task_id)")
@@ -78,7 +88,7 @@ def add_task(task_id: str, payload: str) -> bool:
     sql = "INSERT INTO tasks (task_id, payload, status) VALUES (?, ?, 'pending')"
     conn = get_db_connection()
     if not conn: return False
-
+    log.info(f"DB:{DB_FILE} 準備新增任務: {task_id}")
     try:
         with conn:
             conn.execute(sql, (task_id, payload))
@@ -104,6 +114,7 @@ def fetch_and_lock_task() -> dict | None:
     conn = get_db_connection()
     if not conn: return None
 
+    log.debug(f"DB:{DB_FILE} Worker 正在嘗試獲取任務...")
     try:
         # 使用 IMMEDIATE 交易來立即鎖定資料庫以進行寫入
         with conn:
@@ -117,13 +128,14 @@ def fetch_and_lock_task() -> dict | None:
             if task:
                 # 2. 如果找到任務，立刻更新其狀態
                 task_id_to_process = task["id"]
-                log.info(f"🔒 鎖定任務 ID: {task['task_id']} (資料庫 id: {task_id_to_process})")
+                log.info(f"🔒 找到並鎖定任務 ID: {task['task_id']} (資料庫 id: {task_id_to_process})")
                 cursor.execute(
                     "UPDATE tasks SET status = 'processing' WHERE id = ?", (task_id_to_process,)
                 )
                 return dict(task)
             else:
                 # 佇列中沒有待處理的任務
+                log.debug("...佇列為空，無待處理任務。")
                 return None
     except sqlite3.Error as e:
         log.error(f"❌ 獲取並鎖定任務時發生錯誤: {e}", exc_info=True)
@@ -132,6 +144,26 @@ def fetch_and_lock_task() -> dict | None:
         if conn:
             conn.close()
 
+
+def update_task_progress(task_id: str, progress: int, partial_result: str):
+    """
+    更新任務的即時進度和部分結果。
+    """
+    # 將部分結果打包成與最終結果相同的 JSON 結構
+    result_payload = json.dumps({"transcript": partial_result})
+    sql = "UPDATE tasks SET progress = ?, result = ? WHERE task_id = ?"
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        with conn:
+            conn.execute(sql, (progress, result_payload, task_id))
+        log.debug(f"📈 任務 {task_id} 進度已更新為: {progress}%")
+    except sqlite3.Error as e:
+        log.error(f"❌ 更新任務 {task_id} 進度時出錯: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
 
 def update_task_status(task_id: str, status: str, result: str = None):
     """
