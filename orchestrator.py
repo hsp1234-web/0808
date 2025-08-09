@@ -6,6 +6,7 @@ import logging
 import argparse
 import threading
 from pathlib import Path
+import socket
 
 # 將專案根目錄加入 sys.path
 ROOT_DIR = Path(__file__).resolve().parent
@@ -27,6 +28,12 @@ def stream_reader(stream, prefix):
     for line in iter(stream.readline, ''):
         log.info(f"[{prefix}] {line.strip()}")
     stream.close()
+
+def find_free_port() -> int:
+    """尋找一個空閒的 TCP 埠號。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 def main():
     """
@@ -54,12 +61,16 @@ def main():
     processes = []
     threads = []
     try:
-        # 1. 啟動 API 伺服器
-        api_server_cmd = [sys.executable, "api_server.py"]
+        # 1. 尋找可用埠號並啟動 API 伺服器
+        api_port = find_free_port()
+        api_server_cmd = [sys.executable, "api_server.py", "--port", str(api_port)]
         log.info(f"🔧 正在啟動 API 伺服器: {' '.join(api_server_cmd)}")
         api_proc = subprocess.Popen(api_server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         processes.append(api_proc)
-        log.info(f"✅ API 伺服器已啟動，PID: {api_proc.pid}")
+        log.info(f"✅ API 伺服器已啟動，PID: {api_proc.pid}，埠號: {api_port}")
+        # 向外部監聽器報告埠號
+        print(f"API_PORT: {api_port}", flush=True)
+
 
         # 2. 啟動背景工作處理器
         worker_cmd = [sys.executable, "worker.py"]

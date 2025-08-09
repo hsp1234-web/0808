@@ -140,8 +140,19 @@ async def health_check():
 # --- 主程式啟動 ---
 if __name__ == "__main__":
     import uvicorn
+    import argparse
+
+    parser = argparse.ArgumentParser(description="鳳凰音訊轉錄儀 API 伺服器")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8001,
+        help="伺服器監聽的埠號"
+    )
+    args = parser.parse_args()
+
     log.info("🚀 啟動 API 伺服器 (v3)...")
     # 初始化資料庫
     database.initialize_database()
-    log.info("請在瀏覽器中開啟 http://127.0.0.1:8001")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
