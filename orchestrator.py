@@ -4,6 +4,7 @@ import subprocess
 import sys
 import logging
 import argparse
+import threading
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
@@ -13,13 +14,19 @@ sys.path.insert(0, str(ROOT_DIR))
 from db import database
 
 # --- 日誌設定 ---
-# 使用 stdout，以便外部程序可以捕捉心跳信號
+# 使用 stdout，以便外部程序可以捕捉心跳信號和子程序日誌
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 log = logging.getLogger('orchestrator')
+
+def stream_reader(stream, prefix):
+    """一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。"""
+    for line in iter(stream.readline, ''):
+        log.info(f"[{prefix}] {line.strip()}")
+    stream.close()
 
 def main():
     """
@@ -45,6 +52,7 @@ def main():
     database.initialize_database()
 
     processes = []
+    threads = []
     try:
         # 1. 啟動 API 伺服器
         api_server_cmd = [sys.executable, "api_server.py"]
@@ -62,18 +70,24 @@ def main():
         processes.append(worker_proc)
         log.info(f"✅ Worker 已啟動，PID: {worker_proc.pid}")
 
-        # 3. 進入主監控與心跳迴圈
+        # 3. 啟動日誌流式讀取執行緒
+        # 為每個子程序的 stdout 和 stderr 建立一個執行緒
+        threads.append(threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server')))
+        threads.append(threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr')))
+        threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker')))
+        threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr')))
+
+        for t in threads:
+            t.daemon = True # 設置為守護執行緒，以便主程序退出時它們也會退出
+            t.start()
+
+        # 4. 進入主監控與心跳迴圈
         log.info("--- [協調器進入監控模式] ---")
         while True:
             # 健康檢查
             for proc in processes:
                 if proc.poll() is not None:
-                    log.critical(f"💥 子程序 {proc.args[1]} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
-                    log.critical("--- STDOUT DUMP ---")
-                    log.critical(proc.stdout.read())
-                    log.critical("--- STDERR DUMP ---")
-                    log.critical(proc.stderr.read())
-                    raise RuntimeError(f"子程序 {proc.args[1]} 異常退出")
+                    raise RuntimeError(f"子程序 {proc.args[1]} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
 
             # 心跳檢查
             if database.are_tasks_active():
@@ -100,6 +114,11 @@ def main():
                 except subprocess.TimeoutExpired:
                     log.warning(f"⚠️ 子程序 {proc.pid} 未能正常終止，將強制擊殺 (kill)。")
                     proc.kill()
+
+        # 等待日誌執行緒結束
+        for t in threads:
+            t.join(timeout=2)
+
         log.info("👋 協調器已關閉。")
 
 
