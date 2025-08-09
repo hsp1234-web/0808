@@ -26,16 +26,9 @@
             <h1 class="text-2xl font-bold">鳳凰 <span class="phoenix-gradient-text">音訊轉錄儀 v2</span></h1>
         </header>
 
-        <!-- 上傳區域 -->
-        <div id="upload-container">
-            <label for="file-input" class="phoenix-glass rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 transition-all border-2 border-dashed border-gray-400/50">
-                <i data-lucide="upload-cloud" class="w-16 h-16 phoenix-gradient-text"></i>
-                <p class="mt-4 text-lg font-semibold">點擊此處或拖曳多個檔案以上傳</p>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等格式</p>
-                <input id="file-input" type="file" multiple class="hidden" @change="handleFileUpload">
-            </label>
-
-            <!-- 選項 -->
+        <!-- 步驟一: 環境準備 -->
+        <div id="prepare-step" v-if="!isEnvReady">
+            <h2 class="text-xl font-semibold mb-2">步驟 1: 選擇模型與語言</h2>
             <div class="phoenix-glass rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label for="model-select" class="block text-sm font-medium mb-1">模型大小</label>
@@ -55,6 +48,42 @@
                     </select>
                 </div>
             </div>
+
+            <!-- 確認按鈕 -->
+            <div class="mt-4">
+                <button @click="prepareEnvironment" class="w-full px-4 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                    <span>確認選擇並準備環境</span>
+                </button>
+            </div>
+
+            <!-- 環境準備狀態 -->
+            <div v-if="envPrepareTask" class="mt-4 phoenix-glass rounded-xl p-4">
+                <h3 class="font-semibold mb-2">環境準備狀態</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-medium truncate pr-4">{{ envPrepareTask.statusText }}</p>
+                        <p class="text-sm font-semibold" :class="envPrepareTask.statusColor">{{ envPrepareTask.progress }}%</p>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                        <div class="bg-sky-500 h-2.5 rounded-full transition-all duration-300" :style="{ width: envPrepareTask.progress + '%' }"></div>
+                    </div>
+                    <p v-if="envPrepareTask.result && envPrepareTask.result.log" class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                        {{ envPrepareTask.result.log }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步驟二: 上傳與轉錄 -->
+        <div id="upload-container" v-if="isEnvReady">
+            <h2 class="text-xl font-semibold mb-2">步驟 2: 上傳音訊檔案進行轉錄</h2>
+            <label for="file-input" class="phoenix-glass rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 transition-all border-2 border-dashed border-gray-400/50">
+                <i data-lucide="upload-cloud" class="w-16 h-16 phoenix-gradient-text"></i>
+                <p class="mt-4 text-lg font-semibold">點擊此處或拖曳多個檔案以上傳</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">支援 MP3, WAV, M4A 等格式</p>
+                <input id="file-input" type="file" multiple class="hidden" @change="handleFileUpload">
+            </label>
         </div>
 
         <!-- 系統狀態 & 任務儀表板 -->
@@ -176,8 +205,11 @@
                 const selectedModel = ref('medium');
                 const selectedLanguage = ref('zh');
                 const systemStats = reactive({ cpu_usage: 0, ram_usage: 0, gpu_usage: null });
+                const envPrepareTask = ref(null);
+                const isEnvReady = ref(false);
                 let taskPollingInterval = null;
                 let statsPollingInterval = null;
+                let envPollingInterval = null;
 
                 const ongoingTasks = computed(() =>
                     Object.values(tasks).filter(t => t.status !== 'COMPLETED' && t.status !== 'FAILED').sort((a, b) => b.startTime - a.startTime)
@@ -415,6 +447,11 @@
                     }
                 };
 
+                const prepareEnvironment = async () => {
+                    // TODO: Implement this after backend is ready
+                    console.log("準備環境中...");
+                };
+
                 return {
                     ongoingTasks: enhancedOngoingTasks,
                     completedTasks: enhancedCompletedTasks,
@@ -423,11 +460,14 @@
                     selectedModel,
                     selectedLanguage,
                     systemStats,
+                    envPrepareTask,
+                    isEnvReady,
                     handleFileUpload,
                     toggleSelection,
                     downloadSelected,
                     openPreview,
-                    closePreview
+                    closePreview,
+                    prepareEnvironment
                 };
             }
         }).mount('#app');

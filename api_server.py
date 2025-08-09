@@ -52,6 +52,25 @@ async def serve_frontend(request: Request):
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
+@app.post("/api/prepare_environment", status_code=202)
+async def create_prepare_environment_task(model_size: str = Form("tiny")):
+    """
+    接收準備環境的請求（如下載模型），並在資料庫中建立一個 'download' 任務。
+    """
+    task_id = str(uuid.uuid4())
+    log.info(f"📥 收到新的環境準備請求，分配任務 ID: {task_id}")
+
+    payload = {"model_size": model_size}
+
+    # 假設 add_task 函式已更新，可以接收 'type' 參數
+    if not database.add_task(task_id, json.dumps(payload), task_type='download'):
+        log.error(f"❌ 無法將 'download' 任務 {task_id} 新增至資料庫佇列。")
+        raise HTTPException(status_code=500, detail="無法建立任務佇列。")
+
+    log.info(f"✅ 'download' 任務 {task_id} 已成功加入佇列。")
+    return {"task_id": task_id}
+
+
 @app.post("/api/transcribe", status_code=202)
 async def create_transcription_task(
     file: UploadFile = File(...),
