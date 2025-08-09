@@ -82,25 +82,42 @@ class Transcriber:
             else:
                 log.info(f"🌍 未指定語言，模型自動偵測到 {detected_lang_msg}")
 
-            full_transcript = "".join(segment.text for segment in segments).strip()
+            # --- 串流式輸出 ---
+            # 我們不再一次性回傳整個文本，而是逐句印出
+            cc = OpenCC('s2twp') if info.language.lower().startswith('zh') else None
+            if cc:
+                log.info("🔄 偵測到中文，將對每句進行繁體化處理。")
 
-            duration = time.time() - start_time
-            log.info(f"📝 轉錄完成。耗時: {duration:.2f} 秒。")
+            total_transcript = []
+            for segment in segments:
+                segment_text = segment.text.strip()
+                if cc:
+                    segment_text = cc.convert(segment_text)
 
-            # 如果偵測到的語言是中文，則進行繁簡轉換
-            if info.language.lower().startswith('zh'):
-                log.info("🔄 偵測到中文，正在執行繁體化處理...")
-                try:
-                    cc = OpenCC('s2twp')
-                    converted_transcript = cc.convert(full_transcript)
-                    log.info("✅ 繁體化處理完成。")
-                    return converted_transcript
-                except Exception as e:
-                    log.error(f"❌ 繁簡轉換時發生錯誤: {e}", exc_info=True)
-                    # 轉換失敗時，回傳原始轉錄稿
-                    return full_transcript
-            else:
-                return full_transcript
+                # 建立一個 JSON 物件來標準化輸出
+                output_data = {
+                    "type": "segment",
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment_text
+                }
+                # 使用 flush=True 確保即時輸出
+                print(json.dumps(output_data, ensure_ascii=False), flush=True)
+                total_transcript.append(segment_text)
+
+            processing_time = time.time() - start_time
+            log.info(f"📝 轉錄完成。耗時: {processing_time:.2f} 秒。")
+
+            # 在最後，輸出一個包含最終統計資訊的 JSON 物件
+            final_info = {
+                "type": "final",
+                "audio_duration": info.duration,
+                "processing_time": processing_time
+            }
+            print(json.dumps(final_info), flush=True)
+
+            # 為了相容原有的檔案寫入邏輯，我們回傳完整的文本
+            return "".join(total_transcript)
 
         except Exception as e:
             log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)

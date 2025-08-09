@@ -5,7 +5,9 @@ import logging
 import json
 import subprocess
 import sys
-from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
+import threading
+import asyncio
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -52,6 +54,34 @@ file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 action_log.addHandler(file_handler)
 action_log.propagate = False # 防止日誌傳播到 root logger，避免在控制台重複輸出
+
+# --- WebSocket 連線管理器 ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        log.info(f"新用戶端連線。目前共 {len(self.active_connections)} 個連線。")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        log.info(f"一個用戶端離線。目前共 {len(self.active_connections)} 個連線。")
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+    async def broadcast_json(self, data: dict):
+        for connection in self.active_connections:
+            await connection.send_json(data)
+
+manager = ConnectionManager()
+
 
 # --- FastAPI 應用實例 ---
 app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
@@ -305,6 +335,104 @@ async def download_transcript(task_id: str):
     except (json.JSONDecodeError, KeyError) as e:
         log.error(f"❌ 解析任務 {task_id} 的結果時出錯: {e}")
         raise HTTPException(status_code=500, detail="無法解析任務結果。")
+
+
+def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
+    """
+    在一個單獨的執行緒中執行模型下載，並透過 WebSocket 回報結果。
+    """
+    def _download_in_thread():
+        log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
+        try:
+            cmd = [sys.executable, "tools/transcriber.py", "--command=download", f"--model_size={model_size}"]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+            stdout, stderr = process.communicate()
+
+            if process.returncode == 0:
+                log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
+                message = {
+                    "type": "DOWNLOAD_STATUS",
+                    "payload": {"model": model_size, "status": "completed", "progress": 100}
+                }
+            else:
+                log.error(f"❌ [執行緒] 模型 '{model_size}' 下載失敗。 Stderr: {stderr}")
+                message = {
+                    "type": "DOWNLOAD_STATUS",
+                    "payload": {"model": model_size, "status": "failed", "error": stderr}
+                }
+
+            # 使用 run_coroutine_threadsafe 在主事件迴圈中安全地廣播訊息
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+
+        except Exception as e:
+            log.error(f"❌ [執行緒] 下載執行緒中發生錯誤: {e}", exc_info=True)
+            message = {
+                "type": "DOWNLOAD_STATUS",
+                "payload": {"model": model_size, "status": "failed", "error": str(e)}
+            }
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+
+    # 建立並啟動執行緒
+    thread = threading.Thread(target=_download_in_thread)
+    thread.start()
+
+
+@app.websocket("/api/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            log.info(f"從 WebSocket 收到訊息: {data}")
+
+            try:
+                message = json.loads(data)
+                msg_type = message.get("type")
+                payload = message.get("payload", {})
+
+                if msg_type == "DOWNLOAD_MODEL":
+                    model_size = payload.get("model")
+                    if model_size:
+                        log.info(f"收到下載 '{model_size}' 模型的請求。")
+                        await manager.broadcast_json({
+                            "type": "DOWNLOAD_STATUS",
+                            "payload": {"model": model_size, "status": "starting", "progress": 0}
+                        })
+                        loop = asyncio.get_running_loop()
+                        trigger_model_download(model_size, loop)
+                    else:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
+
+                elif msg_type == "START_TRANSCRIPTION":
+                    task_id = payload.get("task_id", str(uuid.uuid4()))
+                    file_path = payload.get("file_path")
+                    model_size = payload.get("model_size", "tiny")
+                    language = payload.get("language")
+
+                    if not file_path:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少檔案路徑參數"})
+                    else:
+                        log.info(f"收到開始轉錄 '{file_path}' 的請求。")
+                        loop = asyncio.get_running_loop()
+                        trigger_transcription(task_id, file_path, model_size, language, loop)
+
+                else:
+                    # 處理其他類型的訊息
+                    await manager.broadcast_json({
+                        "type": "ECHO",
+                        "payload": f"已收到未知類型的訊息: {msg_type}"
+                    })
+
+            except json.JSONDecodeError:
+                log.error("收到了非 JSON 格式的 WebSocket 訊息。")
+                await manager.broadcast_json({"type": "ERROR", "payload": "訊息必須是 JSON 格式"})
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        log.info("WebSocket 用戶端已離線。")
+    except Exception as e:
+        log.error(f"WebSocket 發生未預期錯誤: {e}", exc_info=True)
+        manager.disconnect(websocket)
 
 
 @app.get("/api/health")
