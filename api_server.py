@@ -3,6 +3,8 @@ import uuid
 import shutil
 import logging
 import json
+import subprocess
+import sys
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -51,6 +53,22 @@ async def serve_frontend(request: Request):
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
+def check_model_exists(model_size: str) -> bool:
+    """
+    檢查指定的 Whisper 模型是否已經被下載到本地快取。
+    這是一個簡化的實現，依賴於 `tools/transcriber.py` 的能力。
+    """
+    # 為了避免在 API Server 中直接依賴 heavy ML 函式庫，
+    # 我們透過呼叫一個輕量級的工具腳本來檢查。
+    check_command = [sys.executable, "tools/transcriber.py", "--command=check", f"--model_size={model_size}"]
+    try:
+        result = subprocess.run(check_command, capture_output=True, text=True, check=True)
+        log.info(f"模型 '{model_size}' 檢查結果: {result.stdout.strip()}")
+        return "exists" in result.stdout.lower()
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        log.error(f"檢查模型 '{model_size}' 時發生錯誤: {e}")
+        return False
+
 @app.post("/api/transcribe", status_code=202)
 async def create_transcription_task(
     file: UploadFile = File(...),
@@ -58,14 +76,16 @@ async def create_transcription_task(
     language: Optional[str] = Form(None)
 ):
     """
-    接收音訊檔案，將其儲存，並在資料庫中建立一個轉錄任務。
+    接收音訊檔案，根據模型是否存在，決定是直接建立轉錄任務，
+    還是先建立一個下載任務和一個依賴於它的轉錄任務。
     """
-    task_id = str(uuid.uuid4())
-    log.info(f"📥 收到新的轉錄請求，分配任務 ID: {task_id}")
+    # 1. 檢查模型是否存在
+    model_is_present = check_model_exists(model_size)
 
-    # 1. 儲存上傳的檔案
+    # 2. 保存上傳的檔案
+    transcribe_task_id = str(uuid.uuid4())
     file_extension = Path(file.filename).suffix or ".wav"
-    saved_file_path = UPLOADS_DIR / f"{task_id}{file_extension}"
+    saved_file_path = UPLOADS_DIR / f"{transcribe_task_id}{file_extension}"
     try:
         with open(saved_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -76,23 +96,34 @@ async def create_transcription_task(
     finally:
         await file.close()
 
-    # 2. 建立任務 payload
-    payload = {
+    # 3. 根據模型是否存在來建立任務
+    transcription_payload = {
         "input_file": str(saved_file_path),
-        "output_dir": "transcripts", # Worker 將會把結果存在這個子目錄
+        "output_dir": "transcripts",
         "model_size": model_size,
         "language": language
     }
 
-    # 3. 將任務加入 SQLite 佇列
-    if not database.add_task(task_id, json.dumps(payload)):
-        log.error(f"❌ 無法將任務 {task_id} 新增至資料庫佇列。")
-        # 如果新增任務失敗，我們應該清理已上傳的檔案
-        saved_file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="無法建立任務佇列。")
+    if model_is_present:
+        # 模型已存在，直接建立轉錄任務
+        log.info(f"✅ 模型 '{model_size}' 已存在，直接建立轉錄任務: {transcribe_task_id}")
+        database.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe')
+        return {"task_id": transcribe_task_id}
+    else:
+        # 模型不存在，建立下載任務和依賴的轉錄任務
+        download_task_id = str(uuid.uuid4())
+        log.warning(f"⚠️ 模型 '{model_size}' 不存在。建立下載任務 '{download_task_id}' 和依賴的轉錄任務 '{transcribe_task_id}'")
 
-    log.info(f"✅ 任務 {task_id} 已成功加入佇列。")
-    return {"task_id": task_id}
+        download_payload = {"model_size": model_size}
+        database.add_task(download_task_id, json.dumps(download_payload), task_type='download')
+
+        database.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe', depends_on=download_task_id)
+
+        # 我們回傳轉錄任務的 ID，讓前端可以追蹤最終結果
+        return JSONResponse(content={"tasks": [
+            {"task_id": download_task_id, "type": "download"},
+            {"task_id": transcribe_task_id, "type": "transcribe"}
+        ]})
 
 
 @app.get("/api/status/{task_id}")
@@ -130,6 +161,42 @@ async def log_frontend_action(payload: Dict):
     """
     log.info(f"📝 收到前端操作日誌: {payload}")
     return {"status": "logged"}
+
+
+import psutil
+
+@app.get("/api/system_stats")
+async def get_system_stats():
+    """
+    獲取並回傳當前的系統資源使用狀態（CPU, RAM, GPU）。
+    """
+    # CPU
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+
+    # RAM
+    ram = psutil.virtual_memory()
+    ram_usage = ram.percent
+
+    # GPU (透過 nvidia-smi)
+    gpu_usage = None
+    try:
+        # 執行 nvidia-smi 命令
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, check=True
+        )
+        # 解析輸出
+        gpu_usage = float(result.stdout.strip())
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        # nvidia-smi 不存在或執行失敗
+        log.debug(f"無法獲取 GPU 資訊: {e}")
+        gpu_usage = None # 表示無 GPU 或無法讀取
+
+    return {
+        "cpu_usage": cpu_usage,
+        "ram_usage": ram_usage,
+        "gpu_usage": gpu_usage
+    }
 
 
 @app.get("/api/health")
