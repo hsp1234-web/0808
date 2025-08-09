@@ -81,17 +81,13 @@ import time
 from datetime import datetime
 import threading
 from collections import deque
+import re
 from IPython.display import clear_output
 from google.colab import output as colab_output
 
 # ==============================================================================
-# SECTION 0.5: 輔助函式
+# SECTION 0.5: 輔助函式 is omitted for brevity
 # ==============================================================================
-def find_free_port() -> int:
-    """尋找一個空閒的 TCP 埠號。"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
 
 # ==============================================================================
 # SECTION 1: 管理器類別定義 (Managers)
@@ -170,7 +166,7 @@ class ServerManager:
         self.server_process = None; self.server_ready_event = threading.Event()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
-        self.port = find_free_port() # 動態尋找埠號
+        self.port = None # 將在這裡儲存從日誌中解析出的埠號
 
     def _run(self):
         try:
@@ -224,21 +220,35 @@ class ServerManager:
             )
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
-            # ** 適配新架構: 監聽新的握手信號 **
-            # 我們現在監聽由 orchestrator 轉發的 api_server 日誌
-            handshake_done = False
+            # ** 適配新架構: 監聽新的握手信號，並從中解析埠號 **
+            port_pattern = re.compile(r"API_PORT:\s*(\d+)")
+            uvicorn_ready_pattern = re.compile(r"Uvicorn running on")
+            server_ready = False
+
             for line in iter(self.server_process.stdout.readline, ''):
                 if self._stop_event.is_set(): break
 
-                # 將所有日誌都顯示在儀表板上
-                self._log_manager.log("DEBUG", line.strip())
+                line = line.strip()
+                self._log_manager.log("DEBUG", line) # 顯示所有日誌
 
-                # 新的握手信號
-                if not handshake_done and "Uvicorn running on" in line:
-                    self._stats['status'] = "✅ 伺服器運行中"
-                    self._log_manager.log("SUCCESS", "伺服器已就緒！收到 Uvicorn 握手信號！")
+                # 解析埠號
+                if not self.port:
+                    port_match = port_pattern.search(line)
+                    if port_match:
+                        self.port = int(port_match.group(1))
+                        self._log_manager.log("INFO", f"✅ 從日誌中成功解析出 API 埠號: {self.port}")
+
+                # 監聽 Uvicorn 就緒信號
+                if not server_ready:
+                    if uvicorn_ready_pattern.search(line):
+                        server_ready = True
+                        self._stats['status'] = "✅ 伺服器運行中"
+                        self._log_manager.log("SUCCESS", "伺服器已就緒！收到 Uvicorn 握手信號！")
+
+                # 當埠號和就緒信號都收到後，才觸發事件
+                if self.port and server_ready:
                     self.server_ready_event.set()
-                    handshake_done = True # 避免重複設定
+                    # 這裡可以選擇性 break，但為了持續監控，我們讓它繼續讀取日誌
 
             # 等待子程序自然結束 (通常是外部中斷)
             self.server_process.wait()
@@ -304,29 +314,29 @@ def main():
         server_manager.start()
 
         if server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT):
-            # V65.5: 增強重試邏輯
-            max_retries, retry_delay = 10, 3
-            for attempt in range(max_retries):
-                try:
-                    log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
-                    # ** 適配新架構: 使用固定的埠號 8001 **
-                    url = colab_output.eval_js(f'google.colab.kernel.proxyPort(8001)')
-                    if url and url.strip():
-                        shared_stats['proxy_url'] = url
-                        log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
-                        break # 成功，跳出迴圈
-                except Exception as e:
-                    log_manager.log("WARN", f"嘗試失敗: {e}")
+            if not server_manager.port:
+                log_manager.log("CRITICAL", "伺服器已就緒，但未能解析出 API 埠號。無法建立代理連結。")
+            else:
+                # V65.5: 增強重試邏輯
+                max_retries, retry_delay = 10, 3
+                for attempt in range(max_retries):
+                    try:
+                        log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
+                        url = colab_output.eval_js(f'google.colab.kernel.proxyPort({server_manager.port})')
+                        if url and url.strip():
+                            shared_stats['proxy_url'] = url
+                            log_manager.log("SUCCESS", f"✅ 成功取得代理連結！埠號: {server_manager.port}")
+                            break # 成功，跳出迴圈
+                    except Exception as e:
+                        log_manager.log("WARN", f"嘗試失敗: {e}")
 
-                # 只有在尚未成功時才打印等待訊息並等待
+                    if not shared_stats.get('proxy_url'):
+                        log_manager.log("INFO", f"將於 {retry_delay} 秒後重試...")
+                        time.sleep(retry_delay)
+
                 if not shared_stats.get('proxy_url'):
-                    log_manager.log("INFO", f"將於 {retry_delay} 秒後重試...")
-                    time.sleep(retry_delay)
-
-            # for 迴圈結束後檢查是否成功
-            if not shared_stats.get('proxy_url'):
-                shared_stats['status'] = "❌ 取得代理連結失敗"
-                log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
+                    shared_stats['status'] = "❌ 取得代理連結失敗"
+                    log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
