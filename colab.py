@@ -302,7 +302,14 @@ def main():
         if display_manager._thread.is_alive(): display_manager.stop()
         server_manager.stop()
         clear_output() # 清理最後的儀表板輸出
-        print("\n".join(log_manager.get_display_logs())) # 打印最終日誌
+        # 修正：將日誌字典列表轉換為字串列表後再打印
+        final_logs = []
+        for log in log_manager.get_display_logs():
+            ts = log['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            level = log['level']
+            message = log['message']
+            final_logs.append(f"[{ts}] [{level:^8}] {message}")
+        print("\n".join(final_logs))
         print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
 if __name__ == "__main__":
