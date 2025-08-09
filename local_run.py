@@ -4,6 +4,7 @@ import sys
 import time
 import logging
 from pathlib import Path
+import re
 
 # --- 日誌設定 ---
 logging.basicConfig(
@@ -33,15 +34,43 @@ def main():
         )
         log.info(f"✅ 協調器已啟動 (PID: {orchestrator_proc.pid})")
 
-        # 2. 等待 API 伺服器就緒
-        # 簡單的實現：給予足夠的時間讓服務啟動
-        log.info("--- 步驟 2/4: 等待 API 伺服器就緒 ---")
-        time.sleep(8)
+        # 2. 等待 API 伺服器就緒並取得埠號
+        log.info("--- 步驟 2/4: 等待 API 伺服器就緒並取得埠號 ---")
+        api_port = None
+        port_pattern = re.compile(r"API_PORT:\s*(\d+)")
+        start_time = time.time()
+        timeout = 30 # 30 秒超時
+
+        server_ready = False
+        uvicorn_ready_pattern = re.compile(r"Uvicorn running on")
+
+        for line in iter(orchestrator_proc.stdout.readline, ''):
+            log.info(f"[Orchestrator]: {line.strip()}") # 顯示日誌以便除錯
+
+            if not api_port:
+                port_match = port_pattern.search(line)
+                if port_match:
+                    api_port = port_match.group(1)
+                    log.info(f"✅ 偵測到 API 埠號: {api_port}")
+
+            if not server_ready:
+                if uvicorn_ready_pattern.search(line):
+                    server_ready = True
+                    log.info("✅ Uvicorn 伺服器已就緒。")
+
+            if api_port and server_ready:
+                log.info("✅ API 伺服器已完全準備就緒。")
+                break
+
+            if time.time() - start_time > timeout:
+                log.error("❌ 等待 API 伺服器就緒超時。")
+                raise RuntimeError("API server did not become ready in time.")
 
         # 檢查協調器是否仍在運行
         if orchestrator_proc.poll() is not None:
              log.error("❌ 協調器在啟動過程中意外終止。")
              log.error("--- 協調器日誌 ---")
+             # 讀取剩餘的日誌
              for line in orchestrator_proc.stdout:
                  log.error(line.strip())
              return
@@ -50,11 +79,14 @@ def main():
         log.info("--- 步驟 3/4: 提交一個測試任務 ---")
         try:
             import requests
+            api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
+            log.info(f"準備提交任務至: {api_url}")
+
             # 建立一個假的音訊檔案用於上傳
             Path("temp_dummy_for_test.wav").write_bytes(b"dummy audio data")
             with open("temp_dummy_for_test.wav", "rb") as f:
                 files = {'file': ('test.wav', f, 'audio/wav')}
-                response = requests.post("http://127.0.0.1:8001/api/transcribe", files=files, timeout=10)
+                response = requests.post(api_url, files=files, timeout=10)
                 response.raise_for_status()
                 task_id = response.json()['task_id']
                 log.info(f"✅ 成功提交任務，Task ID: {task_id}")
