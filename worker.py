@@ -81,11 +81,6 @@ def process_task(task: dict, use_mock: bool):
             database.update_task_status(task_id, 'completed', final_result)
         else:
             log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {result.returncode}")
-            # 將詳細的 stderr 印出到 worker 的日誌中，以便直接觀察
-            if result.stderr:
-                log.error(f"工具的 STDERR:\n{result.stderr}")
-            if result.stdout:
-                log.error(f"工具的 STDOUT:\n{result.stdout}")
             error_message = result.stderr or result.stdout or "未知錯誤"
             final_result = json.dumps({
                 "error": error_message,

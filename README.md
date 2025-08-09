@@ -65,6 +65,36 @@
 
 ---
 
+## 🧪 端對端測試 (E2E Testing)
+
+為了確保前端介面的穩定性與核心功能的正確性，我們引入了 **Playwright** 作為端對端測試框架。這些測試會模擬真實使用者的操作，在瀏覽器中自動執行上傳、狀態檢查等流程。
+
+### 如何執行測試
+
+1.  **安裝依賴套件**:
+    確保您已安裝所有 Node.js 和 Python 的依賴。
+    ```bash
+    npm install
+    pip install -r requirements.txt
+    pip install -r requirements-worker.txt
+    ```
+
+2.  **安裝 Playwright 瀏覽器**:
+    首次執行時，需要下載 Playwright 所需的瀏覽器核心。
+    ```bash
+    npx playwright install --with-deps
+    ```
+
+3.  **執行測試**:
+    此命令將會啟動後端伺服器（使用模擬模式），並在無頭瀏覽器中執行所有測試案例。
+    ```bash
+    npx playwright test
+    ```
+
+測試腳本位於 `tests/e2e.spec.js`。
+
+---
+
 ## 📈 目前進度
 
 **專案重構第一階段：架構與檔案結構重建 - ✅ 已完成**

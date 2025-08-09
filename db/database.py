@@ -11,13 +11,11 @@ log = logging.getLogger(__name__)
 DB_FILE = Path(__file__).parent / "queue.db"
 
 def get_db_connection():
-    """建立並回傳一個資料庫連線，並啟用 WAL 模式以提高並行性。"""
+    """建立並回傳一個資料庫連線。"""
     try:
         # isolation_level=None 會開啟 autocommit 模式，但我們將手動管理交易
         conn = sqlite3.connect(DB_FILE, timeout=10) # 增加 timeout
         conn.row_factory = sqlite3.Row # 將回傳結果設定為類似 dict 的物件
-        # 啟用 WAL (Write-Ahead Logging) 模式，這對於多進程讀寫至關重要
-        conn.execute("PRAGMA journal_mode=WAL;")
         return conn
     except sqlite3.Error as e:
         log.error(f"資料庫連線失敗: {e}")

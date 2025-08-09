@@ -5,7 +5,8 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "@playwright/test": "^1.45.0"
   },
   "peerDependencies": {
     "typescript": "^5"

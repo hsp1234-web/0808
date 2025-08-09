@@ -82,10 +82,14 @@ def main():
             api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
             log.info(f"準備提交任務至: {api_url}")
 
-            # 建立一個假的音訊檔案用於上傳
-            Path("temp_dummy_for_test.wav").write_bytes(b"dummy audio data")
-            with open("temp_dummy_for_test.wav", "rb") as f:
-                files = {'file': ('test.wav', f, 'audio/wav')}
+            # 使用一個真實的、有效的音訊檔案進行測試
+            dummy_audio_path = Path("dummy_audio.wav")
+            if not dummy_audio_path.exists():
+                log.error(f"❌ 測試所需的音訊檔案 {dummy_audio_path} 不存在！")
+                return
+
+            with open(dummy_audio_path, "rb") as f:
+                files = {'file': (dummy_audio_path.name, f, 'audio/wav')}
                 response = requests.post(api_url, files=files, timeout=10)
                 response.raise_for_status()
                 task_id = response.json()['task_id']
@@ -93,8 +97,6 @@ def main():
         except Exception as e:
             log.error(f"❌ 提交任務時失敗: {e}", exc_info=True)
             return # 提前終止
-        finally:
-            Path("temp_dummy_for_test.wav").unlink(missing_ok=True)
 
 
         # 4. 監聽心跳信號，直到偵測到 IDLE

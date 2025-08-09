@@ -206,31 +206,43 @@
                     const tasksToPoll = Object.values(tasks).filter(t => t.status === 'PENDING' || t.status === 'PROCESSING');
                     if (tasksToPoll.length === 0) return;
 
-                    for (const task of tasksToPoll) {
+                    // 使用 Promise.all 並行處理所有請求，避免單一請求阻塞
+                    const promises = tasksToPoll.map(task => (async () => {
                         try {
                             const response = await fetch(`/api/status/${task.id}`);
                             if (response.ok) {
                                 const data = await response.json();
                                 if (tasks[data.id]) {
-                                    tasks[data.id].status = data.status;
-                                    if(data.status === 'COMPLETED') {
-                                        tasks[data.id].result = data.result;
-                                        tasks[data.id].endTime = Date.now();
+                                    // 使用 Object.assign 確保響應性
+                                    const updateData = {
+                                        status: data.status,
+                                        result: data.result,
+                                        error: data.error,
+                                    };
+                                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                                        updateData.endTime = Date.now();
                                     }
-                                    if(data.status === 'FAILED') {
-                                        tasks[data.id].error = data.error;
-                                        tasks[data.id].endTime = Date.now();
-                                    }
+                                    Object.assign(tasks[data.id], updateData);
                                 }
                             } else if (response.status === 404) {
-                                tasks[task.id].status = 'FAILED';
-                                tasks[task.id].error = '任務 ID 在後端找不到，可能已過期或被清除。';
-                                tasks[task.id].endTime = Date.now();
+                                if (tasks[task.id]) {
+                                    tasks[task.id].status = 'FAILED';
+                                    tasks[task.id].error = '任務 ID 在後端找不到，可能已過期或被清除。';
+                                    tasks[task.id].endTime = Date.now();
+                                }
                             }
                         } catch (e) {
                             console.error(`Polling error for task ${task.id}:`, e);
+                            // 也可以考慮在這裡設定任務為失敗狀態
+                            if (tasks[task.id]) {
+                                tasks[task.id].status = 'FAILED';
+                                tasks[task.id].error = '輪詢時發生網路錯誤。';
+                                tasks[task.id].endTime = Date.now();
+                            }
                         }
-                    }
+                    })());
+
+                    await Promise.all(promises);
                 };
 
                 const toggleSelection = (taskId) => {
@@ -260,7 +272,7 @@
 
 
                 onMounted(() => {
-                    lucide.createIcons();
+                    // lucide.createIcons(); // 暫時禁用以進行偵錯
                     pollingInterval = setInterval(pollTasks, 2000);
                 });
 
@@ -281,6 +293,8 @@
         }).mount('#app');
 
         // Re-render icons when Vue updates the DOM
+        // 暫時禁用 MutationObserver 以進行偵錯
+        /*
         const observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 if (mutation.type === 'childList') {
@@ -290,6 +304,7 @@
             }
         });
         observer.observe(document.getElementById('app'), { childList: true, subtree: true });
+        */
 
     </script>
 </body>
