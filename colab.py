@@ -187,6 +187,20 @@ class ServerManager:
 
             self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
 
+            # ** 安裝後端依賴 **
+            requirements_path = project_path / "requirements.txt"
+            if requirements_path.is_file():
+                self._log_manager.log("INFO", f"檢測到 requirements.txt，正在安裝依賴...")
+                # 在 Colab 環境中，使用 -q 來減少不必要的輸出
+                pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)]
+                install_result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
+                if install_result.returncode != 0:
+                    self._log_manager.log("CRITICAL", f"依賴安裝失敗:\n{install_result.stderr}")
+                    return
+                self._log_manager.log("SUCCESS", "✅ 後端依賴安裝完成。")
+            else:
+                self._log_manager.log("WARN", "未在倉庫中找到 requirements.txt，跳過依賴安裝。")
+
             # ** 適配新架構: 啟動 orchestrator.py **
             orchestrator_script_path = project_path / "orchestrator.py"
             if not orchestrator_script_path.is_file():
