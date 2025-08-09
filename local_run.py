@@ -108,8 +108,26 @@ def main():
                 files = {'file': (dummy_audio_path.name, f, 'audio/wav')}
                 response = requests.post(api_url, files=files, timeout=10)
                 response.raise_for_status()
-                task_id = response.json()['task_id']
-                log.info(f"✅ 成功提交任務，Task ID: {task_id}")
+
+                # 處理可能的多任務回應
+                response_data = response.json()
+                task_id = None
+                if "tasks" in response_data:
+                    # 新的多任務回應格式
+                    log.info(f"✅ 成功提交多任務: {response_data['tasks']}")
+                    # 我們關心的是最終的轉錄任務
+                    transcribe_task = next((task for task in response_data["tasks"] if task.get("type") == "transcribe"), None)
+                    if not transcribe_task:
+                        raise ValueError("在回應中找不到 'transcribe' 類型的任務")
+                    task_id = transcribe_task["task_id"]
+                elif "task_id" in response_data:
+                    # 舊的單任務回應格式
+                    task_id = response_data['task_id']
+                else:
+                    raise ValueError("回應中既沒有 'tasks' 也沒有 'task_id'")
+
+                log.info(f"✅ 將追蹤主要任務 ID: {task_id}")
+
         except Exception as e:
             log.error(f"❌ 提交任務時失敗: {e}", exc_info=True)
             return # 提前終止
