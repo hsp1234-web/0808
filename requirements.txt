@@ -9,3 +9,6 @@ python-multipart
 
 # For e2e test script
 requests
+
+# For system resource monitoring
+psutil

@@ -106,32 +106,72 @@ class Transcriber:
             log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
             raise e
 
+import json
+import sys
+from faster_whisper.utils import get_assets_path
+
+def check_model(model_size: str):
+    """檢查模型是否已下載"""
+    try:
+        # 這是 faster-whisper 內部用來找模型路徑的方法
+        model_path = get_assets_path(f"ctranslate2-4-avx2/whisper-{model_size}-ct2")
+        if (Path(model_path) / "config.json").is_file():
+            print("exists")
+            log.info(f"✅ 模型 '{model_size}' 已存在於: {model_path}")
+        else:
+            print("not_exists")
+            log.info(f"❓ 模型 '{model_size}' 不存在。")
+    except Exception as e:
+        print("not_exists")
+        log.error(f"檢查模型 '{model_size}' 時出錯: {e}")
+
+def download_model(model_size: str):
+    """下載模型並回報進度"""
+    log.info(f"📥 開始下載模型: {model_size}")
+    # 利用 _load_model 的副作用來下載
+    try:
+        Transcriber(model_size=model_size)
+        print(json.dumps({"progress": 100, "log": "模型下載完成"}), flush=True)
+    except Exception as e:
+        print(json.dumps({"progress": 100, "log": f"下載失敗: {e}"}), flush=True)
+        log.critical(f"下載模型時發生錯誤: {e}", exc_info=True)
+        exit(1)
+
+
 def main():
     """
-    主函數，用於解析命令列參數並啟動轉錄流程。
+    主函數，根據 command 參數執行不同操作。
     """
-    parser = argparse.ArgumentParser(description="一個獨立的音訊轉錄工具。")
-    parser.add_argument("audio_file", type=str, help="需要轉錄的音訊檔案路徑。")
-    parser.add_argument("output_file", type=str, help="儲存轉錄結果的檔案路徑。")
-    parser.add_argument("--model_size", type=str, default="tiny", help="要使用的 Whisper 模型大小 (例如 'tiny', 'base', 'small')。")
-    parser.add_argument("--language", type=str, default=None, help="音訊的語言 (例如 'en', 'zh')。如果未指定，將自動偵測。")
+    parser = argparse.ArgumentParser(description="一個多功能轉錄與模型管理工具。")
+    parser.add_argument("--command", type=str, default="transcribe", choices=["transcribe", "check", "download"], help="要執行的操作。")
+    # 轉錄參數
+    parser.add_argument("--audio_file", type=str, help="[transcribe] 需要轉錄的音訊檔案路徑。")
+    parser.add_argument("--output_file", type=str, help="[transcribe] 儲存轉錄結果的檔案路徑。")
+    parser.add_argument("--language", type=str, default=None, help="[transcribe] 音訊的語言。")
+    # 通用參數
+    parser.add_argument("--model_size", type=str, default="tiny", help="要使用/檢查/下載的模型大小。")
 
     args = parser.parse_args()
 
-    log.info(f"🚀 工具啟動，參數: {args}")
+    if args.command == "check":
+        check_model(args.model_size)
+        return
 
+    if args.command == "download":
+        download_model(args.model_size)
+        return
+
+    # --- 預設為轉錄 ---
+    if not args.audio_file or not args.output_file:
+        parser.error("--audio_file 和 --output_file 是 'transcribe' 命令的必要參數。")
+
+    log.info(f"🚀 工具啟動 (轉錄模式)，參數: {args}")
     try:
-        # 1. 初始化轉錄器 (這會載入模型)
         transcriber = Transcriber(model_size=args.model_size)
-
-        # 2. 執行轉錄
         result_text = transcriber.transcribe(args.audio_file, args.language)
-
-        # 3. 將結果寫入輸出檔案
         output_path = Path(args.output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True) # 確保目標資料夾存在
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(result_text, encoding='utf-8')
-
         log.info(f"✅ 成功將結果寫入到: {args.output_file}")
 
     except Exception as e:

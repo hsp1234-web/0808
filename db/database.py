@@ -39,12 +39,30 @@ def initialize_database():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL UNIQUE,
                     status TEXT NOT NULL DEFAULT 'pending',
+                    progress INTEGER DEFAULT 0,
                     payload TEXT,
                     result TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    type TEXT DEFAULT 'transcribe',
+                    depends_on TEXT
                 )
             """)
+            # Add columns if they don't exist (for migration)
+            migrations = {
+                "progress": "INTEGER DEFAULT 0",
+                "type": "TEXT DEFAULT 'transcribe'",
+                "depends_on": "TEXT"
+            }
+            for col, col_type in migrations.items():
+                try:
+                    cursor.execute(f"ALTER TABLE tasks ADD COLUMN {col} {col_type}")
+                    log.info(f"欄位 '{col}' 已成功新增至 'tasks' 資料表。")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" in str(e):
+                        pass # Column already exists, ignore
+                    else:
+                        raise
             # 建立索引以加速查詢
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON tasks (status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_id ON tasks (task_id)")
@@ -67,21 +85,23 @@ def initialize_database():
 
 # --- 任務佇列核心功能 ---
 
-def add_task(task_id: str, payload: str) -> bool:
+def add_task(task_id: str, payload: str, task_type: str = 'transcribe', depends_on: str = None) -> bool:
     """
     新增一個新任務到佇列中。
 
     :param task_id: 唯一的任務 ID。
     :param payload: 任務的內容，通常是 JSON 字串。
+    :param task_type: 任務類型 ('transcribe' 或 'download').
+    :param depends_on: 此任務所依賴的另一個任務的 task_id。
     :return: 如果成功新增則回傳 True，否則回傳 False。
     """
-    sql = "INSERT INTO tasks (task_id, payload, status) VALUES (?, ?, 'pending')"
+    sql = "INSERT INTO tasks (task_id, payload, status, type, depends_on) VALUES (?, ?, 'pending', ?, ?)"
     conn = get_db_connection()
     if not conn: return False
-
+    log.info(f"DB:{DB_FILE} 準備新增 '{task_type}' 任務: {task_id} (依賴: {depends_on or '無'})")
     try:
         with conn:
-            conn.execute(sql, (task_id, payload))
+            conn.execute(sql, (task_id, payload, task_type, depends_on))
         log.info(f"✅ 已成功新增任務到佇列: {task_id}")
         return True
     except sqlite3.IntegrityError:
@@ -104,26 +124,38 @@ def fetch_and_lock_task() -> dict | None:
     conn = get_db_connection()
     if not conn: return None
 
+    log.debug(f"DB:{DB_FILE} Worker 正在嘗試獲取任務...")
     try:
         # 使用 IMMEDIATE 交易來立即鎖定資料庫以進行寫入
         with conn:
             cursor = conn.cursor()
-            # 1. 查詢並鎖定一個待處理的任務
-            cursor.execute(
-                "SELECT id, task_id, payload FROM tasks WHERE status = 'pending' ORDER BY created_at LIMIT 1"
-            )
+            # 1. 查詢一個可執行的待處理任務
+            #    - 優先處理無依賴的任務 (例如下載任務)
+            #    - 對於有依賴的任務，只有在其依賴的任務已完成時才選取
+            sql = """
+                SELECT id, task_id, payload, type
+                FROM tasks
+                WHERE status = 'pending' AND (
+                    depends_on IS NULL OR
+                    depends_on IN (SELECT task_id FROM tasks WHERE status = 'completed')
+                )
+                ORDER BY depends_on NULLS FIRST, created_at
+                LIMIT 1
+            """
+            cursor.execute(sql)
             task = cursor.fetchone()
 
             if task:
                 # 2. 如果找到任務，立刻更新其狀態
                 task_id_to_process = task["id"]
-                log.info(f"🔒 鎖定任務 ID: {task['task_id']} (資料庫 id: {task_id_to_process})")
+                log.info(f"🔒 找到並鎖定任務 ID: {task['task_id']} (資料庫 id: {task_id_to_process})")
                 cursor.execute(
                     "UPDATE tasks SET status = 'processing' WHERE id = ?", (task_id_to_process,)
                 )
                 return dict(task)
             else:
                 # 佇列中沒有待處理的任務
+                log.debug("...佇列為空，無待處理任務。")
                 return None
     except sqlite3.Error as e:
         log.error(f"❌ 獲取並鎖定任務時發生錯誤: {e}", exc_info=True)
@@ -132,6 +164,26 @@ def fetch_and_lock_task() -> dict | None:
         if conn:
             conn.close()
 
+
+def update_task_progress(task_id: str, progress: int, partial_result: str):
+    """
+    更新任務的即時進度和部分結果。
+    """
+    # 將部分結果打包成與最終結果相同的 JSON 結構
+    result_payload = json.dumps({"transcript": partial_result})
+    sql = "UPDATE tasks SET progress = ?, result = ? WHERE task_id = ?"
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        with conn:
+            conn.execute(sql, (progress, result_payload, task_id))
+        log.debug(f"📈 任務 {task_id} 進度已更新為: {progress}%")
+    except sqlite3.Error as e:
+        log.error(f"❌ 更新任務 {task_id} 進度時出錯: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
 
 def update_task_status(task_id: str, status: str, result: str = None):
     """
@@ -162,7 +214,7 @@ def get_task_status(task_id: str) -> dict | None:
     :param task_id: 要查詢的任務 ID。
     :return: 包含任務狀態的字典，或如果找不到則回傳 None。
     """
-    sql = "SELECT task_id, status, payload, result, created_at, updated_at FROM tasks WHERE task_id = ?"
+    sql = "SELECT task_id, status, progress, type, payload, result, created_at, updated_at FROM tasks WHERE task_id = ?"
     conn = get_db_connection()
     if not conn: return None
     try:

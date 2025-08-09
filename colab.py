@@ -207,7 +207,8 @@ class ServerManager:
             self._log_manager.log("INFO", "將啟動後端服務...")
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
             # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
-            launch_command = [sys.executable, "orchestrator.py"]
+            # 在 Colab 環境中，我們總是希望以真實模式運行
+            launch_command = [sys.executable, "orchestrator.py", "--no-mock"]
 
             self.server_process = subprocess.Popen(
                 launch_command,

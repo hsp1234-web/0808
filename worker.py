@@ -25,21 +25,51 @@ log = logging.getLogger('worker')
 TOOLS_DIR = ROOT_DIR / "tools"
 TRANSCRIPTS_DIR = ROOT_DIR / "transcripts"
 
-def process_task(task: dict, use_mock: bool):
-    """
-    處理單一轉錄任務。
-
-    :param task: 從資料庫獲取的任務字典。
-    :param use_mock: 是否使用模擬轉錄工具。
-    """
+def process_download_task(task: dict, use_mock: bool):
+    """處理模型下載任務。"""
     task_id = task['task_id']
-    log.info(f"🚀 開始處理任務: {task_id}")
+    payload = json.loads(task['payload'])
+    model_size = payload['model_size']
+    log.info(f"🚀 開始處理 'download' 任務: {task_id} for model '{model_size}'")
 
+    # 在模擬模式下，我們也假裝下載
+    if use_mock:
+        log.info("(模擬) 假裝下載模型...")
+        time.sleep(3)
+        database.update_task_status(task_id, 'completed', json.dumps({"message": "模型已成功下載 (模擬)"}))
+        return
+
+    # 真實模式下，呼叫工具的 download 命令
+    tool_script_path = TOOLS_DIR / "transcriber.py"
+    command = [sys.executable, str(tool_script_path), f"--command=download", f"--model_size={model_size}"]
+
+    # 我們可以像轉錄一樣監聽進度，但 download_model 目前只在結束時輸出一次
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+    for line in process.stdout:
+        try:
+            progress_data = json.loads(line)
+            database.update_task_progress(task_id, progress_data.get("progress", 0), progress_data.get("log", ""))
+        except json.JSONDecodeError:
+            log.info(f"[下載工具 stdout] {line.strip()}")
+
+    process.wait()
+    if process.returncode == 0:
+        database.update_task_status(task_id, 'completed', json.dumps({"message": f"模型 {model_size} 已成功下載"}))
+    else:
+        log.error(f"❌ 下載模型 {model_size} 失敗。")
+        database.update_task_status(task_id, 'failed', json.dumps({"error": f"下載模型 {model_size} 失敗"}))
+
+
+def process_transcription_task(task: dict, use_mock: bool):
+    """處理音訊轉錄任務。"""
+    task_id = task['task_id']
+    log.info(f"🚀 開始處理 'transcribe' 任務: {task_id}")
     try:
         payload = json.loads(task['payload'])
         input_file = Path(payload['input_file'])
         model_size = payload.get('model_size', 'tiny')
-        language = payload.get('language') # 可以是 None
+        language = payload.get('language')
 
         if not input_file.exists():
             raise FileNotFoundError(f"輸入檔案不存在: {input_file}")
@@ -56,36 +86,68 @@ def process_task(task: dict, use_mock: bool):
 
         # 3. 構建並執行命令
         command = [
-            sys.executable, # 使用與 worker 相同的 Python 解譯器
+            sys.executable,
             str(tool_script_path),
-            str(input_file),
-            str(output_file),
+            f"--command=transcribe", # 明確指定命令
+            f"--audio_file={input_file}",
+            f"--output_file={output_file}",
             f"--model_size={model_size}"
         ]
         if language:
             command.append(f"--language={language}")
 
         log.info(f"🔧 執行命令: {' '.join(command)}")
-        result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
 
-        # 4. 處理執行結果
-        if result.returncode == 0:
-            log.info(f"✅ 工具成功執行任務: {task_id}")
-            # 讀取轉錄結果
-            transcript = output_file.read_text(encoding='utf-8').strip()
-            # 將結果以 JSON 格式儲存
+        # 改用 Popen 進行非阻塞式讀取
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+        # 4. 即時讀取 stdout 來更新進度
+        full_stdout = []
+        full_stderr = []
+
+        # 使用緒來避免阻塞
+        def read_stderr():
+            for line in process.stderr:
+                full_stderr.append(line)
+                log.warning(f"[工具 stderr] {line.strip()}")
+
+        import threading
+        stderr_thread = threading.Thread(target=read_stderr)
+        stderr_thread.start()
+
+        for line in process.stdout:
+            full_stdout.append(line)
+            try:
+                # 解析 JSON 進度
+                progress_data = json.loads(line)
+                progress = progress_data.get("progress")
+                text = progress_data.get("text")
+                if progress is not None:
+                    log.info(f"📈 任務 {task_id} 進度: {progress}% - {text[:30]}...")
+                    database.update_task_progress(task_id, progress, text)
+            except json.JSONDecodeError:
+                # 不是 JSON 格式的日誌，直接印出
+                log.info(f"[工具 stdout] {line.strip()}")
+
+        process.wait()
+        stderr_thread.join()
+
+        # 5. 處理最終結果
+        if process.returncode == 0:
+            log.info(f"✅ 工具成功完成任務: {task_id}")
+            final_transcript = output_file.read_text(encoding='utf-8').strip()
             final_result = json.dumps({
-                "transcript": transcript,
-                "tool_stdout": result.stdout,
+                "transcript": final_transcript,
+                "tool_stdout": "".join(full_stdout),
             })
             database.update_task_status(task_id, 'completed', final_result)
         else:
-            log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {result.returncode}")
-            error_message = result.stderr or result.stdout or "未知錯誤"
+            log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {process.returncode}")
+            error_message = "".join(full_stderr) or "".join(full_stdout) or "未知錯誤"
             final_result = json.dumps({
                 "error": error_message,
-                "tool_stdout": result.stdout,
-                "tool_stderr": result.stderr
+                "tool_stdout": "".join(full_stdout),
+                "tool_stderr": "".join(full_stderr)
             })
             database.update_task_status(task_id, 'failed', final_result)
 
@@ -93,6 +155,19 @@ def process_task(task: dict, use_mock: bool):
         log.critical(f"💥 處理任務 {task_id} 時發生未預期的嚴重錯誤: {e}", exc_info=True)
         database.update_task_status(task_id, 'failed', json.dumps({"error": str(e)}))
 
+
+def process_task(task: dict, use_mock: bool):
+    """
+    根據任務類型分派到不同的處理函式。
+    """
+    task_type = task.get('type', 'transcribe') # 預設為舊的轉錄任務
+    if task_type == 'download':
+        process_download_task(task, use_mock)
+    elif task_type == 'transcribe':
+        process_transcription_task(task, use_mock)
+    else:
+        log.error(f"❌ 未知的任務類型: '{task_type}' (Task ID: {task['task_id']})")
+        database.update_task_status(task['task_id'], 'failed', json.dumps({"error": f"未知的任務類型: {task_type}"}))
 
 def main_loop(use_mock: bool, poll_interval: int):
     """
