@@ -83,8 +83,10 @@ def check_model_exists(model_size: str) -> bool:
     check_command = [sys.executable, "tools/transcriber.py", "--command=check", f"--model_size={model_size}"]
     try:
         result = subprocess.run(check_command, capture_output=True, text=True, check=True)
-        log.info(f"模型 '{model_size}' 檢查結果: {result.stdout.strip()}")
-        return "exists" in result.stdout.lower()
+        output = result.stdout.strip().lower()
+        log.info(f"模型 '{model_size}' 檢查結果: {output}")
+        # 必須完全匹配 "exists"，避免 "not_exists" 被錯誤判斷為 True
+        return output == "exists"
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         log.error(f"檢查模型 '{model_size}' 時發生錯誤: {e}")
         return False

@@ -12,3 +12,10 @@ requests
 
 # For system resource monitoring
 psutil
+
+# From requirements-worker.txt
+# Transcription Engine
+faster-whisper
+
+# For Chinese Traditional/Simplified conversion
+opencc-python-reimplemented
