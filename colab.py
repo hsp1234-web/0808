@@ -210,7 +210,8 @@ class ServerManager:
             # ** 適配新架構: 不再傳遞 --mock，因為這是生產環境 **
             self._log_manager.log("INFO", "將啟動後端服務...")
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
-            launch_command = [sys.executable, str(orchestrator_script_path)]
+            # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
+            launch_command = [sys.executable, "orchestrator.py"]
 
             self.server_process = subprocess.Popen(
                 launch_command,
