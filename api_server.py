@@ -14,13 +14,33 @@ from typing import Optional, Dict
 # 匯入新的資料庫模組
 from db import database
 
+# --- 路徑設定 ---
+# 以此檔案為基準，定義專案根目錄
+ROOT_DIR = Path(__file__).resolve().parent
+
 # --- 日誌設定 ---
+# 主日誌器
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    handlers=[logging.StreamHandler()] # 輸出到控制台
 )
 log = logging.getLogger('api_server')
+
+# 建立一個專門用來記錄前端操作的日誌器
+run_log_file = ROOT_DIR / "run_log.txt"
+action_log = logging.getLogger('frontend_action')
+action_log.setLevel(logging.INFO)
+
+# 為了確保每次執行都是乾淨的，先清空日誌檔案
+if run_log_file.exists():
+    run_log_file.unlink()
+
+# 為 action_log 新增一個 FileHandler
+file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+action_log.addHandler(file_handler)
+action_log.propagate = False # 防止日誌傳播到 root logger，避免在控制台重複輸出
 
 # --- FastAPI 應用實例 ---
 app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
@@ -154,12 +174,15 @@ async def get_task_status(task_id: str):
     return JSONResponse(content=response_data)
 
 
-@app.post("/log/action", status_code=200)
+@app.post("/api/log/action", status_code=200)
 async def log_frontend_action(payload: Dict):
     """
-    接收前端發送的操作日誌。
+    接收前端發送的操作日誌，並使用專門的日誌器記錄到檔案。
     """
-    log.info(f"📝 收到前端操作日誌: {payload}")
+    action = payload.get("action", "unknown_action")
+    # 為了讓日誌檔案更具可讀性，我們只記錄 action 本身
+    action_log.info(f"[FRONTEND ACTION] {action}")
+    log.info(f"📝 記錄前端操作: {action}") # 在控制台也顯示日誌
     return {"status": "logged"}
 
 

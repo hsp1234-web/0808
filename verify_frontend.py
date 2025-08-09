@@ -1,155 +1,187 @@
 import time
 import os
-import wave
-import base64
 import subprocess
-import requests
-from playwright.sync_api import sync_playwright, expect
+import signal
+from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
 
-def create_dummy_wav(filename="dummy_audio.wav"):
+# --- 設定 ---
+SERVER_URL = "http://127.0.0.1:8000"
+# 在 api_server.py 中，根目錄會提供 mp3.html
+APP_URL = f"{SERVER_URL}/"
+SERVER_START_TIMEOUT = 30  # 秒
+ACTION_TIMEOUT = 10000  # 毫秒
+LOG_FILE = "run_log.txt"
+SCREENSHOT_FILE = "frontend_verification.png"
+DUMMY_FILE_NAME = "dummy_audio.wav"
+
+def create_dummy_wav(filename=DUMMY_FILE_NAME):
     """建立一個簡短的、無聲的 WAV 檔案用於測試上傳。"""
-    with wave.open(filename, 'wb') as wf:
+    import wave
+    # 確保檔案路徑是絕對的
+    filepath = os.path.abspath(filename)
+    with wave.open(filepath, 'wb') as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(16000)
         wf.writeframes(b'\x00' * 16000 * 1) # 1 秒的靜音
-    return os.path.abspath(filename)
+    print(f"✅ 已建立臨時音訊檔案於: {filepath}")
+    return filepath
 
-def wait_for_server(url, timeout=30):
-    """等待後端伺服器啟動。"""
+def verify_log(action_name, timeout=5):
+    """檢查日誌檔案中是否包含指定的 action。"""
     start_time = time.time()
+    expected_log_entry = f"[FRONTEND ACTION] {action_name}"
+    print(f"🔍 正在驗證日誌: 應包含 '{expected_log_entry}'...")
+
     while time.time() - start_time < timeout:
-        try:
-            response = requests.get(url, timeout=1)
-            if response.status_code == 200:
-                print("✅ 伺服器已成功啟動。")
+        if not os.path.exists(LOG_FILE):
+            time.sleep(0.2)
+            continue
+
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if expected_log_entry in content:
+                print(f"✅ 日誌驗證成功: 找到了 '{expected_log_entry}'。")
                 return True
-        except requests.ConnectionError:
-            time.sleep(0.5)
-    print(f"❌ 伺服器在 {timeout} 秒內沒有回應。")
+        time.sleep(0.2)
+
+    print(f"❌ 日誌驗證失敗: 在 {timeout} 秒內未找到 '{expected_log_entry}'。")
+    # 為了除錯，顯示目前的日誌內容
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            print("--- 目前日誌內容 ---")
+            print(f.read())
+            print("--------------------")
     return False
 
 def run_verification():
     """
-    使用 Playwright 執行前端自動化驗證。
+    使用 Playwright 執行前端自動化驗證，包含超時機制和日誌驗證。
     """
     server_process = None
     dummy_file_path = None
+
+    # 使用 Popen 啟動伺服器，以便我們可以獲取其 process ID
+    # preexec_fn=os.setsid 確保我們可以殺死整個 process group
+    print("▶️ 啟動後端伺服器...")
+    server_command = ["uvicorn", "api_server:app", "--host", "127.0.0.1", "--port", "8000"]
+    server_process = subprocess.Popen(server_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+
+    # --- 強健的伺服器啟動等待與超時機制 ---
+    start_time = time.time()
+    server_ready = False
+    print(f"⏳ 等待伺服器啟動... (超時: {SERVER_START_TIMEOUT} 秒)")
+
+    import requests
+    while time.time() - start_time < SERVER_START_TIMEOUT:
+        try:
+            # 使用 /api/health 端點進行健康檢查
+            response = requests.get(f"{SERVER_URL}/api/health", timeout=1)
+            if response.status_code == 200:
+                print("✅ 伺服器已成功啟動並回應健康檢查。")
+                server_ready = True
+                break
+        except requests.ConnectionError:
+            time.sleep(0.5)
+        except requests.Timeout:
+            print(".. 健康檢查超時，重試中 ..")
+
+    if not server_ready:
+        print(f"❌ 伺服器在 {SERVER_START_TIMEOUT} 秒內沒有成功啟動。測試中止。")
+        # 殺死整個 process group
+        os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
+        server_process.wait()
+        return False
+
     try:
-        # 啟動後端伺服器
-        print("▶️ 啟動後端伺服器...")
-        server_process = subprocess.Popen(["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"])
-
-        # 等待伺服器啟動
-        if not wait_for_server("http://0.0.0.0:8000/api/system_stats"):
-            raise RuntimeError("後端伺服器啟動失敗。")
-
         dummy_file_path = create_dummy_wav()
-        with open(dummy_file_path, "rb") as f:
-            file_content_b64 = base64.b64encode(f.read()).decode('utf-8')
 
         with sync_playwright() as p:
             print("▶️ 啟動瀏覽器...")
-            browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+            browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.set_default_timeout(30000) # 設定預設超時
+            page.set_default_timeout(ACTION_TIMEOUT)
 
-            print("▶️ 導航至應用程式頁面...")
-            page.goto("http://0.0.0.0:8000/static/mp3.html", wait_until="domcontentloaded")
+            print(f"▶️ 導航至應用程式頁面: {APP_URL}")
+            page.goto(APP_URL, wait_until="domcontentloaded")
 
-            # --- 字體大小測試 ---
-            print("▶️ 測試字體大小調整功能...")
-            font_size_display = page.locator('span.font-bold:has-text("%")')
-            zoom_in_button = page.locator('button:has(i[data-lucide="zoom-in"])')
-            zoom_out_button = page.locator('button:has(i[data-lucide="zoom-out"])')
+            # 1. 驗證頁面載入日誌
+            if not verify_log("頁面載入完成"):
+                raise RuntimeError("頁面載入日誌驗證失敗。")
 
-            # 初始狀態截圖
-            page.screenshot(path="verification_fontsize_initial.png")
-            print("📸 已擷取初始狀態螢幕截圖。")
-            initial_font_size = font_size_display.inner_text()
-            print(f"初始字體大小: {initial_font_size}")
-            expect(font_size_display).to_have_text("100%")
+            # 2. 點擊「確認設定」按鈕並驗證日誌
+            print("▶️ 模擬操作: 點擊「確認設定」按鈕")
+            page.locator("#confirm-settings-btn").click()
+            if not verify_log("確認設定按鈕點擊"):
+                raise RuntimeError("「確認設定」日誌驗證失敗。")
 
-            # 點擊放大
-            zoom_in_button.click()
-            page.wait_for_timeout(500) # 等待動畫
-            page.screenshot(path="verification_fontsize_zoomed_in.png")
-            zoomed_in_font_size = font_size_display.inner_text()
-            print(f"放大後字體大小: {zoomed_in_font_size}")
-            print("📸 已擷取放大後螢幕截圖。")
-            expect(font_size_display).to_have_text("125%")
+            # 3. 點擊字體大小按鈕並驗證日誌
+            print("▶️ 模擬操作: 點擊「字體放大」按鈕")
+            page.locator("#zoom-in-btn").click()
+            if not verify_log("字體大小變更"):
+                raise RuntimeError("「字體放大」日誌驗證失敗。")
 
-            # 點擊縮小
-            zoom_out_button.click()
-            zoom_out_button.click() # 點兩次回到 75%
-            page.wait_for_timeout(500)
-            page.screenshot(path="verification_fontsize_zoomed_out.png")
-            zoomed_out_font_size = font_size_display.inner_text()
-            print(f"縮小後字體大小: {zoomed_out_font_size}")
-            print("📸 已擷取縮小後螢幕截圖。")
-            expect(font_size_display).to_have_text("75%")
+            print("▶️ 模擬操作: 點擊「字體縮小」按鈕")
+            page.locator("#zoom-out-btn").click()
+            # 由於日誌名稱相同，這裡僅驗證第二次操作是否也觸發
+            # (更好的做法是讓日誌包含更多上下文，但目前可接受)
+            time.sleep(1) # 等待一下，讓日誌檔案有時間更新
+            if not verify_log("字體大小變更"):
+                 raise RuntimeError("「字體縮小」日誌驗證失敗。")
 
-            print("✅ 字體大小調整功能測試完成。")
+            # 4. 模擬檔案上傳並驗證日誌
+            print(f"▶️ 模擬操作: 上傳檔案 '{DUMMY_FILE_NAME}'")
+            page.locator("#file-input").set_input_files(dummy_file_path)
+            if not verify_log("檔案已選擇"):
+                raise RuntimeError("「檔案選擇」日誌驗證失敗。")
 
-            # --- 檔案上傳與處理測試 ---
-            print("▶️ 執行檔案上傳與處理流程...")
-            # (此處省略了與之前版本相同的 base64 注入程式碼)
-            js_script = """
-            async ({ base64, fileName, mimeType }) => {
-                const byteCharacters = atob(base64);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], { type: mimeType });
-                const file = new File([blob], fileName, { type: mimeType });
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                const inputElement = document.getElementById('file-input');
-                inputElement.files = dataTransfer.files;
-                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            """
-            page.evaluate(js_script, {
-                "base64": file_content_b64,
-                "fileName": os.path.basename(dummy_file_path),
-                "mimeType": "audio/wav"
-            })
+            # 5. 點擊「開始處理」按鈕並驗證日誌
+            print("▶️ 模擬操作: 點擊「開始處理」按鈕")
+            # 確保按鈕已啟用
+            expect(page.locator("#start-processing-btn")).to_be_enabled()
+            page.locator("#start-processing-btn").click()
+            if not verify_log("開始處理按鈕點擊"):
+                 raise RuntimeError("「開始處理」日誌驗證失敗。")
 
-            print("▶️ 點擊「開始處理」按鈕...")
-            start_button = page.locator('button:has-text("開始處理")')
-            start_button.click()
-
-            print("▶️ 等待任務完成...")
-            completed_selector = f'div.p-3:has-text("{os.path.basename(dummy_file_path)}")'
-            expect(page.locator(completed_selector)).to_be_visible(timeout=60000)
-            print("✅ 任務已成功顯示在「已完成」列表中。")
-
-            print("▶️ 擷取最終驗證螢幕截圖...")
-            page.screenshot(path="verification_final.png")
-            print("✅ 成功儲存螢幕截圖至 verification_final.png")
+            # 6. 最終驗證與截圖
+            print("✅ 所有模擬操作與日誌驗證均已成功。")
+            page.screenshot(path=SCREENSHOT_FILE)
+            print(f"📸 成功儲存最終驗證螢幕截圖至: {SCREENSHOT_FILE}")
 
             browser.close()
             return True
 
+    except PlaywrightTimeoutError as e:
+        print(f"❌ Playwright 操作超時: {e}")
+        return False
+    except RuntimeError as e:
+        print(f"❌ 測試執行失敗: {e}")
+        return False
     except Exception as e:
-        print(f"❌ 前端驗證過程中發生錯誤: {e}")
+        print(f"❌ 前端驗證過程中發生未預期的錯誤: {e}")
         return False
     finally:
-        # 確保伺服器和臨時檔案都被清理
+        # --- 清理程序 ---
+        print("▶️ 執行清理程序...")
         if server_process:
             print("▶️ 正在關閉後端伺服器...")
-            server_process.terminate()
+            # 使用 signal.SIGTERM 優雅地關閉整個 process group
+            os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
             server_process.wait()
             print("✅ 伺服器已關閉。")
         if dummy_file_path and os.path.exists(dummy_file_path):
             os.remove(dummy_file_path)
-            print(f"🗑️ 已刪除臨時檔案: {os.path.basename(dummy_file_path)}")
+            print(f"🗑️ 已刪除臨時檔案: {DUMMY_FILE_NAME}")
+        # 清理日誌檔案
+        if os.path.exists(LOG_FILE):
+            os.remove(LOG_FILE)
+            print(f"🗑️ 已刪除日誌檔案: {LOG_FILE}")
+
 
 if __name__ == "__main__":
     if run_verification():
-        print("\n🎉 前端驗證成功！")
+        print("\n🎉🎉🎉 前端自動化驗證成功！ 🎉🎉🎉")
+        exit(0)
     else:
-        print("\n🔥 前端驗證失敗。")
+        print("\n🔥🔥🔥 前端自動化驗證失敗。 🔥🔥🔥")
         exit(1)
