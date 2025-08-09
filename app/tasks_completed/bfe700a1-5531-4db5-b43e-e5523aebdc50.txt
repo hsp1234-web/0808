@@ -1,2 +1,0 @@
-這是一段由 mock_transcriber.py 產生的模擬轉錄結果。
-處理的檔案是：'/app/app/tasks_pending/bfe700a1-5531-4db5-b43e-e5523aebdc50.wav'。
