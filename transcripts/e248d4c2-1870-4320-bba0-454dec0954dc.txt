@@ -1,2 +1,0 @@
-這是一段由 mock_transcriber.py 產生的模擬轉錄結果。
-處理的檔案是：'/app/uploads/e248d4c2-1870-4320-bba0-454dec0954dc.wav'。
