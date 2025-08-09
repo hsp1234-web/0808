@@ -506,7 +506,11 @@
             };
 
             const handleFileUpload = (event) => {
-                uploadedFiles.push(...Array.from(event.target.files));
+                const newFiles = Array.from(event.target.files);
+                if (newFiles.length > 0) {
+                    logAction('檔案已選擇', { file_count: newFiles.length });
+                }
+                uploadedFiles.push(...newFiles);
                 updateFileList();
             };
 
@@ -516,6 +520,7 @@
                     currentFontSize = newSize;
                     document.body.style.fontSize = `${currentFontSize}%`;
                     fontSizeDisplay.textContent = `${currentFontSize}%`;
+                    logAction('字體大小變更', { newSize: `${currentFontSize}%` });
                 }
             };
 
