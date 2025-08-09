@@ -1,6 +1,7 @@
 # db/database.py
 import sqlite3
 import logging
+import json
 from pathlib import Path
 
 # --- 日誌設定 ---

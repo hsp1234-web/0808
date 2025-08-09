@@ -33,6 +33,13 @@ def main():
     專為自動化測試設計的啟動器。
     它會啟動協調器，提交一個任務，然後等待系統變回 IDLE 狀態後自動退出。
     """
+    # 在每次執行前清理舊的資料庫，確保測試環境的純淨
+    db_file = Path("db/queue.db")
+    if db_file.exists():
+        log.info(f"--- 步驟 -1/5: 正在清理舊的資料庫檔案 ({db_file}) ---")
+        db_file.unlink()
+        log.info("✅ 舊資料庫已刪除。")
+
     install_dependencies() # 在所有操作之前執行
 
     log.info("🚀 Local Test Runner: 啟動...")

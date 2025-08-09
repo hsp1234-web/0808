@@ -267,6 +267,11 @@
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
+            const cpuLabel = document.getElementById('cpu-label');
+            const ramLabel = document.getElementById('ram-label');
+            const gpuLabel = document.getElementById('gpu-label');
+            const gpuDisplay = document.getElementById('gpu-display');
+
 
             let currentFontSize = 100;
             let uploadedFiles = [];
@@ -465,6 +470,41 @@
             });
             zoomInBtn.addEventListener('click', () => changeFontSize(25));
             zoomOutBtn.addEventListener('click', () => changeFontSize(-25));
+
+            const updateSystemStats = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/system_stats`);
+                    if (!response.ok) {
+                        // 輕微的錯誤，不需要中斷使用者體驗
+                        console.warn(`無法獲取系統狀態: ${response.status}`);
+                        return;
+                    }
+                    const stats = await response.json();
+
+                    cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
+                    ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
+
+                    if (stats.gpu_detected) {
+                        gpuDisplay.textContent = 'NVIDIA GPU';
+                        gpuLabel.textContent = `${stats.gpu_usage.toFixed(1)}%`;
+                    } else {
+                        gpuDisplay.textContent = '未偵測到';
+                        gpuLabel.textContent = 'N/A';
+                    }
+                } catch (error) {
+                    console.warn("更新系統狀態時發生錯誤:", error);
+                    // 發生錯誤時，將標籤重設為預設值，避免顯示舊的或錯誤的資訊
+                    cpuLabel.textContent = '--%';
+                    ramLabel.textContent = '--%';
+                    gpuLabel.textContent = 'N/A';
+                }
+            };
+
+            // --- 初始設定與週期性任務 ---
+            // 立即執行一次，然後每3秒更新一次
+            updateSystemStats();
+            setInterval(updateSystemStats, 3000);
+
 
             // 初始日誌
             logAction('頁面載入完成');
