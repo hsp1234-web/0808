@@ -33,7 +33,10 @@ class DatabaseLogHandler(logging.Handler):
         if not hasattr(self.local, 'conn') or self.local.conn is None:
             try:
                 # 使用較長的超時並啟用 autocommit
-                self.local.conn = sqlite3.connect(DB_FILE, timeout=10, isolation_level=None)
+                conn = sqlite3.connect(DB_FILE, timeout=10, isolation_level=None)
+                # 啟用 WAL (Write-Ahead Logging) 模式以提高併發性
+                conn.execute("PRAGMA journal_mode=WAL")
+                self.local.conn = conn
             except sqlite3.Error as e:
                 handler_log.error(f"無法建立資料庫連線: {e}")
                 self.local.conn = None

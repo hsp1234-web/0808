@@ -268,25 +268,29 @@
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
+            const modelProgressContainer = document.getElementById('model-progress-container');
+            const modelProgressBar = document.getElementById('model-progress-bar');
+            const modelProgressText = document.getElementById('model-progress-text');
 
             // --- 狀態變數 ---
             let currentFontSize = 100;
             let uploadedFiles = [];
             let socket;
-            // 使用 Map 來儲存任務 ID 與其對應的 DOM 元素的關聯
             const taskElements = new Map();
+            const modelStatus = {}; // e.g., { tiny: 'completed', base: 'downloading' }
 
             // --- WebSocket 核心邏輯 ---
             const setupWebSocket = () => {
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
-
                 socket = new WebSocket(wsUrl);
 
                 socket.onopen = () => {
                     console.log('WebSocket 連線成功');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
+                    // 智慧預載 'tiny' 模型
+                    downloadModel('tiny');
                 };
 
                 socket.onmessage = (event) => {
@@ -299,79 +303,114 @@
                     console.log('WebSocket 連線已關閉');
                     statusText.textContent = '已離線';
                     statusLight.className = 'status-light status-yellow';
-                    // 嘗試重新連線
-                    setTimeout(setupWebSocket, 3000);
+                    setTimeout(setupWebSocket, 3000); // 嘗試重新連線
                 };
 
                 socket.onerror = (error) => {
                     console.error('WebSocket 發生錯誤:', error);
                     statusText.textContent = '連線錯誤';
-                    statusLight.className = 'status-light status-red'; // 假設有紅色狀態
+                    statusLight.className = 'status-light status-red';
                 };
             };
 
             const handleWebSocketMessage = (message) => {
                 const { type, payload } = message;
-                if (!payload || !payload.task_id) return;
 
+                if (type === 'DOWNLOAD_STATUS') {
+                    const { model, status, progress, error } = payload;
+                    modelStatus[model] = status;
+                    modelProgressContainer.classList.remove('hidden');
+                    let progressText = `模型 '${model}': ${status}`;
+
+                    if (status === 'starting') {
+                        progressText = `準備下載模型 '${model}'...`;
+                        modelProgressBar.style.width = '0%';
+                        modelProgressBar.style.backgroundColor = 'var(--button-bg-color)';
+                    } else if (status === 'downloading') {
+                        // 在 JULES_LOG.md 中有提到，transcriber.py 會回傳包含 "progress" 的 JSON
+                        // 但我們在此先假設一個簡單的進度回報
+                        progressText = `正在下載模型 '${model}'...`;
+                        modelProgressBar.style.width = `50%`; // 示意進度
+                    } else if (status === 'completed') {
+                        progressText = `✅ 模型 '${model}' 下載完成！`;
+                        modelProgressBar.style.width = '100%';
+                        modelProgressBar.style.backgroundColor = 'var(--success-color)';
+                        setTimeout(() => modelProgressContainer.classList.add('hidden'), 2000);
+                    } else if (status === 'failed') {
+                        progressText = `❌ 模型 '${model}' 下載失敗: ${error}`;
+                        modelProgressBar.style.width = '100%';
+                        modelProgressBar.style.backgroundColor = 'red';
+                        setTimeout(() => modelProgressContainer.classList.add('hidden'), 5000);
+                    }
+                    modelProgressText.textContent = progressText;
+                    return;
+                }
+
+                if (!payload || !payload.task_id) return;
                 const taskElement = taskElements.get(payload.task_id);
                 if (!taskElement) return;
-
                 const statusSpan = taskElement.querySelector('.task-status');
 
                 switch (type) {
                     case 'TRANSCRIPTION_STATUS':
                         if (payload.status === 'starting') {
                             statusSpan.textContent = '轉錄中...';
-                            statusSpan.style.color = '#007bff';
-                            transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`; // 清空並設置標題
+                            transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
                         } else if (payload.status === 'completed') {
                             statusSpan.textContent = '✅ 完成';
-                            statusSpan.style.color = 'green';
-                            // 將任務移至「已完成」列表
-                            if (noCompletedTaskMsg.style.display !== 'none') {
-                                noCompletedTaskMsg.style.display = 'none';
-                            }
+                            if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                             completedTasksContainer.appendChild(taskElement);
                         } else if (payload.status === 'failed') {
                             statusSpan.textContent = `❌ 失敗: ${payload.error}`;
-                            statusSpan.style.color = 'red';
-                            if (noCompletedTaskMsg.style.display !== 'none') {
-                                noCompletedTaskMsg.style.display = 'none';
-                            }
+                            if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                             completedTasksContainer.appendChild(taskElement);
                         }
                         break;
-
                     case 'TRANSCRIPTION_UPDATE':
-                        // 我們只處理 'segment' 類型的更新
                         if (payload.type === 'segment') {
                             const p = document.createElement('p');
                             p.textContent = payload.text;
                             transcriptOutput.appendChild(p);
-                            // 自動滾動到最下方
                             transcriptOutput.scrollTop = transcriptOutput.scrollHeight;
-                        } else if (payload.type === 'final') {
-                            // 可以在此處顯示最終統計資訊
-                            console.log('轉錄統計:', payload);
                         }
                         break;
+                }
+            };
+
+            // --- 模型下載邏輯 ---
+            const downloadModel = (modelName) => {
+                if (!modelName) return;
+                if (modelStatus[modelName] === 'completed' || modelStatus[modelName] === 'downloading') {
+                    console.log(`跳過下載: 模型 '${modelName}' 狀態為 ${modelStatus[modelName]}`);
+                    return;
+                }
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    logAction('請求下載模型', { model: modelName });
+                    socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelName } }));
+                } else {
+                    console.error('WebSocket 未連線，無法下載模型。');
                 }
             };
 
             // --- 上傳與處理流程 ---
             const startProcessing = () => {
                 if (uploadedFiles.length === 0) return;
-                logAction('開始處理按鈕點擊', { file_count: uploadedFiles.length });
 
+                const selectedModel = modelSelect.value;
+                const currentModelStatus = modelStatus[selectedModel];
+
+                // 如果模型尚未就緒且未在下載中，則自動觸發下載
+                if (currentModelStatus !== 'completed' && currentModelStatus !== 'downloading') {
+                    logAction('隱性模型下載觸發', { model: selectedModel });
+                    downloadModel(selectedModel);
+                }
+
+                // 正常繼續處理檔案上傳流程
+                logAction('開始處理按鈕點擊', { file_count: uploadedFiles.length });
                 const filesToProcess = [...uploadedFiles];
                 uploadedFiles = [];
                 updateFileList();
-
-                // 循序處理所有檔案
-                filesToProcess.forEach(file => {
-                    uploadFile(file);
-                });
+                filesToProcess.forEach(file => uploadFile(file));
             };
 
             const uploadFile = (file) => {
@@ -379,10 +418,7 @@
                 const uploadProgressBar = document.getElementById('upload-progress-bar');
                 const uploadProgressText = document.getElementById('upload-progress-text');
 
-                // 為每個檔案創建一個任務項目
-                if (noOngoingTaskMsg.style.display !== 'none') {
-                    noOngoingTaskMsg.style.display = 'none';
-                }
+                if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
                 const taskElement = document.createElement('div');
                 taskElement.className = 'task-item';
                 taskElement.innerHTML = `<span class="task-filename">${file.name}</span><span class="task-status">等待上傳...</span>`;
@@ -409,49 +445,53 @@
                     uploadProgressContainer.classList.add('hidden');
                     if (xhr.status >= 200 && xhr.status < 300) {
                         statusSpan.textContent = '上傳成功，等待處理...';
-                        logAction('檔案上傳成功', { filename: file.name });
-
                         const responseData = JSON.parse(xhr.responseText);
                         const transcribeTask = (responseData.tasks || [responseData]).find(t => t.type === 'transcribe');
-
                         if (transcribeTask && transcribeTask.task_id) {
-                            // 將 task_id 與 DOM 元素關聯起來
                             taskElements.set(transcribeTask.task_id, taskElement);
-
-                            // 透過 WebSocket 發送開始指令
                             if (socket && socket.readyState === WebSocket.OPEN) {
-                                socket.send(JSON.stringify({
-                                    type: 'START_TRANSCRIPTION',
-                                    payload: { task_id: transcribeTask.task_id }
-                                }));
+                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: transcribeTask.task_id } }));
                                 statusSpan.textContent = '已發送轉錄請求...';
                             } else {
                                 statusSpan.textContent = '錯誤: WebSocket 未連線';
-                                statusSpan.style.color = 'red';
                             }
                         } else {
                             statusSpan.textContent = '錯誤: 未收到有效的任務ID';
-                            statusSpan.style.color = 'red';
                         }
                     } else {
                         statusSpan.textContent = '上傳失敗';
-                        statusSpan.style.color = 'red';
                     }
                 };
-
                 xhr.onerror = () => {
                     uploadProgressContainer.classList.add('hidden');
                     statusSpan.textContent = '上傳失敗: 網路錯誤';
-                    statusSpan.style.color = 'red';
                 };
-
                 xhr.open('POST', '/api/transcribe', true);
                 xhr.send(formData);
             };
 
             // --- UI 輔助函式 ---
+            const updateSystemStats = () => {
+                fetch('/api/system_stats').then(r => r.json()).then(data => {
+                    document.getElementById('cpu-label').textContent = `${data.cpu_usage.toFixed(1)}%`;
+                    document.getElementById('ram-label').textContent = `${data.ram_usage.toFixed(1)}%`;
+                    const gpuDisplay = document.getElementById('gpu-display');
+                    if (data.gpu_detected) {
+                        gpuDisplay.textContent = '已偵測';
+                        document.getElementById('gpu-label').textContent = `${data.gpu_usage.toFixed(1)}%`;
+                    } else {
+                        gpuDisplay.textContent = '未偵測到';
+                        document.getElementById('gpu-label').textContent = 'N/A';
+                    }
+                }).catch(error => {
+                    console.warn('無法獲取系統狀態:', error);
+                    document.getElementById('cpu-label').textContent = '--%';
+                    document.getElementById('ram-label').textContent = '--%';
+                    document.getElementById('gpu-label').textContent = 'N/A';
+                });
+            };
+
             const logAction = (action, payload = {}) => {
-                console.log(`[LOG ACTION] ${action}`, payload);
                 fetch('/api/log/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -461,18 +501,12 @@
 
             const updateFileList = () => {
                 fileListDisplay.innerHTML = uploadedFiles.map(file => `<div>- ${file.name}</div>`).join('');
-                if (uploadedFiles.length > 0) {
-                    startBtn.textContent = `✨ 開始處理 ${uploadedFiles.length} 個檔案`;
-                    startBtn.disabled = false;
-                } else {
-                    startBtn.textContent = '✨ 請先選擇檔案';
-                    startBtn.disabled = true;
-                }
+                startBtn.disabled = uploadedFiles.length === 0;
+                startBtn.textContent = uploadedFiles.length > 0 ? `✨ 開始處理 ${uploadedFiles.length} 個檔案` : '✨ 請先選擇檔案';
             };
 
             const handleFileUpload = (event) => {
-                const newFiles = Array.from(event.target.files);
-                uploadedFiles.push(...newFiles);
+                uploadedFiles.push(...Array.from(event.target.files));
                 updateFileList();
             };
 
@@ -491,13 +525,15 @@
             confirmBtn.addEventListener('click', () => {
                 const selectedModel = modelSelect.value;
                 modelDisplay.textContent = selectedModel;
-                alert(`設定已確認: 模型=${selectedModel}`);
+                logAction('確認設定按鈕點擊', { model: selectedModel });
+                downloadModel(selectedModel);
             });
             zoomInBtn.addEventListener('click', () => changeFontSize(25));
             zoomOutBtn.addEventListener('click', () => changeFontSize(-25));
 
-            // 初始化 WebSocket
             setupWebSocket();
+            updateSystemStats();
+            setInterval(updateSystemStats, 300); // 依照使用者要求，更新頻率設為 0.3 秒
             logAction('頁面載入完成');
         });
     </script>

@@ -17,3 +17,5 @@ API_PORT: 46763
 2025-08-09 18:48:45,250 - orchestrator - INFO - [worker_stderr] 2025-08-09 18:48:45,250 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
 2025-08-09 18:48:45,254 - orchestrator - INFO - [worker_stderr] 2025-08-09 18:48:45,251 - worker - INFO - 資料庫日誌處理器設定完成 (source: worker)。
 2025-08-09 18:48:45,262 - orchestrator - INFO - [worker_stderr] 2025-08-09 18:48:45,262 - worker - INFO - 🤖 Worker 已啟動。模式: 模擬 (Mock)。查詢間隔: 5 秒。
+2025-08-09 20:12:58,621 - [FRONTEND ACTION] 頁面載入完成
+2025-08-09 20:12:58,631 - [FRONTEND ACTION] 請求下載模型

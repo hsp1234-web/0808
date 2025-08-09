@@ -17,6 +17,8 @@ def get_db_connection():
         # isolation_level=None 會開啟 autocommit 模式，但我們將手動管理交易
         conn = sqlite3.connect(DB_FILE, timeout=10) # 增加 timeout
         conn.row_factory = sqlite3.Row # 將回傳結果設定為類似 dict 的物件
+        # 啟用 WAL (Write-Ahead Logging) 模式以提高併發性
+        conn.execute("PRAGMA journal_mode=WAL")
         return conn
     except sqlite3.Error as e:
         log.error(f"資料庫連線失敗: {e}")
