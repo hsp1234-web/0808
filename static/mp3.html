@@ -3,116 +3,224 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>鳳凰音訊轉錄儀 v2</title>
+    <title>鳳凰音訊轉錄儀 v3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body { font-family: 'Noto Sans TC', sans-serif; transition: background-color 0.3s, color 0.3s; }
-        .dark body { background-color: #131316; color: #E8EAED; }
-        body { background-color: #F8F9FA; color: #202124; }
-        .phoenix-glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(0, 0, 0, 0.1); }
-        .dark .phoenix-glass { background: rgba(32, 33, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .phoenix-gradient-text { background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark body {
+            background-color: #131316;
+            color: #E8EAED;
+        }
+        body {
+            background-color: #F8F9FA;
+            color: #202124;
+        }
+        .phoenix-glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        .dark .phoenix-glass {
+            background: rgba(32, 33, 36, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .phoenix-gradient-text {
+            background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
         [v-cloak] { display: none; }
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .status-green { background-color: #28a745; box-shadow: 0 0 8px #28a745; }
+        .status-yellow { background-color: #ffc107; box-shadow: 0 0 8px #ffc107; }
+        .status-red { background-color: #dc3545; box-shadow: 0 0 8px #dc3545; }
     </style>
 </head>
 <body class="p-4 sm:p-6 lg:p-8">
-    <div id="app" class="max-w-7xl mx-auto space-y-6" v-cloak>
-        <!-- 標題 -->
+    <div id="app" class="max-w-7xl mx-auto space-y-6" :style="{ fontSize: baseFontSize + '%' }" v-cloak>
+        <!-- 標題與控制項 -->
         <header class="flex justify-between items-center">
-            <h1 class="text-2xl font-bold">鳳凰 <span class="phoenix-gradient-text">音訊轉錄儀 v2</span></h1>
+            <h1 class="text-2xl font-bold">鳳凰 <span class="phoenix-gradient-text">音訊轉錄儀 v3</span></h1>
+            <div class="flex items-center gap-2">
+                 <!-- 字體大小控制 -->
+                <div class="flex items-center gap-1 phoenix-glass rounded-lg p-1 text-sm">
+                    <span class="font-semibold px-2">字體</span>
+                    <button @click="changeFontSize(-25)" class="p-1.5 hover:bg-gray-500/10 rounded-md transition-colors" :disabled="baseFontSize <= 50"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+                    <span class="font-bold w-12 text-center">{{ baseFontSize }}%</span>
+                    <button @click="changeFontSize(25)" class="p-1.5 hover:bg-gray-500/10 rounded-md transition-colors" :disabled="baseFontSize >= 150"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+                </div>
+                <button class="p-2 hover:bg-gray-500/10 rounded-full transition-colors">
+                    <i data-lucide="sun" class="w-6 h-6"></i>
+                </button>
+            </div>
         </header>
 
-        <!-- 頂部：指揮中心 -->
-        <div id="status-dashboard" class="phoenix-glass rounded-xl p-4 sm:p-6">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <!-- 左側：狀態燈 -->
-                <div class="flex items-center gap-4">
-                    <h2 class="text-xl font-bold">指揮中心</h2>
-                    <div class="flex items-center gap-2">
-                        <span class="flex h-3 w-3 rounded-full" :class="getTrafficLightClass(appStatus.system_ready)" title="系統狀態"></span>
-                        <span class="flex h-3 w-3 rounded-full" :class="getTrafficLightClass(appStatus.model_loaded)" title="模型狀態"></span>
-                        <span class="flex h-3 w-3 rounded-full" :class="getTrafficLightClass(appStatus.gpu_detected)" title="GPU 加速"></span>
-                    </div>
+        <!-- 全域儀表板 -->
+        <div class="phoenix-glass rounded-xl p-4 sm:p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="flex items-center gap-2 font-semibold">
+                    <span class="status-light" :class="globalStatus.light"></span>
+                    <span>狀態: {{ globalStatus.text }}</span>
                 </div>
-                <!-- 中間：狀態訊息 -->
-                <div class="flex-grow text-center">
-                    <p class="font-semibold">{{ appStatus.message }}</p>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5"></i>
+                    <span>模型: <span class="font-semibold">{{ selectedModel }}</span></span>
                 </div>
-                <!-- 右側：系統資源 -->
-                <div class="flex items-center gap-4 text-sm">
-                    <span>CPU: {{ systemStats.cpu_usage.toFixed(1) }}%</span>
-                    <span>RAM: {{ systemStats.ram_usage.toFixed(1) }}%</span>
-                    <span v-if="appStatus.gpu_detected">GPU: {{ systemStats.gpu_usage !== null ? systemStats.gpu_usage.toFixed(1) + '%' : 'N/A' }}</span>
-                    <span class="text-xs text-gray-500">(每 0.3 秒更新)</span>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="gpu-chip" class="w-5 h-5"></i>
+                    <span>GPU: <span class="font-semibold">{{ systemStats.gpu_name || '未偵測到' }}</span></span>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3">
+                <!-- 進度條 -->
+                <div>
+                    <div class="flex justify-between items-baseline mb-1"><span class="text-sm font-medium">CPU</span><span class="text-xs font-bold">{{ systemStats.cpu_usage.toFixed(1) }}%</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700"><div class="bg-green-500 h-2 rounded-full" :style="{ width: systemStats.cpu_usage + '%' }"></div></div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-baseline mb-1"><span class="text-sm font-medium">RAM</span><span class="text-xs font-bold">{{ systemStats.ram_usage.toFixed(1) }}%</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700"><div class="bg-yellow-500 h-2 rounded-full" :style="{ width: systemStats.ram_usage + '%' }"></div></div>
+                </div>
+                <div v-if="systemStats.gpu_usage !== null">
+                    <div class="flex justify-between items-baseline mb-1"><span class="text-sm font-medium">GPU</span><span class="text-xs font-bold">{{ systemStats.gpu_usage.toFixed(1) }}%</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700"><div class="bg-purple-500 h-2 rounded-full" :style="{ width: systemStats.gpu_usage + '%' }"></div></div>
                 </div>
             </div>
         </div>
 
-        <!-- 中部：控制面板 -->
-        <div id="control-panel" class="phoenix-glass rounded-xl p-4 sm:p-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <!-- 模型選擇 -->
-                <div>
-                    <label for="model-select" class="block text-sm font-medium mb-1">1. 選擇模型</label>
-                    <select id="model-select" v-model="selectedModel" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
-                        <option value="tiny">Tiny (最快)</option>
-                        <option value="base">Base</option>
-                        <option value="small">Small</option>
-                        <option value="medium">Medium (建議)</option>
-                        <option value="large">Large (最準確)</option>
-                    </select>
+        <!-- 步驟一 & 二 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 左側：選項 -->
+            <div class="phoenix-glass rounded-xl p-4 sm:p-6 space-y-4 flex flex-col">
+                <h2 class="text-xl font-semibold">⚙️ 步驟 1: 選項</h2>
+                <div class="flex-grow space-y-4">
+                    <div>
+                        <label for="model-select" class="block text-sm font-medium mb-1">模型大小</label>
+                        <select id="model-select" v-model="selectedModel" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
+                            <option value="tiny">Tiny (最快)</option>
+                            <option value="base">Base</option>
+                            <option value="small">Small</option>
+                            <option value="medium">Medium (建議)</option>
+                            <option value="large">Large (最準確)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="language-select" class="block text-sm font-medium mb-1">轉錄語言</label>
+                        <select id="language-select" v-model="selectedLanguage" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
+                            <option value="zh">繁體中文</option>
+                            <option value="en">英文</option>
+                        </select>
+                    </div>
                 </div>
-                <!-- 語言選擇 -->
-                <div>
-                    <label for="language-select" class="block text-sm font-medium mb-1">2. 選擇語言</label>
-                    <select id="language-select" v-model="selectedLanguage" class="w-full p-2 rounded-md bg-white/60 dark:bg-black/30 border border-gray-400/50 dark:border-gray-600/50 focus:ring-2 focus:ring-sky-500">
-                        <option value="zh">繁體中文</option>
-                        <option value="en">英文</option>
-                    </select>
-                </div>
-                <!-- 上傳與開始 -->
-                <div>
-                    <label class="block text-sm font-medium mb-1">3. 上傳檔案並開始</label>
-                    <label for="file-input" class="w-full px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors flex items-center justify-center gap-2 cursor-pointer">
-                        <i data-lucide="play-circle" class="w-5 h-5"></i>
-                        <span>開始處理</span>
-                    </label>
+                <button class="w-full mt-4 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-all transform hover:scale-105">✓ 確認設定</button>
+            </div>
+            <!-- 右側：上傳 -->
+            <div class="phoenix-glass rounded-xl p-4 sm:p-6 flex flex-col">
+                <h2 class="text-xl font-semibold mb-4">📤 步驟 2: 上傳檔案</h2>
+                <label for="file-input" class="flex-grow rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-sky-400 transition-all border-2 border-dashed border-gray-400/50">
+                    <i data-lucide="upload-cloud" class="w-12 h-12 phoenix-gradient-text"></i>
+                    <p class="mt-2 text-lg font-semibold">點擊或拖曳檔案到此處</p>
                     <input id="file-input" type="file" multiple class="hidden" @change="handleFileUpload">
-                </div>
+                </label>
             </div>
         </div>
 
-        <!-- 底部：結果區域 -->
-        <div id="results-area" v-if="true" class="phoenix-glass rounded-xl p-4 sm:p-6">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- 左側：已完成檔案列表 -->
-                <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">已完成檔案</h2>
-                        <button class="text-sm font-semibold flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-600 text-white disabled:bg-gray-400">
-                            <i data-lucide="download" class="w-4 h-4"></i>
-                            <span>下載已選 (0)</span>
-                        </button>
-                    </div>
-                    <div class="space-y-3 max-h-96 overflow-y-auto">
-                        <!-- Placeholder for completed files -->
-                        <div class="text-center text-gray-500 dark:text-gray-400 py-8">
-                           <p>尚無完成的任務</p>
+        <!-- 步驟三: 開始處理 -->
+        <div class="flex justify-center">
+            <button @click="startProcessing" :disabled="uploadedFiles.length === 0" class="w-full md:w-1/2 text-lg font-bold py-3 px-6 rounded-xl bg-blue-600 text-white shadow-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none transition-all transform hover:scale-105">
+                ✨ 開始處理 {{ uploadedFiles.length }} 個檔案
+            </button>
+        </div>
+
+        <!-- 任務儀表板 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 進行中任務 -->
+            <div class="phoenix-glass rounded-xl p-4 sm:p-6">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="loader-2" class="w-6 h-6 animate-spin"></i>進行中任務</h2>
+                <div id="ongoing-tasks" class="space-y-3 max-h-96 overflow-y-auto">
+                    <div v-if="ongoingTasks.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-4">暫無執行中任務</div>
+                    <div v-for="task in ongoingTasks" :key="task.task_id" class="p-3 rounded-lg bg-white/60 dark:bg-black/30">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold truncate w-4/5">{{ getTaskFilename(task) }}</span>
+                            <span class="text-sm font-medium text-yellow-600 dark:text-yellow-400">{{ task.status }}...</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
+                            <div class="bg-blue-600 h-2.5 rounded-full" :style="{width: task.progress + '%'}"></div>
                         </div>
                     </div>
                 </div>
-                <!-- 右側：預覽/即時字幕 -->
-                <div>
-                     <h2 class="text-xl font-semibold mb-4">預覽</h2>
-                     <div class="aspect-video bg-black/20 rounded-lg p-4 text-gray-400">
-                        <p>點擊左側檔案旁的 <i data-lucide="file-text" class="inline-block w-4 h-4"></i> 按鈕以預覽結果。</p>
-                        <br>
-                        <p>處理中任務的即時字幕也會顯示於此處。</p>
-                     </div>
+            </div>
+
+            <!-- 已完成任務 -->
+            <div class="phoenix-glass rounded-xl p-4 sm:p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold flex items-center gap-2"><i data-lucide="check-circle-2" class="w-6 h-6 text-green-500"></i>已完成任務</h2>
+                    <button @click="downloadSelected" :disabled="selectedTasks.size === 0" class="text-sm font-semibold flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>下載已選 ({{ selectedTasks.size }})</span>
+                    </button>
+                </div>
+                <div id="completed-tasks" class="space-y-3 max-h-96 overflow-y-auto">
+                     <div v-if="completedTasks.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-4">尚無完成的任務</div>
+                     <div v-for="task in completedTasks" :key="task.task_id" class="p-3 rounded-lg flex items-center justify-between" :class="{'bg-green-100/80 dark:bg-green-900/30': task.status === 'completed', 'bg-red-100/80 dark:bg-red-900/30': task.status === 'failed'}">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 rounded text-blue-600 bg-transparent" :value="task.task_id" v-model="selectedTasks">
+                            <div class="truncate">
+                                <p class="font-semibold">{{ getTaskFilename(task) }}</p>
+                                <p class="text-xs" :class="{'text-green-600 dark:text-green-400': task.status === 'completed', 'text-red-600 dark:text-red-400': task.status === 'failed'}">
+                                    {{ task.status === 'completed' ? '已完成' : '失敗' }} - {{ new Date(task.updated_at).toLocaleString() }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                           <button @click="previewTask = task" class="p-1.5 hover:bg-gray-500/10 rounded-md transition-colors"><i data-lucide="file-text" class="w-5 h-5"></i></button>
+                           <a :href="'/api/download/' + task.task_id" download class="p-1.5 hover:bg-gray-500/10 rounded-md transition-colors"><i data-lucide="download-cloud" class="w-5 h-5"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 即時轉錄輸出 -->
+        <div v-if="isProcessing" class="phoenix-glass rounded-xl p-4 sm:p-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-6 h-6"></i>即時轉錄輸出
+            </h2>
+            <div class="w-full min-h-[100px] text-base whitespace-pre-wrap text-gray-700 dark:text-gray-300 p-2 bg-white/50 dark:bg-black/20 rounded-md">
+                {{ liveTranscript || '等待任務開始...' }}
+            </div>
+        </div>
+
+        <!-- 預覽 Modal -->
+        <div v-if="previewTask" @click.self="previewTask = null" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity" :class="previewTask ? 'opacity-100' : 'opacity-0 pointer-events-none'">
+            <div @click.stop class="w-full max-w-3xl phoenix-glass rounded-xl shadow-2xl p-6 space-y-4 transform transition-transform" :class="previewTask ? 'scale-100' : 'scale-95'">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xl font-bold truncate">預覽: {{ getTaskFilename(previewTask) }}</h3>
+                    <button @click="previewTask = null" class="p-1.5 hover:bg-gray-500/20 rounded-full transition-colors"><i data-lucide="x" class="w-6 h-6"></i></button>
+                </div>
+                <div class="w-full h-96 overflow-y-auto bg-white/50 dark:bg-black/20 p-4 rounded-lg border border-gray-400/30">
+                    <pre class="whitespace-pre-wrap text-sm">{{ previewTask.result?.transcript || '沒有可用的轉錄文字。' }}</pre>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button @click="previewTask = null" class="px-4 py-2 font-semibold rounded-lg bg-gray-500/20 hover:bg-gray-500/30 transition-colors">關閉</button>
+                    <a :href="'/api/download/' + previewTask.task_id" download class="px-4 py-2 font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        下載
+                    </a>
                 </div>
             </div>
         </div>
@@ -120,119 +228,207 @@
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script>
-        const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
+        const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch } = Vue;
 
         createApp({
             setup() {
-                // --- 狀態儀表板響應式狀態 ---
-                const appStatus = reactive({
-                    system_ready: false,
-                    model_loaded: false,
-                    gpu_detected: false,
-                    message: "正在初始化..."
-                });
+                // --- 響應式狀態 (State) ---
+                const tasks = reactive({});
                 const systemStats = reactive({
-                    cpu_usage: 0,
-                    ram_usage: 0,
-                    gpu_usage: null
+                    cpu_usage: 0.0,
+                    ram_usage: 0.0,
+                    gpu_usage: null,
+                    gpu_name: null,
+                    gpu_detected: false
+                });
+                const appStatus = reactive({
+                    message: "正在初始化...",
+                    model_loaded: false,
+                    active_model: null
                 });
 
-                // --- 控制面板響應式狀態 ---
+                const previewTask = ref(null);
+                const selectedTasks = ref(new Set());
                 const selectedModel = ref('medium');
                 const selectedLanguage = ref('zh');
+                const uploadedFiles = ref([]);
+                const liveTranscript = ref('');
+                const baseFontSize = ref(100);
 
-                // --- 結果區域響應式狀態 ---
-                const tasks = reactive({}); // 用於儲存所有任務，包括下載和轉錄
-                const previewContent = ref(""); // 用於右側面板顯示的內容
-                const selectedFilesForDownload = ref(new Set());
+                let statsInterval, tasksInterval;
 
-                // --- Polling 間隔 ---
-                let statsInterval, appStatusInterval, tasksInterval;
-
-                // --- Computed Properties for UI ---
-                const completedTranscriptionTasks = computed(() => {
-                    return Object.values(tasks)
-                        .filter(t => t.type === 'transcribe' && t.status === 'COMPLETED')
-                        .sort((a, b) => b.startTime - a.startTime);
-                });
-
+                // --- 計算屬性 (Computed) ---
                 const isProcessing = computed(() => {
-                    return Object.values(tasks).some(t => t.status === 'PROCESSING');
+                    return Object.values(tasks).some(t => ['processing', 'pending'].includes(t.status));
                 });
 
-                // --- UI 邏輯函式 ---
-                const getTrafficLightClass = (status) => status ? 'bg-green-500' : 'bg-gray-400';
+                const globalStatus = computed(() => {
+                    if (isProcessing.value) return { light: 'status-yellow', text: '處理中...' };
+                    if (appStatus.model_loaded) return { light: 'status-green', text: '準備就緒' };
+                    return { light: 'status-red', text: '初始化中' };
+                });
 
-                // --- 核心邏輯函式 ---
+                const ongoingTasks = computed(() => {
+                    return Object.values(tasks)
+                        .filter(t => ['pending', 'processing'].includes(t.status))
+                        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                });
+
+                const completedTasks = computed(() => {
+                    return Object.values(tasks)
+                        .filter(t => ['completed', 'failed'].includes(t.status))
+                        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                });
+
+                // --- API 呼叫方法 (Methods) ---
                 const pollSystemStats = async () => {
                     try {
                         const response = await fetch('/api/system_stats');
-                        if (response.ok) {
-                            const data = await response.json();
-                            systemStats.cpu_usage = data.cpu_usage;
-                            systemStats.ram_usage = data.ram_usage;
-                            systemStats.gpu_usage = data.gpu_usage;
-                            appStatus.gpu_detected = data.gpu_detected;
-                            appStatus.system_ready = true; // 收到第一次回應即表示系統就緒
-                        }
-                    } catch (e) {
-                        console.error("無法獲取系統狀態:", e);
-                        appStatus.system_ready = false;
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        const data = await response.json();
+                        systemStats.cpu_usage = data.cpu_usage;
+                        systemStats.ram_usage = data.ram_usage;
+                        systemStats.gpu_usage = data.gpu_usage;
+                        systemStats.gpu_detected = data.gpu_detected;
+                    } catch (error) {
+                        console.error("無法獲取系統狀態:", error);
                     }
                 };
 
-                // TODO: 實作 pollAppStatus 和 pollTasks
+                const pollTasks = async () => {
+                    try {
+                        const response = await fetch('/api/tasks');
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        const remoteTasks = await response.json();
 
-                const handleFileUpload = async (event) => {
-                    // TODO: 實作檔案上傳和任務建立邏輯
+                        // 更新本地的 tasks 物件
+                        const remoteTaskIds = new Set();
+                        for (const task of remoteTasks) {
+                            tasks[task.task_id] = task;
+                            remoteTaskIds.add(task.task_id);
+                        }
+                        // 刪除遠端已不存在的任務
+                        for (const localTaskId in tasks) {
+                            if (!remoteTaskIds.has(localTaskId)) {
+                                delete tasks[localTaskId];
+                            }
+                        }
+                    } catch (error) {
+                        console.error("無法獲取任務列表:", error);
+                    }
                 };
 
-                const showPreview = (task) => {
-                    // TODO: 實作預覽邏輯
+                const handleFileUpload = (event) => {
+                    uploadedFiles.value.push(...event.target.files);
+                    event.target.value = ''; // 清空 input 以便可以再次上傳同一個檔案
                 };
 
-                const downloadSelectedFiles = () => {
-                    // TODO: 實作下載邏輯
+                const startProcessing = async () => {
+                    if (uploadedFiles.value.length === 0) return;
+
+                    const filesToUpload = [...uploadedFiles.value];
+                    uploadedFiles.value = []; // 清空待上傳列表
+
+                    for (const file of filesToUpload) {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('model_size', selectedModel.value);
+                        formData.append('language', selectedLanguage.value);
+
+                        try {
+                            const response = await fetch('/api/transcribe', {
+                                method: 'POST',
+                                body: formData,
+                            });
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.detail || '上傳失敗');
+                            }
+                            // 立即觸發一次任務更新
+                            await pollTasks();
+                        } catch (error) {
+                            console.error(`檔案 ${file.name} 上傳失敗:`, error);
+                            // 可以在這裡加入 UI 提示
+                        }
+                    }
                 };
 
+                // --- UI/輔助方法 ---
+                const changeFontSize = (amount) => {
+                    const newSize = baseFontSize.value + amount;
+                    if (newSize >= 50 && newSize <= 150) {
+                        baseFontSize.value = newSize;
+                    }
+                };
 
-                // --- 生命週期掛鉤 ---
+                const getTaskFilename = (task) => {
+                    try {
+                        const path = task.payload?.input_file || '';
+                        return path.split(/[\\/]/).pop();
+                    } catch {
+                        return '未知檔案';
+                    }
+                };
+
+                watch(ongoingTasks, (newTasks, oldTasks) => {
+                    const latestTask = newTasks[0];
+                    if (latestTask && latestTask.status === 'processing') {
+                         if (latestTask.result && latestTask.result.transcript) {
+                            liveTranscript.value = latestTask.result.transcript;
+                         } else {
+                            liveTranscript.value = "正在處理中，請稍候...";
+                         }
+                    } else if (newTasks.length === 0) {
+                        liveTranscript.value = "所有任務已完成。";
+                    }
+                });
+
+                // --- 生命週期鉤子 (Lifecycle Hooks) ---
                 onMounted(() => {
-                    statsInterval = setInterval(pollSystemStats, 300);
-                    pollSystemStats();
-
                     lucide.createIcons();
+
+                    // 立即執行一次，然後設定定時器
+                    pollSystemStats();
+                    pollTasks();
+                    statsInterval = setInterval(pollSystemStats, 2000); // 2秒更新一次系統狀態
+                    tasksInterval = setInterval(pollTasks, 1000); // 1秒更新一次任務列表
+
+                    // 監聽 DOM 變化，重新渲染 lucide-icons
                     const observer = new MutationObserver(() => {
                         lucide.createIcons();
                     });
                     observer.observe(document.getElementById('app'), { childList: true, subtree: true });
 
                     onUnmounted(() => {
-                        observer.disconnect();
                         clearInterval(statsInterval);
-                        // TODO: 清除其他計時器
+                        clearInterval(tasksInterval);
+                        observer.disconnect();
                     });
                 });
 
                 // --- 返回給模板的資料和函式 ---
                 return {
-                    appStatus,
+                    tasks,
                     systemStats,
+                    appStatus,
+                    previewTask,
+                    selectedTasks,
                     selectedModel,
                     selectedLanguage,
-                    completedTranscriptionTasks,
+                    uploadedFiles,
+                    liveTranscript,
+                    baseFontSize,
                     isProcessing,
-                    previewContent,
-                    selectedFilesForDownload,
-                    getTrafficLightClass,
+                    globalStatus,
+                    ongoingTasks,
+                    completedTasks,
                     handleFileUpload,
-                    showPreview,
-                    downloadSelectedFiles
+                    startProcessing,
+                    changeFontSize,
+                    getTaskFilename
                 };
             }
         }).mount('#app');
-
-
     </script>
 </body>
 </html>

@@ -215,6 +215,62 @@ async def get_system_stats():
     }
 
 
+@app.get("/api/tasks")
+async def get_all_tasks_endpoint():
+    """
+    獲取所有任務的列表，用於前端展示。
+    """
+    tasks = database.get_all_tasks()
+    # 嘗試解析 payload 和 result 中的 JSON 字串
+    for task in tasks:
+        try:
+            if task.get("payload"):
+                task["payload"] = json.loads(task["payload"])
+        except (json.JSONDecodeError, TypeError):
+            log.warning(f"任務 {task.get('task_id')} 的 payload 不是有效的 JSON。")
+            pass # 保持原樣
+        try:
+            if task.get("result"):
+                task["result"] = json.loads(task["result"])
+        except (json.JSONDecodeError, TypeError):
+            log.warning(f"任務 {task.get('task_id')} 的 result 不是有效的 JSON。")
+            pass # 保持原樣
+    return JSONResponse(content=tasks)
+
+
+@app.get("/api/download/{task_id}")
+async def download_transcript(task_id: str):
+    """
+    根據任務 ID 下載轉錄結果檔案。
+    """
+    task = database.get_task_status(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
+
+    if task['status'] != 'completed':
+        raise HTTPException(status_code=400, detail="任務尚未完成，無法下載。")
+
+    try:
+        # 從 result 欄位解析出檔名
+        result_data = json.loads(task['result'])
+        output_filename = result_data.get("transcript_path")
+        if not output_filename:
+            raise HTTPException(status_code=500, detail="任務結果中未包含有效的檔案路徑。")
+
+        file_path = Path(output_filename)
+        if not file_path.is_file():
+            log.error(f"❌ 轉錄檔案不存在: {file_path}")
+            raise HTTPException(status_code=404, detail="轉錄檔案遺失或無法讀取。")
+
+        # 提供檔案下載
+        from fastapi.responses import FileResponse
+        return FileResponse(path=file_path, filename=file_path.name, media_type='text/plain')
+
+    except (json.JSONDecodeError, KeyError) as e:
+        log.error(f"❌ 解析任務 {task_id} 的結果時出錯: {e}")
+        raise HTTPException(status_code=500, detail="無法解析任務結果。")
+
+
 @app.get("/api/health")
 async def health_check():
     """提供一個簡單的健康檢查端點。"""

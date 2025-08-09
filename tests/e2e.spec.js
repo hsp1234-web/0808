@@ -44,20 +44,19 @@ const startServer = () => new Promise((resolve, reject) => {
       const response = await fetch(healthUrl);
       if (response.ok) {
         console.log('✅ 健康檢查成功，API 伺服器已就緒！');
-        serverUrl = `${APP_URL_BASE}:${apiPort}/static/mp3.html`;
+        // V3 UI 的 HTML 檔案路徑是 /，由 FastAPI 在根目錄提供
+        serverUrl = `${APP_URL_BASE}:${apiPort}/`;
         clearTimeout(timeout);
         resolve(serverUrl);
         return;
       }
     } catch (error) {
-      // 預期會收到連線被拒的錯誤，直到伺服器就緒
       if (error.cause && error.cause.code === 'ECONNREFUSED') {
         // 正常，繼續輪詢
       } else {
         console.warn(`健康檢查時發生非預期錯誤: ${error.message}`);
       }
     }
-    // 繼續下一次輪詢
     setTimeout(pollHealthCheck, HEALTH_CHECK_POLL_INTERVAL);
   };
 
@@ -71,7 +70,6 @@ const startServer = () => new Promise((resolve, reject) => {
       if (portMatch) {
         apiPort = portMatch[1];
         console.log(`✅ 偵測到 API 埠號: ${apiPort}`);
-        // 取得埠號後，開始進行健康檢查
         pollHealthCheck();
       }
     }
@@ -105,8 +103,8 @@ const killServer = () => {
 };
 
 
-// --- E2E 測試套件 ---
-test.describe('鳳凰音訊轉錄儀 E2E 測試', () => {
+// --- E2E 測試套件 (V3 UI) ---
+test.describe('鳳凰音訊轉錄儀 V3 E2E 測試', () => {
 
   test.setTimeout(TEST_TIMEOUT);
 
@@ -123,43 +121,69 @@ test.describe('鳳凰音訊轉錄儀 E2E 測試', () => {
     killServer();
   });
 
-  test('應成功上傳音訊檔案並顯示完成狀態', async ({ page }) => {
-    await page.goto(serverUrl);
+  test('應成功上傳音訊檔案，歷經處理中，最終顯示完成狀態', async ({ page }) => {
+    await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.locator('#upload-container')).toBeVisible();
+    // 1. 確保 UI 初始狀態正確
+    await expect(page.locator('h1')).toContainText('鳳凰 音訊轉錄儀 v3');
+    await expect(page.locator('#ongoing-tasks')).toContainText('暫無執行中任務');
+    await expect(page.locator('#completed-tasks')).toContainText('尚無完成的任務');
 
-    const fileInput = page.locator('input[type="file"]');
+    // 2. 選擇檔案
+    const fileInput = page.locator('input#file-input');
     const filePath = 'dummy_audio.wav';
     await fileInput.setInputFiles(filePath);
 
+    // 3. 點擊開始處理按鈕
+    const startButton = page.locator('button', { hasText: '開始處理' });
+    await expect(startButton).toBeEnabled();
+    await expect(startButton).toContainText('開始處理 1 個檔案');
+    await startButton.click();
+
+    // 4. 驗證任務出現在「進行中」列表
+    const ongoingTasksContainer = page.locator('#ongoing-tasks');
+    const ongoingTaskLocator = ongoingTasksContainer.locator('div', { hasText: path.basename(filePath) });
+    await expect(ongoingTaskLocator).toBeVisible({ timeout: 10000 });
+    await expect(ongoingTaskLocator).toContainText('processing...');
+
+    // 5. 等待並驗證任務移動到「已完成」列表
     const completedTasksContainer = page.locator('#completed-tasks');
-    const taskLocator = completedTasksContainer.locator('.p-3', { hasText: path.basename(filePath) });
+    const completedTaskLocator = completedTasksContainer.locator('div', { hasText: path.basename(filePath) });
+    await expect(completedTaskLocator).toBeVisible({ timeout: 45000 });
 
-    await expect(taskLocator.locator('p', { hasText: '已完成' })).toBeVisible({ timeout: 45000 });
+    // 6. 驗證完成狀態的 UI
+    await expect(completedTaskLocator).toContainText('已完成');
+    // 檢查是否有綠色樣式 (表示成功)
+    const successText = completedTaskLocator.locator('.text-green-600');
+    await expect(successText).toBeVisible();
 
-    await expect(taskLocator.locator('.text-green-500')).toBeVisible();
+    // 7. 驗證「進行中」列表已清空
+    await expect(ongoingTasksContainer).toContainText('暫無執行中任務');
   });
 
-  test('上傳無效檔案時應顯示失敗狀態且 UI 保持穩定', async ({ page }) => {
+  test('上傳無效檔案時應顯示失敗狀態', async ({ page }) => {
+    await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+
+    // 1. 準備無效檔案
     const fakeFileName = 'fake_audio.txt';
     fs.writeFileSync(fakeFileName, '這不是一個音訊檔案');
 
-    await page.goto(serverUrl);
+    // 2. 上傳並開始處理
+    await page.locator('input#file-input').setInputFiles(fakeFileName);
+    await page.locator('button', { hasText: '開始處理' }).click();
 
-    await expect(page.locator('#upload-container')).toBeVisible();
-
-    const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles(fakeFileName);
-
+    // 3. 等待並驗證任務出現在「已完成」列表且狀態為「失敗」
     const completedTasksContainer = page.locator('#completed-tasks');
-    const taskLocator = completedTasksContainer.locator('.p-3', { hasText: fakeFileName });
+    const failedTaskLocator = completedTasksContainer.locator('div', { hasText: fakeFileName });
+    await expect(failedTaskLocator).toBeVisible({ timeout: 45000 });
 
-    await expect(taskLocator.locator('p', { hasText: '失敗' })).toBeVisible({ timeout: 45000 });
+    // 4. 驗證失敗狀態的 UI
+    await expect(failedTaskLocator).toContainText('失敗');
+    // 檢查是否有紅色樣式
+    const failureText = failedTaskLocator.locator('.text-red-600');
+    await expect(failureText).toBeVisible();
 
-    await expect(taskLocator.locator('.text-red-500')).toBeVisible();
-
-    await expect(page.locator('#upload-container')).toBeVisible();
-
+    // 清理臨時檔案
     fs.unlinkSync(fakeFileName);
   });
 });

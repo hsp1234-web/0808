@@ -252,6 +252,29 @@ def are_tasks_active() -> bool:
             conn.close()
 
 
+def get_all_tasks() -> list[dict]:
+    """
+    獲取資料庫中所有任務的列表，主要用於前端 UI 顯示。
+
+    :return: 一個包含所有任務字典的列表。
+    """
+    sql = "SELECT task_id, status, progress, type, payload, result, created_at, updated_at FROM tasks ORDER BY created_at DESC"
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        tasks = cursor.fetchall()
+        # 將 Row 物件轉換為標準字典列表
+        return [dict(task) for task in tasks]
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取所有任務時發生錯誤: {e}", exc_info=True)
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     # 直接執行此檔案時，會進行初始化
     initialize_database()
