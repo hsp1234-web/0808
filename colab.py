@@ -148,9 +148,8 @@ class ServerManager:
         self.port = find_free_port()
 
     def _run(self):
-        project_path = Path.cwd()
         try:
-            # 根據 USE_LOCAL_CODE 決定是否執行 Git 操作
+            # 根據模式決定專案的根目錄
             if not USE_LOCAL_CODE:
                 self._stats['status'] = "🚀 準備從 Git 下載..."
                 project_path = Path(PROJECT_FOLDER_NAME)
@@ -166,16 +165,23 @@ class ServerManager:
                 self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
             else:
                 self._log_manager.log("INFO", "✅ 使用本地程式碼模式，跳過 Git 下載。")
+                project_path = Path.cwd()
 
-            launcher_script_path = project_path / "scripts" / "launch.py"
-            if not launcher_script_path.is_file():
-                self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return
+            # --- 路徑修正 ---
+            # 啟動器腳本路徑應該相對於專案根目錄
+            launcher_script = Path("scripts") / "launch.py"
+            full_launcher_path = project_path / launcher_script
+
+            if not full_launcher_path.is_file():
+                self._log_manager.log("CRITICAL", f"核心啟動器未找到: {full_launcher_path}"); return
 
             self._stats['status'] = "🚀 呼叫核心啟動器..."
-            self._log_manager.log("BATTLE", f"=== 正在呼叫核心啟動器 `{launcher_script_path}` ===")
+            self._log_manager.log("BATTLE", f"=== 正在呼叫核心啟動器 `{full_launcher_path}` ===")
             self._log_manager.log("INFO", f"將在動態埠號 {self.port} 上啟動服務。")
 
-            launch_command = [sys.executable, str(launcher_script_path), "--port", str(self.port)]
+            # 在命令中使用相對於 cwd 的路徑
+            launch_command = [sys.executable, str(launcher_script), "--port", str(self.port)]
+
             self.server_process = subprocess.Popen(
                 launch_command, cwd=str(project_path),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
@@ -185,7 +191,6 @@ class ServerManager:
             for line in iter(self.server_process.stdout.readline, ''):
                 if self._stop_event.is_set(): break
                 self._log_manager.log("DEBUG", line.strip())
-                # 更新最後活動時間，用於看門狗
                 self._stats['last_activity_time'] = time.monotonic()
                 if "PHOENIX_SERVER_READY_FOR_COLAB" in line:
                     self._stats['status'] = "✅ 伺服器運行中"
