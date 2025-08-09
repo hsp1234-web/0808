@@ -14,16 +14,32 @@ logging.basicConfig(
 )
 log = logging.getLogger('local_run')
 
+def install_dependencies():
+    """安裝所有必要的依賴套件。"""
+    log.info("--- 步驟 0/5: 檢查並安裝依賴 ---")
+    requirements_files = ["requirements.txt", "requirements-worker.txt"]
+    for req_file in requirements_files:
+        log.info(f"正在安裝 {req_file}...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
+            log.info(f"✅ {req_file} 中的依賴已成功安裝。")
+        except subprocess.CalledProcessError as e:
+            log.error(f"❌ 安裝 {req_file} 失敗: {e}")
+            sys.exit(1) # 如果依賴安裝失敗，則終止腳本
+    log.info("✅ 所有依賴都已安裝。")
+
 def main():
     """
     專為自動化測試設計的啟動器。
     它會啟動協調器，提交一個任務，然後等待系統變回 IDLE 狀態後自動退出。
     """
+    install_dependencies() # 在所有操作之前執行
+
     log.info("🚀 Local Test Runner: 啟動...")
     orchestrator_proc = None
     try:
         # 1. 啟動協調器 (在真實模式下)
-        log.info("--- 步驟 1/4: 啟動協調器 ---")
+        log.info("--- 步驟 1/5: 啟動協調器 ---")
         cmd = [sys.executable, "orchestrator.py"]
         orchestrator_proc = subprocess.Popen(
             cmd,
@@ -35,7 +51,7 @@ def main():
         log.info(f"✅ 協調器已啟動 (PID: {orchestrator_proc.pid})")
 
         # 2. 等待 API 伺服器就緒並取得埠號
-        log.info("--- 步驟 2/4: 等待 API 伺服器就緒並取得埠號 ---")
+        log.info("--- 步驟 2/5: 等待 API 伺服器就緒並取得埠號 ---")
         api_port = None
         port_pattern = re.compile(r"API_PORT:\s*(\d+)")
         start_time = time.time()
@@ -76,7 +92,7 @@ def main():
              return
 
         # 3. 提交一個測試任務
-        log.info("--- 步驟 3/4: 提交一個測試任務 ---")
+        log.info("--- 步驟 3/5: 提交一個測試任務 ---")
         try:
             import requests
             api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
@@ -100,7 +116,7 @@ def main():
 
 
         # 4. 監聽心跳信號，直到偵測到 IDLE
-        log.info("--- 步驟 4/4: 監聽心跳，等待系統變為 IDLE ---")
+        log.info("--- 步驟 4/5: 監聽心跳，等待系統變為 IDLE ---")
         running_detected = False
         idle_after_running_detected = False
 
