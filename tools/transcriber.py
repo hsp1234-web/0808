@@ -4,6 +4,7 @@
 # 使用 ast.literal_eval 安全解析
 DEPENDENCIES = {
     # '套件名': '在 pip install 中使用的名稱'
+    'torch': 'torch',
     'faster-whisper': 'faster-whisper',
     'opencc': 'opencc-python-reimplemented'
 }
@@ -11,6 +12,7 @@ DEPENDENCIES = {
 import time
 import logging
 import argparse
+import torch
 from pathlib import Path
 from opencc import OpenCC
 
@@ -42,20 +44,30 @@ class Transcriber:
 
     def _load_model(self):
         """
-        根據指定的模型大小載入 faster-whisper 模型。
+        根據指定的模型大小和可用的硬體，載入 faster-whisper 模型。
         """
         log.info(f"🧠 開始載入 '{self.model_size}' 模型...")
         start_time = time.time()
+
+        # --- JULES 於 2025-08-09 的修改：自動偵測並使用 GPU ---
+        device = "cpu"
+        compute_type = "int8"
+        if torch.cuda.is_available():
+            log.info("✅ 偵測到 NVIDIA GPU (CUDA)！將使用 GPU 進行加速。")
+            device = "cuda"
+            compute_type = "float16" # 在 GPU 上使用 float16 以獲得最佳性能
+        else:
+            log.info("ℹ️ 未偵測到 NVIDIA GPU (CUDA)。將使用 CPU 進行運算。")
+        # --- 修改結束 ---
+
         try:
             from faster_whisper import WhisperModel
-            # 在工具化執行中，我們可以假設環境是固定的，
-            # 例如，總是使用 CPU。未來可以透過參數傳遞來增加彈性。
-            model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
+            model = WhisperModel(self.model_size, device=device, compute_type=compute_type)
             duration = time.time() - start_time
-            log.info(f"✅ 成功載入 '{self.model_size}' 模型！耗時: {duration:.2f} 秒。")
+            log.info(f"✅ 成功載入 '{self.model_size}' 模型到 {device.upper()}！耗時: {duration:.2f} 秒。")
             return model
         except ImportError as e:
-            log.critical(f"❌ 模型載入失敗：缺少 'faster_whisper' 模組。請確認環境已正確安裝。")
+            log.critical(f"❌ 模型載入失敗：缺少 'faster_whisper' 或 'torch' 模組。請確認環境已正確安裝。")
             raise e
         except Exception as e:
             log.critical(f"❌ 載入 '{self.model_size}' 模型時發生未預期錯誤: {e}", exc_info=True)

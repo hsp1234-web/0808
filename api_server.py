@@ -7,6 +7,8 @@ import subprocess
 import sys
 import threading
 import asyncio
+import os
+import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +17,14 @@ from typing import Optional, Dict
 
 # 匯入新的資料庫模組
 from db import database
+
+# --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
+# 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
+# 最早期階段就將時區環境變數設定為 'Asia/Taipei'。
+os.environ['TZ'] = 'Asia/Taipei'
+if sys.platform != 'win32':
+    time.tzset()
+# --- 時區設定結束 ---
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄

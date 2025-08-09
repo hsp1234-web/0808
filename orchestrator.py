@@ -7,6 +7,15 @@ import argparse
 import threading
 from pathlib import Path
 import socket
+import os
+
+# --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
+# 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
+# 最早期階段就將時區環境變數設定為 'Asia/Taipei'。
+os.environ['TZ'] = 'Asia/Taipei'
+if sys.platform != 'win32':
+    time.tzset()
+# --- 時區設定結束 ---
 
 # 將專案根目錄加入 sys.path
 ROOT_DIR = Path(__file__).resolve().parent
@@ -99,25 +108,36 @@ def main():
 
 
         # 2. 根據旗標決定是否啟動背景工作處理器
-        if not args.no_worker:
-            worker_cmd = [sys.executable, "worker.py"]
-            if args.mock:
-                worker_cmd.append("--mock")
-            log.info(f"🔧 正在啟動 Worker: {' '.join(worker_cmd)}")
-            worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
-            processes.append(worker_proc)
-            log.info(f"✅ Worker 已啟動，PID: {worker_proc.pid}")
-        else:
-            log.info("🚫 已設定 --no-worker，將不啟動 Worker 程序。")
-            worker_proc = None
+        # --- JULES 於 2025-08-09 的修改 ---
+        # 註解：
+        # 根據最新的架構審查，系統已全面轉向由 api_server.py 透過 WebSocket
+        # 觸發並在執行緒中處理轉錄任務的模式。舊的 worker.py 程序會與此新模式
+        # 產生衝突（例如，搶佔任務），導致前端出現 WebSocket 連線錯誤和不一致的行為。
+        #
+        # 解決方案：
+        # 因此，我們在此處永久性地停用 worker 程序，以確保只有 api_server
+        # 一個服務在處理任務。--no-worker 旗標雖然保留，但此處的程式碼將不再理會它。
+        log.info("🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。")
+        worker_proc = None
+        # if not args.no_worker:
+        #     worker_cmd = [sys.executable, "worker.py"]
+        #     if args.mock:
+        #         worker_cmd.append("--mock")
+        #     log.info(f"🔧 正在啟動 Worker: {' '.join(worker_cmd)}")
+        #     worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+        #     processes.append(worker_proc)
+        #     log.info(f"✅ Worker 已啟動，PID: {worker_proc.pid}")
+        # else:
+        #     log.info("🚫 已設定 --no-worker，將不啟動 Worker 程序。")
+        #     worker_proc = None
 
         # 3. 啟動日誌流式讀取執行緒
         # 為每個子程序的 stdout 和 stderr 建立一個執行緒
         threads.append(threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server')))
         threads.append(threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr')))
-        if worker_proc:
-            threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker')))
-            threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr')))
+        # if worker_proc:
+        #     threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker')))
+        #     threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr')))
 
         for t in threads:
             t.daemon = True # 設置為守護執行緒，以便主程序退出時它們也會退出
