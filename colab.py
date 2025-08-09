@@ -202,15 +202,16 @@ class ServerManager:
                 self._log_manager.log("WARN", "未在倉庫中找到 requirements.txt，跳過依賴安裝。")
 
             # ** 適配新架構: 啟動 orchestrator.py **
-            orchestrator_script_path = project_path / "orchestrator.py"
-            if not orchestrator_script_path.is_file():
-                self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path}")
+            launch_script_name = "orchestrator.py"
+            orchestrator_script_path_check = project_path / launch_script_name
+            if not orchestrator_script_path_check.is_file():
+                self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path_check}")
                 return
 
             # ** 適配新架構: 不再傳遞 --mock，因為這是生產環境 **
             self._log_manager.log("INFO", "將啟動後端服務...")
-            # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
-            launch_command = [sys.executable, str(orchestrator_script_path)]
+            # 使用相對路徑，因為 cwd 已經設定為 project_path
+            launch_command = [sys.executable, launch_script_name]
 
             self.server_process = subprocess.Popen(
                 launch_command,
@@ -223,29 +224,41 @@ class ServerManager:
             )
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
-            # ** 適配新架構: 監聽新的握手信號 **
-            # 我們現在監聽由 orchestrator 轉發的 api_server 日誌
+            # ** 適配新架構: 監聽新的握手信號，並增強錯誤回報 **
+            startup_logs = []
             handshake_done = False
-            for line in iter(self.server_process.stdout.readline, ''):
-                if self._stop_event.is_set(): break
+            try:
+                for line in iter(self.server_process.stdout.readline, ''):
+                    if self._stop_event.is_set():
+                        break
 
-                # 將所有日誌都顯示在儀表板上
-                self._log_manager.log("DEBUG", line.strip())
+                    line_content = line.strip()
+                    startup_logs.append(line_content)
+                    self._log_manager.log("DEBUG", line_content) # 仍然以 DEBUG 等級記錄即時日誌
 
-                # 新的握手信號
-                if not handshake_done and "Uvicorn running on" in line:
-                    self._stats['status'] = "✅ 伺服器運行中"
-                    self._log_manager.log("SUCCESS", "伺服器已就緒！收到 Uvicorn 握手信號！")
-                    self.server_ready_event.set()
-                    handshake_done = True # 避免重複設定
+                    # 新的握手信號
+                    if not handshake_done and "Uvicorn running on" in line_content:
+                        self._stats['status'] = "✅ 伺服器運行中"
+                        self._log_manager.log("SUCCESS", "伺服器已就緒！收到 Uvicorn 握手信號！")
+                        self.server_ready_event.set()
+                        handshake_done = True # 握手成功，清空啟動日誌緩衝
+                        startup_logs.clear()
 
-            # 等待子程序自然結束 (通常是外部中斷)
-            self.server_process.wait()
+                    # 如果程序在握手成功前就結束了，檢查其返回碼
+                    if self.server_process.poll() is not None and not handshake_done:
+                        break # 退出迴圈以觸發下面的錯誤處理
 
-            # 如果事件從未被設定，表示程序在就緒前就已終止
+            finally:
+                # 等待子程序結束
+                self.server_process.wait(timeout=2)
+
+            # 如果事件從未被設定（即握手從未成功），則表示程序在就緒前已終止
             if not self.server_ready_event.is_set():
                 self._stats['status'] = "❌ 伺服器啟動失敗"
-                self._log_manager.log("CRITICAL", "協調器進程在就緒前已終止。")
+                error_message = "協調器進程在就緒前已終止。以下是它在終止前的最後輸出日誌：\n" + "-"*20 + "\n"
+                error_message += "\n".join(startup_logs) if startup_logs else "[協調器未產生任何輸出日誌]"
+                error_message += "\n" + "-"*20
+                self._log_manager.log("CRITICAL", error_message)
         except Exception as e: self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally: self._stats['status'] = "⏹️ 已停止"
 
