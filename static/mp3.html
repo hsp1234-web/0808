@@ -179,6 +179,11 @@
                  <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
                  <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
             </div>
+            <!-- 模型下載進度條 -->
+            <div id="model-progress-container" class="progress-container hidden" style="margin-top: 16px;">
+                <div id="model-progress-bar" class="progress-bar"></div>
+                <span id="model-progress-text" class="progress-text"></span>
+            </div>
         </div>
 
         <!-- 步驟一 & 二 -->
@@ -268,6 +273,13 @@
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
+            const cpuLabel = document.getElementById('cpu-label');
+            const ramLabel = document.getElementById('ram-label');
+            const gpuLabel = document.getElementById('gpu-label');
+            const gpuDisplay = document.getElementById('gpu-display');
+            const modelProgressContainer = document.getElementById('model-progress-container');
+            const modelProgressBar = document.getElementById('model-progress-bar');
+            const modelProgressText = document.getElementById('model-progress-text');
 
             // --- 狀態變數 ---
             let currentFontSize = 100;
@@ -277,6 +289,15 @@
             const taskElements = new Map();
 
             // --- WebSocket 核心邏輯 ---
+            const sendWebSocketMessage = (type, payload) => {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type, payload }));
+                    return true;
+                }
+                console.error('無法發送 WebSocket 訊息: 連線未開啟。');
+                return false;
+            };
+
             const setupWebSocket = () => {
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
@@ -287,6 +308,15 @@
                     console.log('WebSocket 連線成功');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
+
+                    // 智慧預載入：自動選擇並下載 'tiny' 模型
+                    // 為避免重複下載，可以加上一個旗標來判斷
+                    if (!window.initialModelLoaded) {
+                        console.log('執行智慧預載入: 下載 "tiny" 模型。');
+                        modelSelect.value = 'tiny';
+                        requestModelDownload('tiny');
+                        window.initialModelLoaded = true;
+                    }
                 };
 
                 socket.onmessage = (event) => {
@@ -312,15 +342,44 @@
 
             const handleWebSocketMessage = (message) => {
                 const { type, payload } = message;
-                if (!payload || !payload.task_id) return;
 
-                const taskElement = taskElements.get(payload.task_id);
-                if (!taskElement) return;
-
-                const statusSpan = taskElement.querySelector('.task-status');
-
+                // 根據訊息類型進行不同的處理
                 switch (type) {
+                    case 'DOWNLOAD_STATUS':
+                        const { model, status, progress, error } = payload;
+                        modelProgressContainer.classList.remove('hidden');
+
+                        if (status === 'starting') {
+                            modelProgressBar.style.width = '0%';
+                            modelProgressText.textContent = `準備下載 '${model}' 模型...`;
+                        } else if (status === 'downloading') {
+                            const percent = progress || 0;
+                            modelProgressBar.style.width = `${percent}%`;
+                            modelProgressText.textContent = `正在下載 '${model}' 模型... ${percent}%`;
+                        } else if (status === 'completed') {
+                            modelProgressBar.style.width = '100%';
+                            modelProgressText.textContent = `模型 '${model}' 下載完成！`;
+                            logAction('模型下載完成', { model });
+                            setTimeout(() => modelProgressContainer.classList.add('hidden'), 2000);
+                        } else if (status === 'failed') {
+                            modelProgressBar.style.width = '100%';
+                            modelProgressBar.style.backgroundColor = 'red'; // 標示為紅色
+                            modelProgressText.textContent = `模型 '${model}' 下載失敗: ${error}`;
+                            logAction('模型下載失敗', { model, error });
+                            // 失敗後不要立即隱藏，讓使用者看到錯誤訊息
+                            setTimeout(() => {
+                                modelProgressContainer.classList.add('hidden');
+                                modelProgressBar.style.backgroundColor = ''; // 恢復原色
+                            }, 5000);
+                        }
+                        break;
+
                     case 'TRANSCRIPTION_STATUS':
+                        if (!payload || !payload.task_id) return;
+                        const taskElement = taskElements.get(payload.task_id);
+                        if (!taskElement) return;
+                        const statusSpan = taskElement.querySelector('.task-status');
+
                         if (payload.status === 'starting') {
                             statusSpan.textContent = '轉錄中...';
                             statusSpan.style.color = '#007bff';
@@ -450,6 +509,32 @@
             };
 
             // --- UI 輔助函式 ---
+            const updateSystemStats = async () => {
+                try {
+                    const response = await fetch('/api/system_stats');
+                    if (!response.ok) {
+                        throw new Error(`伺服器回應錯誤: ${response.status}`);
+                    }
+                    const stats = await response.json();
+
+                    cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
+                    ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
+
+                    if (stats.gpu_detected) {
+                        gpuDisplay.textContent = '已偵測到';
+                        gpuLabel.textContent = `${stats.gpu_usage.toFixed(1)}%`;
+                    } else {
+                        gpuDisplay.textContent = '未偵測到';
+                        gpuLabel.textContent = '--%';
+                    }
+                } catch (error) {
+                    console.warn('無法更新系統狀態:', error);
+                    cpuLabel.textContent = '--%';
+                    ramLabel.textContent = '--%';
+                    gpuLabel.textContent = '--%';
+                }
+            };
+
             const logAction = (action, payload = {}) => {
                 console.log(`[LOG ACTION] ${action}`, payload);
                 fetch('/api/log/action', {
@@ -485,19 +570,35 @@
                 }
             };
 
+            // --- 模型下載 ---
+            const requestModelDownload = (modelSize) => {
+                logAction('請求下載模型', { model: modelSize });
+                const success = sendWebSocketMessage('DOWNLOAD_MODEL', { model: modelSize });
+                if (success) {
+                    modelDisplay.textContent = modelSize;
+                    // 後續的 UI 更新將由 WebSocket 回傳的訊息驅動
+                } else {
+                    alert('無法發送下載請求：WebSocket 未連線。');
+                }
+            };
+
             // --- 事件監聽器與初始化 ---
             fileInput.addEventListener('change', handleFileUpload);
             startBtn.addEventListener('click', startProcessing);
             confirmBtn.addEventListener('click', () => {
                 const selectedModel = modelSelect.value;
-                modelDisplay.textContent = selectedModel;
-                alert(`設定已確認: 模型=${selectedModel}`);
+                requestModelDownload(selectedModel);
             });
             zoomInBtn.addEventListener('click', () => changeFontSize(25));
             zoomOutBtn.addEventListener('click', () => changeFontSize(-25));
 
             // 初始化 WebSocket
             setupWebSocket();
+
+            // 初始化並定期更新系統狀態
+            updateSystemStats();
+            setInterval(updateSystemStats, 3000);
+
             logAction('頁面載入完成');
         });
     </script>

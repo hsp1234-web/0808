@@ -110,7 +110,10 @@ test.describe('鳳凰音訊轉錄儀 V3 E2E 測試', () => {
   // 測試現在應該會快很多，但我們保留較長的超時以應對 CI 環境中的波動
   test.setTimeout(TEST_TIMEOUT);
 
-  test.beforeAll(async () => {
+  // 增加 beforeAll 的超時時間，以應對較慢的伺服器啟動
+  test.beforeAll(async ({}, testInfo) => {
+    // 將這個特定 hook 的超時時間設定為 90 秒
+    testInfo.timeout = 90000;
     try {
       serverUrl = await startServer();
     } catch (error) {

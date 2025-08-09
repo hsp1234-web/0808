@@ -339,38 +339,65 @@ async def download_transcript(task_id: str):
 
 def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     """
-    在一個單獨的執行緒中執行模型下載，並透過 WebSocket 回報結果。
+    在一個單獨的執行緒中執行模型下載，並透過 WebSocket 即時串流進度。
     """
     def _download_in_thread():
         log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
+        final_message = None
         try:
             cmd = [sys.executable, "tools/transcriber.py", "--command=download", f"--model_size={model_size}"]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
-            stdout, stderr = process.communicate()
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                bufsize=1 # Line-buffered
+            )
+
+            # 串流讀取進度
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        progress = data.get("progress", 0)
+                        message = {
+                            "type": "DOWNLOAD_STATUS",
+                            "payload": {"model": model_size, "status": "downloading", "progress": progress}
+                        }
+                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                    except json.JSONDecodeError:
+                        log.warning(f"[執行緒] 無法解析來自下載器的 JSON 行: {line}")
+
+            process.wait() # 等待程序結束
 
             if process.returncode == 0:
                 log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
-                message = {
+                final_message = {
                     "type": "DOWNLOAD_STATUS",
                     "payload": {"model": model_size, "status": "completed", "progress": 100}
                 }
             else:
-                log.error(f"❌ [執行緒] 模型 '{model_size}' 下載失敗。 Stderr: {stderr}")
-                message = {
+                stderr_output = process.stderr.read() if process.stderr else "N/A"
+                log.error(f"❌ [執行緒] 模型 '{model_size}' 下載失敗。 Stderr: {stderr_output}")
+                final_message = {
                     "type": "DOWNLOAD_STATUS",
-                    "payload": {"model": model_size, "status": "failed", "error": stderr}
+                    "payload": {"model": model_size, "status": "failed", "error": stderr_output}
                 }
 
-            # 使用 run_coroutine_threadsafe 在主事件迴圈中安全地廣播訊息
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
-
         except Exception as e:
-            log.error(f"❌ [執行緒] 下載執行緒中發生錯誤: {e}", exc_info=True)
-            message = {
+            log.error(f"❌ [執行緒] 下載執行緒中發生嚴重錯誤: {e}", exc_info=True)
+            final_message = {
                 "type": "DOWNLOAD_STATUS",
                 "payload": {"model": model_size, "status": "failed", "error": str(e)}
             }
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+        finally:
+            # 確保無論如何都會發送最終狀態
+            if final_message:
+                asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
 
     # 建立並啟動執行緒
     thread = threading.Thread(target=_download_in_thread)
