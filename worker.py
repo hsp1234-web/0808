@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import argparse
+import requests
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
@@ -149,9 +150,30 @@ def process_transcription_task(task: dict, use_mock: bool):
             final_transcript = output_file.read_text(encoding='utf-8').strip()
             final_result = json.dumps({
                 "transcript": final_transcript,
+                "transcript_path": str(output_file), # 新增此行，為下載 API 提供路徑
                 "tool_stdout": "".join(full_stdout),
             })
             database.update_task_status(task_id, 'completed', final_result)
+            log.info(f"✅ 任務 {task_id} 狀態已更新至資料庫。")
+
+            # 步驟 6: 通知 API Server 任務已完成，以便廣播給前端
+            try:
+                # 注意：這裡假設 api_server 在 8000 port 上運行
+                notify_url = "http://127.0.0.1:8000/api/internal/notify_task_update"
+
+                # 我們只傳送前端 UI 更新所需的最小資訊
+                frontend_payload = {
+                    "task_id": task_id,
+                    "status": "completed",
+                    # 傳送結果，讓前端可以直接使用，例如顯示下載按鈕
+                    "result": json.loads(final_result)
+                }
+
+                requests.post(notify_url, json=frontend_payload, timeout=5)
+                log.info(f"✅ 已成功發送完成通知給 API Server: {task_id}")
+            except requests.exceptions.RequestException as e:
+                log.error(f"❌ 發送完成通知給 API Server 失敗: {e}")
+
         else:
             log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {process.returncode}")
             error_message = "".join(full_stderr) or "".join(full_stdout) or "未知錯誤"

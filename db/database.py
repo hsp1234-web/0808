@@ -29,6 +29,8 @@ def initialize_database():
     初始化資料庫。如果 `tasks` 資料表不存在，就建立它。
     """
     log.info(f"正在檢查並初始化資料庫於: {DB_FILE}")
+    # 在嘗試連線前，確保父目錄存在
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     conn = get_db_connection()
     if not conn:
         log.critical("無法建立資料庫連線，初始化失敗。")

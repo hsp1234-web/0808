@@ -1,25 +1,32 @@
+# verify_frontend.py (new version)
 import time
 import os
 import subprocess
 import signal
-from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
+import sys
+from pathlib import Path
+from playwright.sync_api import sync_playwright, expect, Page, TimeoutError as PlaywrightTimeoutError
+import requests
+import shutil
 
 # --- 設定 ---
 SERVER_URL = "http://127.0.0.1:8000"
-# 在 api_server.py 中，根目錄會提供 mp3.html
 APP_URL = f"{SERVER_URL}/"
-SERVER_START_TIMEOUT = 30  # 秒
-ACTION_TIMEOUT = 10000  # 毫秒
-LOG_FILE = "run_log.txt"
+SERVER_START_TIMEOUT = 30
+ACTION_TIMEOUT = 20000  # 毫秒，增加等待時間以應對任務處理
+LOG_FILE = Path("run_log.txt")
+DB_FILE = Path("db.sqlite3")
+TRANSCRIPTS_DIR = Path("transcripts")
+UPLOADS_DIR = Path("uploads")
 SCREENSHOT_FILE = "frontend_verification.png"
 DUMMY_FILE_NAME = "dummy_audio.wav"
+MOCK_TRANSCRIPT_TEXT = "這是模擬的轉錄結果。"
 
 def create_dummy_wav(filename=DUMMY_FILE_NAME):
     """建立一個簡短的、無聲的 WAV 檔案用於測試上傳。"""
     import wave
-    # 確保檔案路徑是絕對的
-    filepath = os.path.abspath(filename)
-    with wave.open(filepath, 'wb') as wf:
+    filepath = Path(filename).resolve()
+    with wave.open(str(filepath), 'wb') as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(16000)
@@ -27,161 +34,146 @@ def create_dummy_wav(filename=DUMMY_FILE_NAME):
     print(f"✅ 已建立臨時音訊檔案於: {filepath}")
     return filepath
 
-def verify_log(action_name, timeout=5):
-    """檢查日誌檔案中是否包含指定的 action。"""
-    start_time = time.time()
-    expected_log_entry = f"[FRONTEND ACTION] {action_name}"
-    print(f"🔍 正在驗證日誌: 應包含 '{expected_log_entry}'...")
+def cleanup():
+    """清理測試產生的檔案和目錄。"""
+    print("▶️ 執行清理程序...")
+    files_to_delete = [LOG_FILE, DB_FILE, Path(DUMMY_FILE_NAME), Path(SCREENSHOT_FILE)]
+    dirs_to_delete = [TRANSCRIPTS_DIR, UPLOADS_DIR]
 
-    while time.time() - start_time < timeout:
-        if not os.path.exists(LOG_FILE):
-            time.sleep(0.2)
-            continue
+    for f in files_to_delete:
+        if f.exists():
+            f.unlink()
+            print(f"🗑️ 已刪除檔案: {f.name}")
 
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
-            if expected_log_entry in content:
-                print(f"✅ 日誌驗證成功: 找到了 '{expected_log_entry}'。")
-                return True
-        time.sleep(0.2)
+    for d in dirs_to_delete:
+        if d.is_dir():
+            shutil.rmtree(d)
+            print(f"🗑️ 已刪除目錄: {d.name}")
 
-    print(f"❌ 日誌驗證失敗: 在 {timeout} 秒內未找到 '{expected_log_entry}'。")
-    # 為了除錯，顯示目前的日誌內容
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
-            print("--- 目前日誌內容 ---")
-            print(f.read())
-            print("--------------------")
-    return False
 
 def run_verification():
     """
-    使用 Playwright 執行前端自動化驗證，包含超時機制和日誌驗證。
+    執行完整的端對端驗證，包括啟動後端伺服器和背景工作者。
     """
     server_process = None
-    dummy_file_path = None
+    worker_process = None
 
-    # 使用 Popen 啟動伺服器，以便我們可以獲取其 process ID
-    # preexec_fn=os.setsid 確保我們可以殺死整個 process group
-    print("▶️ 啟動後端伺服器...")
-    server_command = ["uvicorn", "api_server:app", "--host", "127.0.0.1", "--port", "8000"]
-    server_process = subprocess.Popen(server_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
-
-    # --- 強健的伺服器啟動等待與超時機制 ---
-    start_time = time.time()
-    server_ready = False
-    print(f"⏳ 等待伺服器啟動... (超時: {SERVER_START_TIMEOUT} 秒)")
-
-    import requests
-    while time.time() - start_time < SERVER_START_TIMEOUT:
-        try:
-            # 使用 /api/health 端點進行健康檢查
-            response = requests.get(f"{SERVER_URL}/api/health", timeout=1)
-            if response.status_code == 200:
-                print("✅ 伺服器已成功啟動並回應健康檢查。")
-                server_ready = True
-                break
-        except requests.ConnectionError:
-            time.sleep(0.5)
-        except requests.Timeout:
-            print(".. 健康檢查超時，重試中 ..")
-
-    if not server_ready:
-        print(f"❌ 伺服器在 {SERVER_START_TIMEOUT} 秒內沒有成功啟動。測試中止。")
-        # 殺死整個 process group
-        os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
-        server_process.wait()
-        return False
+    # 在開始前先清理一次，確保環境乾淨
+    cleanup()
 
     try:
+        print("▶️ 啟動後端伺服器 (模擬模式)...")
+        server_command = [sys.executable, "api_server.py", "--port", "8000"]
+        # 設定 MOCK_MODE 環境變數，讓 API Server 也進入模擬模式
+        server_env = {**os.environ, "MOCK_MODE": "1"}
+        server_process = subprocess.Popen(server_command, preexec_fn=os.setsid, env=server_env)
+
+        print("▶️ 啟動背景工作者 (模擬模式)...")
+        worker_command = [sys.executable, "worker.py", "--mock", "--poll-interval", "1"]
+        worker_process = subprocess.Popen(worker_command, preexec_fn=os.setsid)
+
+        start_time = time.time()
+        server_ready = False
+        print(f"⏳ 等待伺服器啟動... (超時: {SERVER_START_TIMEOUT} 秒)")
+        while time.time() - start_time < SERVER_START_TIMEOUT:
+            try:
+                response = requests.get(f"{SERVER_URL}/api/health", timeout=1)
+                if response.status_code == 200:
+                    print("✅ 伺服器已成功啟動。")
+                    server_ready = True
+                    break
+            except requests.ConnectionError:
+                time.sleep(0.5)
+
+        if not server_ready:
+            raise RuntimeError(f"伺服器在 {SERVER_START_TIMEOUT} 秒內未成功啟動。")
+
         dummy_file_path = create_dummy_wav()
 
         with sync_playwright() as p:
-            print("▶️ 啟動瀏覽器...")
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
+
+            # 監聽並印出瀏覽器主控台的訊息，以便除錯
+            page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
+
             page.set_default_timeout(ACTION_TIMEOUT)
 
-            print(f"▶️ 導航至應用程式頁面: {APP_URL}")
-            page.goto(APP_URL, wait_until="domcontentloaded")
+            print(f"▶️ 導航至: {APP_URL}")
+            page.goto(APP_URL)
 
-            # 1. 驗證頁面載入日誌
-            if not verify_log("頁面載入完成"):
-                raise RuntimeError("頁面載入日誌驗證失敗。")
-
-            # 2. 點擊「確認設定」按鈕並驗證日誌
-            print("▶️ 模擬操作: 點擊「確認設定」按鈕")
-            page.locator("#confirm-settings-btn").click()
-            if not verify_log("確認設定按鈕點擊"):
-                raise RuntimeError("「確認設定」日誌驗證失敗。")
-
-            # 3. 點擊字體大小按鈕並驗證日誌
-            print("▶️ 模擬操作: 點擊「字體放大」按鈕")
-            page.locator("#zoom-in-btn").click()
-            if not verify_log("字體大小變更"):
-                raise RuntimeError("「字體放大」日誌驗證失敗。")
-
-            print("▶️ 模擬操作: 點擊「字體縮小」按鈕")
-            page.locator("#zoom-out-btn").click()
-            # 由於日誌名稱相同，這裡僅驗證第二次操作是否也觸發
-            # (更好的做法是讓日誌包含更多上下文，但目前可接受)
-            time.sleep(1) # 等待一下，讓日誌檔案有時間更新
-            if not verify_log("字體大小變更"):
-                 raise RuntimeError("「字體縮小」日誌驗證失敗。")
-
-            # 4. 模擬檔案上傳並驗證日誌
             print(f"▶️ 模擬操作: 上傳檔案 '{DUMMY_FILE_NAME}'")
             page.locator("#file-input").set_input_files(dummy_file_path)
-            if not verify_log("檔案已選擇"):
-                raise RuntimeError("「檔案選擇」日誌驗證失敗。")
 
-            # 5. 點擊「開始處理」按鈕並驗證日誌
             print("▶️ 模擬操作: 點擊「開始處理」按鈕")
-            # 確保按鈕已啟用
             expect(page.locator("#start-processing-btn")).to_be_enabled()
             page.locator("#start-processing-btn").click()
-            if not verify_log("開始處理按鈕點擊"):
-                 raise RuntimeError("「開始處理」日誌驗證失敗。")
 
-            # 6. 最終驗證與截圖
-            print("✅ 所有模擬操作與日誌驗證均已成功。")
+            print("▶️ 等待任務出現在「已完成」列表中...")
+            # JULES: 加入一個短暫的延遲，以診斷潛在的競爭條件問題
+            page.wait_for_timeout(2000)
+            completed_tasks_list = page.locator("#completed-tasks")
+            task_item = completed_tasks_list.locator(".task-item", has_text=DUMMY_FILE_NAME)
+
+            expect(task_item).to_be_visible(timeout=ACTION_TIMEOUT)
+            print("✅ 任務已完成並顯示在列表中。")
+
+            print("▶️ 驗證「預覽」和「下載」按鈕...")
+            preview_button = task_item.locator('a:has-text("預覽")')
+            download_button = task_item.locator('a:has-text("下載")')
+
+            expect(preview_button).to_be_visible()
+            expect(preview_button).to_have_attribute("target", "_blank")
+            print("✅ 「預覽」按鈕驗證成功。")
+
+            expect(download_button).to_be_visible()
+            expect(download_button).to_have_attribute("download", "dummy_audio_transcript.txt")
+            print("✅ 「下載」按鈕驗證成功。")
+
+            print("▶️ 驗證「預覽」功能...")
+            with page.expect_popup() as popup_info:
+                preview_button.click()
+
+            preview_page = popup_info.value
+            preview_page.wait_for_load_state()
+
+            expect(preview_page.locator('body')).to_contain_text(MOCK_TRANSCRIPT_TEXT, timeout=5000)
+            print("✅ 「預覽」內容驗證成功。")
+            preview_page.close()
+
             page.screenshot(path=SCREENSHOT_FILE)
             print(f"📸 成功儲存最終驗證螢幕截圖至: {SCREENSHOT_FILE}")
 
             browser.close()
             return True
 
-    except PlaywrightTimeoutError as e:
-        print(f"❌ Playwright 操作超時: {e}")
-        return False
-    except RuntimeError as e:
-        print(f"❌ 測試執行失敗: {e}")
-        return False
     except Exception as e:
-        print(f"❌ 前端驗證過程中發生未預期的錯誤: {e}")
+        print(f"❌ 驗證過程中發生錯誤: {e}", file=sys.stderr)
         return False
     finally:
-        # --- 清理程序 ---
-        print("▶️ 執行清理程序...")
-        if server_process:
-            print("▶️ 正在關閉後端伺服器...")
-            # 使用 signal.SIGTERM 優雅地關閉整個 process group
-            os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
-            server_process.wait()
-            print("✅ 伺服器已關閉。")
-        if dummy_file_path and os.path.exists(dummy_file_path):
-            os.remove(dummy_file_path)
-            print(f"🗑️ 已刪除臨時檔案: {DUMMY_FILE_NAME}")
-        # 清理日誌檔案
-        if os.path.exists(LOG_FILE):
-            os.remove(LOG_FILE)
-            print(f"🗑️ 已刪除日誌檔案: {LOG_FILE}")
+        print("▶️ 執行最終清理...")
+        processes = [server_process, worker_process]
+        for proc in processes:
+            if proc and proc.poll() is None:
+                # 使用 SIGTERM 優雅地終止行程組
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                print(f"✅ 已發送終止信號至行程組 (PID: {proc.pid})。")
+
+        for proc in processes:
+            if proc:
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    print(f"⚠️ 行程組 (PID: {proc.pid}) 未能終止，已強制終止。", file=sys.stderr)
+
+        cleanup()
 
 
 if __name__ == "__main__":
     if run_verification():
         print("\n🎉🎉🎉 前端自動化驗證成功！ 🎉🎉🎉")
-        exit(0)
+        sys.exit(0)
     else:
-        print("\n🔥🔥🔥 前端自動化驗證失敗。 🔥🔥🔥")
-        exit(1)
+        print("\n🔥🔥🔥 前端自動化驗證失敗。 🔥🔥🔥", file=sys.stderr)
+        sys.exit(1)

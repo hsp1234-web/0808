@@ -96,9 +96,11 @@ def main():
     processes = []
     threads = []
     try:
-        # 1. 尋找可用埠號並啟動 API 伺服器
+        # 1. 尋找可用埠號並啟動 API 伺ervidor
         api_port = find_free_port()
         api_server_cmd = [sys.executable, "api_server.py", "--port", str(api_port)]
+        if args.mock:
+            api_server_cmd.append("--mock")
         log.info(f"🔧 正在啟動 API 伺服器: {' '.join(api_server_cmd)}")
         api_proc = subprocess.Popen(api_server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         processes.append(api_proc)

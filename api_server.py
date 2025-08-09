@@ -26,6 +26,18 @@ if sys.platform != 'win32':
     time.tzset()
 # --- 時區設定結束 ---
 
+# --- 模式設定 ---
+# 透過命令列旗標決定是否啟用模擬模式
+import argparse
+cli_parser = argparse.ArgumentParser()
+cli_parser.add_argument(
+    "--mock",
+    action="store_true",
+    help="啟用模擬模式，將使用 mock_transcriber.py。"
+)
+cli_args, _ = cli_parser.parse_known_args()
+IS_MOCK_MODE = cli_args.mock
+
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
 ROOT_DIR = Path(__file__).resolve().parent
@@ -127,8 +139,12 @@ async def serve_frontend(request: Request):
 def check_model_exists(model_size: str) -> bool:
     """
     檢查指定的 Whisper 模型是否已經被下載到本地快取。
-    這是一個簡化的實現，依賴於 `tools/transcriber.py` 的能力。
+    在模擬模式下，此函式會永遠回傳 True。
     """
+    if IS_MOCK_MODE:
+        log.info(f"（模擬模式）假設模型 '{model_size}' 已存在。")
+        return True
+
     # 為了避免在 API Server 中直接依賴 heavy ML 函式庫，
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
     check_command = [sys.executable, "tools/transcriber.py", "--command=check", f"--model_size={model_size}"]
@@ -400,9 +416,10 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
         dummy_output_path = output_dir / f"{task_id}.txt"
 
         try:
+            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
             cmd = [
                 sys.executable,
-                "tools/transcriber.py",
+                tool_script,
                 "--command=transcribe",
                 f"--audio_file={file_path}",
                 f"--output_file={dummy_output_path}",
@@ -448,9 +465,19 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
             if process.returncode == 0:
                 log.info(f"✅ [執行緒] 轉錄任務 '{task_id}' 成功完成。")
+
+                # 讀取結果並更新資料庫狀態
+                final_transcript = dummy_output_path.read_text(encoding='utf-8').strip()
+                final_result_obj = {
+                    "transcript": final_transcript,
+                    "transcript_path": str(dummy_output_path)
+                }
+                database.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
+                log.info(f"✅ [執行緒] 已將任務 {task_id} 的狀態和結果更新至資料庫。")
+
                 final_message = {
                     "type": "TRANSCRIPTION_STATUS",
-                    "payload": {"task_id": task_id, "status": "completed"}
+                    "payload": {"task_id": task_id, "status": "completed", "result": final_result_obj}
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
@@ -566,10 +593,10 @@ if __name__ == "__main__":
     )
     args, _ = parser.parse_known_args()
 
-    # 初始化資料庫
-    database.initialize_database()
+    # JULES: 移除此處的資料庫初始化呼叫。
+    # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
 
-    # 然後設定日誌
+    # 設定日誌
     setup_database_logging()
 
     log.info("🚀 啟動 API 伺服器 (v3)...")

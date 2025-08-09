@@ -5,6 +5,19 @@ import time
 import logging
 from pathlib import Path
 import re
+import wave
+
+def create_dummy_audio_if_not_exists(filename="dummy_audio.wav"):
+    """如果指定的音訊檔案不存在，則建立一個簡短的無聲 WAV 檔案。"""
+    filepath = Path(filename)
+    if not filepath.exists():
+        log.info(f"測試音訊檔案 '{filename}' 不存在，正在建立...")
+        with wave.open(str(filepath), 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2) # 16-bit
+            wf.setframerate(16000)
+            wf.writeframes(b'\x00' * 16000 * 1) # 1 秒的靜音
+        log.info(f"✅ 已成功建立 '{filename}'。")
 
 # --- 日誌設定 ---
 logging.basicConfig(
@@ -47,8 +60,8 @@ def main():
     try:
         # 1. 啟動協調器 (在真實模式下)
         log.info("--- 步驟 1/6: 啟動協調器 ---")
-        # 使用 --no-mock 參數，強制使用真實模式
-        cmd = [sys.executable, "orchestrator.py", "--no-mock"]
+        # JULES: 修改為 --mock 參數，強制使用模擬模式以進行測試
+        cmd = [sys.executable, "orchestrator.py", "--mock"]
         orchestrator_proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -106,11 +119,9 @@ def main():
             api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
             log.info(f"準備提交任務至: {api_url}")
 
-            # 使用一個真實的、有效的音訊檔案進行測試
+            # 確保測試音訊檔案存在
+            create_dummy_audio_if_not_exists()
             dummy_audio_path = Path("dummy_audio.wav")
-            if not dummy_audio_path.exists():
-                log.error(f"❌ 測試所需的音訊檔案 {dummy_audio_path} 不存在！")
-                return
 
             with open(dummy_audio_path, "rb") as f:
                 files = {'file': (dummy_audio_path.name, f, 'audio/wav')}

@@ -138,6 +138,21 @@
         .task-filename { font-weight: 600; }
         .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
 
+        /* --- 任務列表中的按鈕 --- */
+        .task-list a {
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background-color: #6c757d; /* A more neutral secondary color */
+            color: white;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+            border: 1px solid #5a6268;
+        }
+        .task-list a:hover {
+            background-color: #5a6268;
+        }
+
         /* --- 即時輸出 --- */
         .transcript-output {
             min-height: 100px;
@@ -347,8 +362,12 @@
                 }
 
                 if (!payload || !payload.task_id) return;
+                console.log(`Looking for task element with ID: ${payload.task_id}`);
                 const taskElement = taskElements.get(payload.task_id);
-                if (!taskElement) return;
+                if (!taskElement) {
+                    console.error(`Task element with ID ${payload.task_id} not found in map!`);
+                    return;
+                }
                 const statusSpan = taskElement.querySelector('.task-status');
 
                 switch (type) {
@@ -357,11 +376,35 @@
                             statusSpan.textContent = '轉錄中...';
                             transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
                         } else if (payload.status === 'completed') {
-                            statusSpan.textContent = '✅ 完成';
+                            statusSpan.innerHTML = ''; // 清空 '完成' 狀態文字
+
+                            const buttonGroup = document.createElement('div');
+                            buttonGroup.style.display = 'flex';
+                            buttonGroup.style.gap = '8px';
+
+                            const previewBtn = document.createElement('a');
+                            previewBtn.href = `/api/download/${payload.task_id}`;
+                            previewBtn.textContent = '預覽';
+                            previewBtn.target = '_blank';
+                            previewBtn.title = '在新分頁中預覽轉錄結果';
+
+                            const downloadBtn = document.createElement('a');
+                            downloadBtn.href = `/api/download/${payload.task_id}`;
+                            downloadBtn.textContent = '下載';
+                            const originalFilename = taskElement.querySelector('.task-filename').textContent;
+                            const baseName = originalFilename.substring(0, originalFilename.lastIndexOf('.')) || originalFilename;
+                            downloadBtn.download = `${baseName}_transcript.txt`;
+                            downloadBtn.title = '下載轉錄文字檔';
+
+                            buttonGroup.appendChild(previewBtn);
+                            buttonGroup.appendChild(downloadBtn);
+                            statusSpan.appendChild(buttonGroup);
+
                             if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                             completedTasksContainer.appendChild(taskElement);
                         } else if (payload.status === 'failed') {
                             statusSpan.textContent = `❌ 失敗: ${payload.error}`;
+                            // 失敗的任務也移到完成列表，但不提供按鈕
                             if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                             completedTasksContainer.appendChild(taskElement);
                         }
@@ -399,12 +442,8 @@
                 const selectedModel = modelSelect.value;
                 const currentModelStatus = modelStatus[selectedModel];
 
-                // 如果模型尚未就緒且未在下載中，則自動觸發下載
-                if (currentModelStatus !== 'completed' && currentModelStatus !== 'downloading') {
-                    logAction('隱性模型下載觸發', { model: selectedModel });
-                    downloadModel(selectedModel);
-                }
-
+                // JULES: 移除隱性模型下載，因為這似乎會造成競爭條件。
+                // 讓使用者透過「確認設定」按鈕明確觸發下載。
                 // 正常繼續處理檔案上傳流程
                 logAction('開始處理按鈕點擊', { file_count: uploadedFiles.length });
                 const filesToProcess = [...uploadedFiles];
@@ -436,7 +475,7 @@
                         const percentComplete = Math.round((event.loaded / event.total) * 100);
                         uploadProgressContainer.classList.remove('hidden');
                         uploadProgressBar.style.width = percentComplete + '%';
-                        uploadProgressText.textContent = `正在上傳 ${file.name}: ${percentComplete}%`;
+                        uploadProgressText.textContent = ``; // 根據使用者要求，移除進度條中的文字
                         statusSpan.textContent = `上傳中: ${percentComplete}%`;
                     }
                 };
@@ -446,15 +485,22 @@
                     if (xhr.status >= 200 && xhr.status < 300) {
                         statusSpan.textContent = '上傳成功，等待處理...';
                         const responseData = JSON.parse(xhr.responseText);
-                        const transcribeTask = (responseData.tasks || [responseData]).find(t => t.type === 'transcribe');
+
+                        // JULES: 修正前端邏輯，使其能處理兩種不同的 API 回應格式
+                        let transcribeTask;
+                        if (responseData.tasks) {
+                            // 處理包含下載任務時的完整回應
+                            transcribeTask = responseData.tasks.find(t => t.type === 'transcribe');
+                        } else if (responseData.task_id) {
+                            // 處理只有轉錄任務時的簡易回應
+                            transcribeTask = { ...responseData, type: 'transcribe' };
+                        }
+
                         if (transcribeTask && transcribeTask.task_id) {
                             taskElements.set(transcribeTask.task_id, taskElement);
-                            if (socket && socket.readyState === WebSocket.OPEN) {
-                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: transcribeTask.task_id } }));
-                                statusSpan.textContent = '已發送轉錄請求...';
-                            } else {
-                                statusSpan.textContent = '錯誤: WebSocket 未連線';
-                            }
+                            // JULES: 移除 START_TRANSCRIPTION 訊息發送。
+                            // 新架構中，worker 會自動處理佇列中的任務。
+                            statusSpan.textContent = '任務已成功排入佇列。';
                         } else {
                             statusSpan.textContent = '錯誤: 未收到有效的任務ID';
                         }
