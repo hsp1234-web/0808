@@ -262,6 +262,34 @@ graph TD
     1.  將 `db_watchdog_probe.py` 中已被完整驗證過的程式碼，完整地複製並覆寫到 `run/colab_runner.py` 的主迴圈中。
     2.  **重複執行完全相同的整合測試**，但這次的目標是 `run/colab_runner.py`，確保其行為與探測器完全一致。
 *   **成果**：我們移植的不再是「程式碼」，而是一個已通過嚴格品管的「成品」，確保了最終整合的成功。
+
+---
+## 案件 004：`local_run.py` 的啟動失敗與 Uvicorn 路徑陷阱 (2025-08-09)
+
+**情境概述:** 在一次旨在修復 `colab.py` 啟動器並增強其功能的任務中，我們遵循了「先本地測試，再整合」的最佳實踐。然而，作為測試工具的 `scripts/local_run.py` 本身卻遭遇了兩次連續的、具有代表性的啟動失敗，為 `BUG.md` 提供了新的實戰案例。
+
+---
+
+### 第一層：`ModuleNotFoundError` - 依賴未安裝的詛咒
+
+*   **症狀**: 執行 `python3 scripts/local_run.py` 後，腳本迅速失敗並拋出 `ModuleNotFoundError: No module named 'uvicorn'`。
+*   **分析**: 這是一個典型的 Python 腳本執行順序問題。腳本在頂層（第 5 行）就 `import uvicorn`，但安裝 `uvicorn` 這個依賴的 `pip install` 指令卻在 `main()` 函式內部。Python 解譯器在執行任何函式之前，會先處理所有頂層的 `import` 語句。在那個時間點，`pip` 還沒有被執行，`uvicorn` 自然不存在於環境中，導致腳本立即失敗。
+*   **解決方案**: 將 `import uvicorn` 語句從檔案頂層移動到 `main()` 函式內部，恰好在 `pip install` 成功執行之後、`uvicorn.run()` 被呼叫之前。這確保了只有在依賴被確認安裝後，解譯器才會嘗試去匯入它。
+
+### 第二層：`ModuleNotFoundError` - Uvicorn 重載器(Reloader)的路徑陷阱
+
+*   **症狀**: 修正了第一層問題後，`local_run.py` 腳本本身不再報錯，並且日誌顯示依賴安裝成功。然而，在 Uvicorn 嘗試啟動時，卻從其子進程中拋出了一個新的錯誤：`ModuleNotFoundError: No module named 'app'`。
+*   **分析**:
+    1.  `local_run.py` 透過 `sys.path.insert(0, project_root)` 確保了其自身能夠找到 `app` 模組。
+    2.  然而，當以程式化方式呼叫 `uvicorn.run(..., reload=True)` 時，Uvicorn 會啟動一個新的、獨立的子進程來監視檔案變更並執行實際的應用程式。
+    3.  這個子進程**沒有正確地繼承**主腳本對 `sys.path` 的修改，也可能沒有繼承正確的工作目錄 (CWD)。因此，當這個子進程嘗試載入 `"app.main:app"` 時，它無法在自己的搜尋路徑中找到名為 `app` 的模組。
+*   **解決方案**: 放棄在 Python 腳本中以程式化方式呼叫 `uvicorn.run()`，特別是在使用 `reload=True` 時。改用一種更穩健、更接近開發者手動操作的方式：使用 `subprocess.run()` 來直接執行 `python3 -m uvicorn app.main:app --reload` 命令。這種方法將 Uvicorn 的啟動完全交給命令列，由 Python 的 `-m` 旗標來確保模組路徑被正確設定，從而規避了子進程的路徑問題。
+
+### 最終總結
+
+這次除錯再次印證了 `BUG.md` 中確立的原則：
+1.  **依賴管理需先行**: 啟動腳本自身的依賴問題需要被妥善處理，延遲匯入是一個有效技巧。
+2.  **避免複雜的程序化啟動**: 對於如 Uvicorn 這類會創建子進程的服務，直接從命令列 (`subprocess.run`) 啟動通常比從 Python 內部 (`os.exec` 或 `uvicorn.run`) 啟動更為可靠，因為它能更好地模擬終端環境，減少路徑和環境變數相關的意外。
 ---
 ## 案件 003：`local_run.py` 的螺旋式除錯之旅 (2025-08-06)
 
