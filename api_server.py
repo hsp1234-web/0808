@@ -154,12 +154,18 @@ async def get_task_status(task_id: str):
     return JSONResponse(content=response_data)
 
 
-@app.post("/log/action", status_code=200)
-async def log_frontend_action(payload: Dict):
+@app.post("/api/log/action", status_code=200)
+async def log_frontend_action(request: Request):
     """
-    接收前端發送的操作日誌。
+    接收前端發送的操作日誌，並寫入 run_log.txt。
     """
+    payload = await request.json()
     log.info(f"📝 收到前端操作日誌: {payload}")
+    try:
+        with open("run_log.txt", "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log.error(f"❌ 寫入日誌檔案 run_log.txt 時發生錯誤: {e}")
     return {"status": "logged"}
 
 
