@@ -40,7 +40,8 @@ def main():
     try:
         # 1. 啟動協調器 (在真實模式下)
         log.info("--- 步驟 1/5: 啟動協調器 ---")
-        cmd = [sys.executable, "orchestrator.py"]
+        # 使用 --no-mock 參數，強制使用真實模式
+        cmd = [sys.executable, "orchestrator.py", "--no-mock"]
         orchestrator_proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
