@@ -30,7 +30,7 @@ USE_LOCAL_CODE = True #@param {type:"boolean"}
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "1.0.1" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.1.3" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -51,6 +51,8 @@ LOG_DISPLAY_LINES = 30 #@param {type:"integer"}
 SERVER_READY_TIMEOUT = 60 #@param {type:"integer"}
 #@markdown **時區設定 (TIMEZONE)**
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
+#@markdown **日誌歸檔資料夾 (LOG_ARCHIVE_ROOT_FOLDER)**
+LOG_ARCHIVE_ROOT_FOLDER = "paper" #@param {type:"string"}
 
 #@markdown ---
 #@markdown > **設定完成後，點擊此儲存格左側的「執行」按鈕。**
@@ -165,7 +167,8 @@ class ServerManager:
                 self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
             else:
                 self._log_manager.log("INFO", "✅ 使用本地程式碼模式，跳過 Git 下載。")
-                project_path = Path.cwd()
+                # 修正：在本地模式下，專案路徑固定為 /app，以避免 CWD 問題
+                project_path = Path("/app")
 
             # --- 路徑修正 ---
             # 啟動器腳本路徑應該相對於專案根目錄
@@ -223,7 +226,35 @@ class ServerManager:
         self._thread.join(timeout=2)
 
 # ==============================================================================
-# SECTION 2: 主程式執行入口
+# SECTION 2: 核心功能函式
+# ==============================================================================
+
+def archive_reports(log_manager, start_time, end_time, status):
+    """將本次執行的日誌與效能報告歸檔儲存。"""
+    print("\n\n" + "="*60 + "\n--- 任務結束，開始執行自動歸檔 ---\n" + "="*60)
+    try:
+        root_folder = Path(LOG_ARCHIVE_ROOT_FOLDER)
+        root_folder.mkdir(exist_ok=True)
+        ts_folder_name = start_time.strftime('%Y-%m-%dT%H-%M-%S%z')
+        report_dir = root_folder / ts_folder_name
+        report_dir.mkdir(exist_ok=True)
+
+        # 使用 LogManager 的 get_display_logs 獲取的是字典列表，需要格式化
+        log_history = log_manager.get_display_logs()
+        formatted_logs = [f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history]
+        detailed_log_content = f"# 詳細日誌\n\n```\n" + "\n".join(formatted_logs) + "\n```"
+        (report_dir / "詳細日誌.md").write_text(detailed_log_content, encoding='utf-8')
+
+        duration = end_time - start_time
+        perf_report_content = f"# 效能報告\n\n- **任務狀態**: {status}\n- **開始時間**: `{start_time.isoformat()}`\n- **結束時間**: `{end_time.isoformat()}`\n- **總耗時**: `{str(duration)}`\n"
+        (report_dir / "效能報告.md").write_text(perf_report_content.strip(), encoding='utf-8')
+        (report_dir / "綜合報告.md").write_text(f"# 綜合報告\n\n{perf_report_content}\n{detailed_log_content}", encoding='utf-8')
+        print(f"✅ 報告已成功歸檔至: {report_dir}")
+    except Exception as e:
+        print(f"❌ 歸檔報告時發生錯誤: {e}")
+
+# ==============================================================================
+# SECTION 3: 主程式執行入口
 # ==============================================================================
 
 def main():
@@ -238,6 +269,7 @@ def main():
     server_manager = ServerManager(log_manager=log_manager, stats_dict=shared_stats)
     display_manager = DisplayManager(log_manager=log_manager, stats_dict=shared_stats, refresh_rate=UI_REFRESH_SECONDS)
 
+    start_time = datetime.now(pytz.timezone(TIMEZONE))
     try:
         display_manager.start()
         server_manager.start()
@@ -307,7 +339,8 @@ def main():
         if display_manager._thread.is_alive(): display_manager.stop()
         server_manager.stop()
         clear_output() # 清理最後的儀表板輸出
-        # 修正：將日誌字典列表轉換為字串列表後再打印
+
+        # 打印最終日誌
         final_logs = []
         for log in log_manager.get_display_logs():
             ts = log['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
@@ -315,6 +348,11 @@ def main():
             message = log['message']
             final_logs.append(f"[{ts}] [{level:^8}] {message}")
         print("\n".join(final_logs))
+
+        # 歸檔日誌
+        end_time = datetime.now(pytz.timezone(TIMEZONE))
+        archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
+
         print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
 if __name__ == "__main__":
