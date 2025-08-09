@@ -64,6 +64,11 @@ def main():
         help="如果設置，則 worker 將以真實模式運行。"
     )
     parser.add_argument(
+        "--no-worker",
+        action="store_true",
+        help="如果設置，則不啟動 worker 程序。"
+    )
+    parser.add_argument(
         "--heartbeat-interval",
         type=int,
         default=5,
@@ -93,21 +98,26 @@ def main():
         print(f"API_PORT: {api_port}", flush=True)
 
 
-        # 2. 啟動背景工作處理器
-        worker_cmd = [sys.executable, "worker.py"]
-        if args.mock:
-            worker_cmd.append("--mock")
-        log.info(f"🔧 正在啟動 Worker: {' '.join(worker_cmd)}")
-        worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
-        processes.append(worker_proc)
-        log.info(f"✅ Worker 已啟動，PID: {worker_proc.pid}")
+        # 2. 根據旗標決定是否啟動背景工作處理器
+        if not args.no_worker:
+            worker_cmd = [sys.executable, "worker.py"]
+            if args.mock:
+                worker_cmd.append("--mock")
+            log.info(f"🔧 正在啟動 Worker: {' '.join(worker_cmd)}")
+            worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+            processes.append(worker_proc)
+            log.info(f"✅ Worker 已啟動，PID: {worker_proc.pid}")
+        else:
+            log.info("🚫 已設定 --no-worker，將不啟動 Worker 程序。")
+            worker_proc = None
 
         # 3. 啟動日誌流式讀取執行緒
         # 為每個子程序的 stdout 和 stderr 建立一個執行緒
         threads.append(threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server')))
         threads.append(threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr')))
-        threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker')))
-        threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr')))
+        if worker_proc:
+            threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker')))
+            threads.append(threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr')))
 
         for t in threads:
             t.daemon = True # 設置為守護執行緒，以便主程序退出時它們也會退出

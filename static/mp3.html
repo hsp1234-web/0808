@@ -247,12 +247,9 @@
         </div>
     </div>
 
-    <!-- 原生 JavaScript 邏輯 -->
+    <!-- 原生 JavaScript 邏輯 (WebSocket 版本) -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // API 端點現在是相對路徑，以配合伺服器
-            const API_BASE_URL = '';
-
             // --- DOM 元素 ---
             const fileInput = document.getElementById('file-input');
             const fileListDisplay = document.getElementById('file-list');
@@ -261,28 +258,205 @@
             const modelSelect = document.getElementById('model-select');
             const languageSelect = document.getElementById('language-select');
             const ongoingTasksContainer = document.getElementById('ongoing-tasks');
+            const completedTasksContainer = document.getElementById('completed-tasks');
             const noOngoingTaskMsg = document.getElementById('no-ongoing-task-msg');
+            const noCompletedTaskMsg = document.getElementById('no-completed-task-msg');
             const transcriptOutput = document.getElementById('transcript-output');
             const modelDisplay = document.getElementById('model-display');
+            const statusText = document.getElementById('status-text');
+            const statusLight = document.getElementById('status-light');
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
 
+            // --- 狀態變數 ---
             let currentFontSize = 100;
             let uploadedFiles = [];
+            let socket;
+            // 使用 Map 來儲存任務 ID 與其對應的 DOM 元素的關聯
+            const taskElements = new Map();
 
+            // --- WebSocket 核心邏輯 ---
+            const setupWebSocket = () => {
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+
+                socket = new WebSocket(wsUrl);
+
+                socket.onopen = () => {
+                    console.log('WebSocket 連線成功');
+                    statusText.textContent = '已連線';
+                    statusLight.className = 'status-light status-green';
+                };
+
+                socket.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    console.log('收到 WebSocket 訊息:', message);
+                    handleWebSocketMessage(message);
+                };
+
+                socket.onclose = () => {
+                    console.log('WebSocket 連線已關閉');
+                    statusText.textContent = '已離線';
+                    statusLight.className = 'status-light status-yellow';
+                    // 嘗試重新連線
+                    setTimeout(setupWebSocket, 3000);
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket 發生錯誤:', error);
+                    statusText.textContent = '連線錯誤';
+                    statusLight.className = 'status-light status-red'; // 假設有紅色狀態
+                };
+            };
+
+            const handleWebSocketMessage = (message) => {
+                const { type, payload } = message;
+                if (!payload || !payload.task_id) return;
+
+                const taskElement = taskElements.get(payload.task_id);
+                if (!taskElement) return;
+
+                const statusSpan = taskElement.querySelector('.task-status');
+
+                switch (type) {
+                    case 'TRANSCRIPTION_STATUS':
+                        if (payload.status === 'starting') {
+                            statusSpan.textContent = '轉錄中...';
+                            statusSpan.style.color = '#007bff';
+                            transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`; // 清空並設置標題
+                        } else if (payload.status === 'completed') {
+                            statusSpan.textContent = '✅ 完成';
+                            statusSpan.style.color = 'green';
+                            // 將任務移至「已完成」列表
+                            if (noCompletedTaskMsg.style.display !== 'none') {
+                                noCompletedTaskMsg.style.display = 'none';
+                            }
+                            completedTasksContainer.appendChild(taskElement);
+                        } else if (payload.status === 'failed') {
+                            statusSpan.textContent = `❌ 失敗: ${payload.error}`;
+                            statusSpan.style.color = 'red';
+                            if (noCompletedTaskMsg.style.display !== 'none') {
+                                noCompletedTaskMsg.style.display = 'none';
+                            }
+                            completedTasksContainer.appendChild(taskElement);
+                        }
+                        break;
+
+                    case 'TRANSCRIPTION_UPDATE':
+                        // 我們只處理 'segment' 類型的更新
+                        if (payload.type === 'segment') {
+                            const p = document.createElement('p');
+                            p.textContent = payload.text;
+                            transcriptOutput.appendChild(p);
+                            // 自動滾動到最下方
+                            transcriptOutput.scrollTop = transcriptOutput.scrollHeight;
+                        } else if (payload.type === 'final') {
+                            // 可以在此處顯示最終統計資訊
+                            console.log('轉錄統計:', payload);
+                        }
+                        break;
+                }
+            };
+
+            // --- 上傳與處理流程 ---
+            const startProcessing = () => {
+                if (uploadedFiles.length === 0) return;
+                logAction('開始處理按鈕點擊', { file_count: uploadedFiles.length });
+
+                const filesToProcess = [...uploadedFiles];
+                uploadedFiles = [];
+                updateFileList();
+
+                // 循序處理所有檔案
+                filesToProcess.forEach(file => {
+                    uploadFile(file);
+                });
+            };
+
+            const uploadFile = (file) => {
+                const uploadProgressContainer = document.getElementById('upload-progress-container');
+                const uploadProgressBar = document.getElementById('upload-progress-bar');
+                const uploadProgressText = document.getElementById('upload-progress-text');
+
+                // 為每個檔案創建一個任務項目
+                if (noOngoingTaskMsg.style.display !== 'none') {
+                    noOngoingTaskMsg.style.display = 'none';
+                }
+                const taskElement = document.createElement('div');
+                taskElement.className = 'task-item';
+                taskElement.innerHTML = `<span class="task-filename">${file.name}</span><span class="task-status">等待上傳...</span>`;
+                ongoingTasksContainer.appendChild(taskElement);
+                const statusSpan = taskElement.querySelector('.task-status');
+
+                const xhr = new XMLHttpRequest();
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('model_size', modelSelect.value);
+                formData.append('language', languageSelect.value);
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percentComplete = Math.round((event.loaded / event.total) * 100);
+                        uploadProgressContainer.classList.remove('hidden');
+                        uploadProgressBar.style.width = percentComplete + '%';
+                        uploadProgressText.textContent = `正在上傳 ${file.name}: ${percentComplete}%`;
+                        statusSpan.textContent = `上傳中: ${percentComplete}%`;
+                    }
+                };
+
+                xhr.onload = () => {
+                    uploadProgressContainer.classList.add('hidden');
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        statusSpan.textContent = '上傳成功，等待處理...';
+                        logAction('檔案上傳成功', { filename: file.name });
+
+                        const responseData = JSON.parse(xhr.responseText);
+                        const transcribeTask = (responseData.tasks || [responseData]).find(t => t.type === 'transcribe');
+
+                        if (transcribeTask && transcribeTask.task_id) {
+                            // 將 task_id 與 DOM 元素關聯起來
+                            taskElements.set(transcribeTask.task_id, taskElement);
+
+                            // 透過 WebSocket 發送開始指令
+                            if (socket && socket.readyState === WebSocket.OPEN) {
+                                socket.send(JSON.stringify({
+                                    type: 'START_TRANSCRIPTION',
+                                    payload: { task_id: transcribeTask.task_id }
+                                }));
+                                statusSpan.textContent = '已發送轉錄請求...';
+                            } else {
+                                statusSpan.textContent = '錯誤: WebSocket 未連線';
+                                statusSpan.style.color = 'red';
+                            }
+                        } else {
+                            statusSpan.textContent = '錯誤: 未收到有效的任務ID';
+                            statusSpan.style.color = 'red';
+                        }
+                    } else {
+                        statusSpan.textContent = '上傳失敗';
+                        statusSpan.style.color = 'red';
+                    }
+                };
+
+                xhr.onerror = () => {
+                    uploadProgressContainer.classList.add('hidden');
+                    statusSpan.textContent = '上傳失敗: 網路錯誤';
+                    statusSpan.style.color = 'red';
+                };
+
+                xhr.open('POST', '/api/transcribe', true);
+                xhr.send(formData);
+            };
+
+            // --- UI 輔助函式 ---
             const logAction = (action, payload = {}) => {
-                const logPayload = { action, timestamp: new Date().toISOString(), ...payload };
-                console.log(`[LOG ACTION] ${action}`, logPayload);
-                // 使用 fetch 將日誌發送到後端
-                fetch(`${API_BASE_URL}/api/log/action`, {
+                console.log(`[LOG ACTION] ${action}`, payload);
+                fetch('/api/log/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(logPayload),
-                }).catch(error => {
-                    // 在此處做一個更柔和的提醒，因為在本地開發時，後端可能尚未啟動
-                    console.warn('無法發送日誌到伺服器:', error);
-                });
+                    body: JSON.stringify({ action, ...payload }),
+                }).catch(error => console.warn('無法發送日誌到伺服器:', error));
             };
 
             const updateFileList = () => {
@@ -299,148 +473,7 @@
             const handleFileUpload = (event) => {
                 const newFiles = Array.from(event.target.files);
                 uploadedFiles.push(...newFiles);
-                logAction('檔案已選擇', { file_count: newFiles.length, filenames: newFiles.map(f => f.name) });
                 updateFileList();
-            };
-
-            const startProcessing = () => {
-                if (uploadedFiles.length === 0) return;
-                logAction('開始處理按鈕點擊', { file_count: uploadedFiles.length });
-
-                noOngoingTaskMsg.style.display = 'none';
-                transcriptOutput.textContent = '';
-
-                const filesToProcess = [...uploadedFiles];
-                uploadedFiles = [];
-                updateFileList();
-
-                const uploadProgressContainer = document.getElementById('upload-progress-container');
-                const uploadProgressBar = document.getElementById('upload-progress-bar');
-                const uploadProgressText = document.getElementById('upload-progress-text');
-
-                // 處理單一檔案的上傳
-                const uploadFile = (file) => {
-                    return new Promise((resolve, reject) => {
-                        const taskElement = document.createElement('div');
-                        taskElement.className = 'task-item';
-                        taskElement.dataset.filename = file.name; // 加上這個屬性以便之後選取
-                        taskElement.innerHTML = `<span class="task-filename">${file.name}</span><span class="task-status">等待上傳...</span>`;
-                        ongoingTasksContainer.appendChild(taskElement);
-                        const statusSpan = taskElement.querySelector('.task-status');
-
-                        const xhr = new XMLHttpRequest();
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        formData.append('model_size', modelSelect.value);
-                        formData.append('language', languageSelect.value);
-
-                        xhr.upload.addEventListener('progress', (event) => {
-                            if (event.lengthComputable) {
-                                const percentComplete = Math.round((event.loaded / event.total) * 100);
-                                uploadProgressBar.style.width = percentComplete + '%';
-                                uploadProgressText.textContent = `正在上傳 ${file.name}: ${percentComplete}%`;
-                                statusSpan.textContent = `上傳中: ${percentComplete}%`;
-                                statusSpan.style.color = '#007bff';
-                            }
-                        });
-
-                        xhr.addEventListener('load', () => {
-                            if (xhr.status >= 200 && xhr.status < 300) {
-                                statusSpan.textContent = '上傳成功，排隊中...';
-                                statusSpan.style.color = 'orange';
-                                logAction('檔案上傳成功', { filename: file.name });
-                                resolve(xhr.responseText);
-                            } else {
-                                const errorData = JSON.parse(xhr.responseText);
-                                statusSpan.textContent = `上傳失敗: ${errorData.detail || '未知錯誤'}`;
-                                statusSpan.style.color = 'red';
-                                logAction('檔案上傳失敗', { filename: file.name, error: errorData.detail });
-                                reject(errorData);
-                            }
-                        });
-
-                        xhr.addEventListener('error', () => {
-                            statusSpan.textContent = '上傳失敗: 網路錯誤';
-                            statusSpan.style.color = 'red';
-                            logAction('檔案上傳網路錯誤', { filename: file.name, error: 'XHR Error' });
-                            reject({ detail: '網路錯誤' });
-                        });
-
-                        xhr.open('POST', `${API_BASE_URL}/api/transcribe`, true);
-                        xhr.send(formData);
-                    });
-                };
-
-                // 循序處理所有檔案
-                (async () => {
-                    uploadProgressContainer.classList.remove('hidden');
-                    for (const file of filesToProcess) {
-                        try {
-                            const responseText = await uploadFile(file);
-                            const responseData = JSON.parse(responseText);
-
-                            // 找出 download 和 transcribe 任務
-                            const tasks = responseData.tasks || [responseData];
-                            const downloadTask = tasks.find(t => t.type === 'download');
-                            const transcribeTask = tasks.find(t => t.type === 'transcribe');
-
-                            const taskElement = ongoingTasksContainer.querySelector(`[data-filename="${file.name}"]`);
-
-                            if (downloadTask) {
-                                await pollStatus(downloadTask.task_id, taskElement, '下載模型中');
-                            }
-                            if (transcribeTask) {
-                                await pollStatus(transcribeTask.task_id, taskElement, '轉錄中');
-                            }
-
-                        } catch (error) {
-                            console.error(`處理檔案 ${file.name} 失敗:`, error);
-                        }
-                    }
-                    uploadProgressContainer.classList.add('hidden');
-                })();
-            };
-
-            const pollStatus = (taskId, taskElement, statusPrefix) => {
-                return new Promise((resolve, reject) => {
-                    const statusSpan = taskElement.querySelector('.task-status');
-                    const interval = setInterval(async () => {
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/api/status/${taskId}`);
-                            if (!response.ok) {
-                                // 如果是 404 (任務不存在)，則有可能是後端延遲，先不中斷
-                                if (response.status === 404) {
-                                    console.warn(`任務 ${taskId} 暫時找不到，繼續輪詢...`);
-                                    return;
-                                }
-                                throw new Error(`伺服器錯誤: ${response.status}`);
-                            }
-
-                            const data = await response.json();
-                            const progress = data.progress || 0;
-                            statusSpan.textContent = `${statusPrefix}: ${progress}% - ${data.status}`;
-
-                            if (data.status === 'completed') {
-                                clearInterval(interval);
-                                statusSpan.textContent = `${statusPrefix} - ✅ 完成`;
-                                statusSpan.style.color = 'green';
-                                if (data.type === 'transcribe') {
-                                    transcriptOutput.textContent = `[${taskElement.dataset.filename}]:\n${data.result.transcript}`;
-                                }
-                                resolve(data);
-                            } else if (data.status === 'failed') {
-                                clearInterval(interval);
-                                statusSpan.textContent = `${statusPrefix} - ❌ 失敗`;
-                                statusSpan.style.color = 'red';
-                                reject(data);
-                            }
-                        } catch (error) {
-                            console.error('輪詢狀態時發生錯誤:', error);
-                            clearInterval(interval);
-                            reject(error);
-                        }
-                    }, 2000);
-                });
             };
 
             const changeFontSize = (amount) => {
@@ -449,7 +482,6 @@
                     currentFontSize = newSize;
                     document.body.style.fontSize = `${currentFontSize}%`;
                     fontSizeDisplay.textContent = `${currentFontSize}%`;
-                    logAction('字體大小變更', { new_size: `${currentFontSize}%` });
                 }
             };
 
@@ -458,15 +490,14 @@
             startBtn.addEventListener('click', startProcessing);
             confirmBtn.addEventListener('click', () => {
                 const selectedModel = modelSelect.value;
-                const selectedLang = languageSelect.value;
                 modelDisplay.textContent = selectedModel;
-                logAction('確認設定按鈕點擊', { model: selectedModel, language: selectedLang });
-                alert(`設定已確認: 模型=${selectedModel}, 語言=${selectedLang}`);
+                alert(`設定已確認: 模型=${selectedModel}`);
             });
             zoomInBtn.addEventListener('click', () => changeFontSize(25));
             zoomOutBtn.addEventListener('click', () => changeFontSize(-25));
 
-            // 初始日誌
+            // 初始化 WebSocket
+            setupWebSocket();
             logAction('頁面載入完成');
         });
     </script>

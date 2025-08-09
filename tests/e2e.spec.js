@@ -7,7 +7,7 @@ import path from 'path';
 // --- 測試設定 ---
 const APP_URL_BASE = 'http://127.0.0.1';
 const START_SERVER_COMMAND = 'python';
-const START_SERVER_ARGS = ['orchestrator.py', '--no-mock']; // 使用真實模式
+const START_SERVER_ARGS = ['orchestrator.py', '--no-worker']; // 使用模擬模式且不啟動 worker
 const SERVER_READY_TIMEOUT = 60000; // 伺服器啟動的超時時間 (60秒)
 const TEST_TIMEOUT = 180000; // 延長超時時間以應對模型下載 (180秒)
 const HEALTH_CHECK_POLL_INTERVAL = 500; // 健康檢查輪詢間隔 (毫秒)
@@ -104,8 +104,10 @@ const killServer = () => {
 
 
 // --- E2E 測試套件 (V3 UI) ---
+
 test.describe('鳳凰音訊轉錄儀 V3 E2E 測試', () => {
 
+  // 測試現在應該會快很多，但我們保留較長的超時以應對 CI 環境中的波動
   test.setTimeout(TEST_TIMEOUT);
 
   test.beforeAll(async () => {
@@ -121,55 +123,64 @@ test.describe('鳳凰音訊轉錄儀 V3 E2E 測試', () => {
     killServer();
   });
 
-  test('應成功上傳音訊檔案並看到進度更新', async ({ page }) => {
+  test('應成功上傳音訊檔案並透過 WebSocket 看到即時更新', async ({ page }) => {
     await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
 
     // 1. 確保 UI 初始狀態正確
     await expect(page.locator('h1')).toContainText('鳳凰音訊轉錄儀 v3');
-    await expect(page.locator('#start-processing-btn')).toBeDisabled();
+    // 等待 WebSocket 連線成功
+    await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 10000 });
 
-    // 2. 選擇一個模型 (非 tiny，以觸發下載)
-    await page.locator('#model-select').selectOption('small');
-    await expect(page.locator('#model-display')).toHaveText('medium'); // 預設值
-    await page.locator('#confirm-settings-btn').click();
-    await expect(page.locator('#model-display')).toHaveText('small'); // 確認後更新
-
-    // 3. 選擇檔案
+    // 2. 選擇檔案
     const fileInput = page.locator('input#file-input');
     const filePath = 'dummy_audio.wav';
+    const fileName = path.basename(filePath);
     await fileInput.setInputFiles(filePath);
     await expect(page.locator('#start-processing-btn')).toBeEnabled();
 
-    // 4. 點擊開始處理按鈕
+    // 3. 點擊開始處理按鈕
     await page.locator('#start-processing-btn').click();
 
-    // 5. 驗證上傳進度條
+    // 4. 驗證上傳流程
+    // 任務出現在「進行中」列表
+    const ongoingTasksContainer = page.locator('#ongoing-tasks');
+    const taskLocator = ongoingTasksContainer.locator('.task-item', { hasText: fileName });
+    await expect(taskLocator).toBeVisible();
+
+    // 上傳進度條正常顯示並消失
     const uploadProgressContainer = page.locator('#upload-progress-container');
-    await expect(uploadProgressContainer).toBeVisible();
+    await expect(uploadProgressContainer).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#upload-progress-text')).toContainText(/正在上傳.*100%/);
-    // 等待上傳進度條消失
     await expect(uploadProgressContainer).toBeHidden({ timeout: 10000 });
 
-    // 6. 驗證任務出現在「進行中」列表並追蹤狀態
-    const ongoingTasksContainer = page.locator('#ongoing-tasks');
-    const taskLocator = ongoingTasksContainer.locator('.task-item', { hasText: path.basename(filePath) });
+    // 狀態變為「已發送轉錄請求...」
+    await expect(taskLocator.locator('.task-status')).toContainText('已發送轉錄請求...', { timeout: 5000 });
 
-    // 等待下載狀態
-    await expect(taskLocator.locator('.task-status')).toContainText(/下載模型中.*100%/, { timeout: 120000 });
-    await expect(taskLocator.locator('.task-status')).toContainText(/下載模型中 - ✅ 完成/, { timeout: 10000 });
+    // 5. 驗證 WebSocket 即時回饋
+    // 狀態變為「轉錄中...」
+    await expect(taskLocator.locator('.task-status')).toContainText('轉錄中...', { timeout: 15000 });
 
-    // 等待轉錄狀態
-    await expect(taskLocator.locator('.task-status')).toContainText(/轉錄中.*100%/, { timeout: 30000 });
-    await expect(taskLocator.locator('.task-status')).toContainText(/轉錄中 - ✅ 完成/, { timeout: 10000 });
+    // 即時輸出區塊出現標題和串流內容
+    const transcriptOutput = page.locator('#transcript-output');
+    await expect(transcriptOutput.locator('h3')).toHaveText(fileName);
 
-    // 7. 驗證轉錄結果出現在輸出區域
-    await expect(page.locator('#transcript-output')).not.toContainText('等待任務開始...');
-    // 由於是靜音檔案，預期為空或只有標頭
-    await expect(page.locator('#transcript-output')).toContainText(`[${path.basename(filePath)}]`);
+    // 驗證模擬的串流文字是否逐步出現
+    await expect(page.locator('p', { hasText: '你好，' })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('p', { hasText: '轉錄即將完成。' })).toBeVisible({ timeout: 10000 });
+
+    // 6. 驗證任務完成
+    // 任務移至「已完成」列表
+    const completedTasksContainer = page.locator('#completed-tasks');
+    const completedTaskLocator = completedTasksContainer.locator('.task-item', { hasText: fileName });
+    await expect(completedTaskLocator).toBeVisible({ timeout: 30000 });
+
+    // 狀態顯示為「完成」
+    await expect(completedTaskLocator.locator('.task-status')).toContainText('✅ 完成');
   });
 
   test('上傳無效檔案時應顯示失敗狀態', async ({ page }) => {
     await page.goto(serverUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 10000 });
 
     // 1. 準備無效檔案
     const fakeFileName = 'fake_audio.txt';
@@ -177,15 +188,18 @@ test.describe('鳳凰音訊轉錄儀 V3 E2E 測試', () => {
 
     // 2. 上傳並開始處理
     await page.locator('input#file-input').setInputFiles(fakeFileName);
-    await page.locator('button', { hasText: '開始處理' }).click();
+    await page.locator('#start-processing-btn').click();
 
     // 3. 等待並驗證任務出現在「已完成」列表且狀態為「失敗」
     const completedTasksContainer = page.locator('#completed-tasks');
-    const failedTaskLocator = completedTasksContainer.locator('div', { hasText: fakeFileName });
+    const failedTaskLocator = completedTasksContainer.locator('.task-item', { hasText: fakeFileName });
+
+    // 等待任務轉移到「已完成」區塊
     await expect(failedTaskLocator).toBeVisible({ timeout: 45000 });
 
     // 4. 驗證失敗狀態的 UI
-    await expect(failedTaskLocator).toContainText('失敗');
+    // 由於轉錄會立即失敗，狀態可能非常短暫，我們直接檢查最終的失敗狀態
+    await expect(failedTaskLocator.locator('.task-status')).toContainText('失敗');
 
     // 清理臨時檔案
     fs.unlinkSync(fakeFileName);

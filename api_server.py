@@ -377,6 +377,93 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     thread.start()
 
 
+def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], loop: asyncio.AbstractEventLoop):
+    """
+    在一個單獨的執行緒中執行轉錄，並透過 WebSocket 即時串流結果。
+    """
+    def _transcribe_in_thread():
+        log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {file_path}")
+
+        # 準備一個假的輸出檔案路徑，因為 transcriber.py 需要它，但我們實際上是從 stdout 讀取
+        output_dir = ROOT_DIR / "transcripts"
+        output_dir.mkdir(exist_ok=True)
+        dummy_output_path = output_dir / f"{task_id}.txt"
+
+        try:
+            cmd = [
+                sys.executable,
+                "tools/transcriber.py",
+                "--command=transcribe",
+                f"--audio_file={file_path}",
+                f"--output_file={dummy_output_path}",
+                f"--model_size={model_size}",
+            ]
+            if language:
+                cmd.append(f"--language={language}")
+
+            log.info(f"執行轉錄指令: {' '.join(map(str, cmd))}")
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                bufsize=1 # Line-buffered
+            )
+
+            start_message = {
+                "type": "TRANSCRIPTION_STATUS",
+                "payload": {"task_id": task_id, "status": "starting", "filename": Path(file_path).name}
+            }
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(start_message), loop)
+
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    try:
+                        data = json.loads(line)
+                        message = {
+                            "type": "TRANSCRIPTION_UPDATE",
+                            "payload": {"task_id": task_id, **data}
+                        }
+                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                    except json.JSONDecodeError:
+                        log.warning(f"[執行緒] 無法解析來自 transcriber 的 JSON 行: {line}")
+
+            process.wait()
+
+            if process.returncode == 0:
+                log.info(f"✅ [執行緒] 轉錄任務 '{task_id}' 成功完成。")
+                final_message = {
+                    "type": "TRANSCRIPTION_STATUS",
+                    "payload": {"task_id": task_id, "status": "completed"}
+                }
+            else:
+                stderr_output = process.stderr.read() if process.stderr else "N/A"
+                log.error(f"❌ [執行緒] 轉錄任務 '{task_id}' 失敗。返回碼: {process.returncode}。Stderr: {stderr_output}")
+                final_message = {
+                    "type": "TRANSCRIPTION_STATUS",
+                    "payload": {"task_id": task_id, "status": "failed", "error": stderr_output}
+                }
+
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
+
+        except Exception as e:
+            log.error(f"❌ [執行緒] 轉錄執行緒中發生嚴重錯誤: {e}", exc_info=True)
+            error_message = {
+                "type": "TRANSCRIPTION_STATUS",
+                "payload": {"task_id": task_id, "status": "failed", "error": str(e)}
+            }
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(error_message), loop)
+
+    thread = threading.Thread(target=_transcribe_in_thread)
+    thread.start()
+
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -404,20 +491,33 @@ async def websocket_endpoint(websocket: WebSocket):
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
 
                 elif msg_type == "START_TRANSCRIPTION":
-                    task_id = payload.get("task_id", str(uuid.uuid4()))
-                    file_path = payload.get("file_path")
-                    model_size = payload.get("model_size", "tiny")
-                    language = payload.get("language")
+                    task_id = payload.get("task_id")
+                    if not task_id:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
+                        continue
+
+                    task_info = database.get_task_status(task_id)
+                    if not task_info:
+                        await manager.broadcast_json({"type": "ERROR", "payload": f"找不到任務 {task_id}"})
+                        continue
+
+                    try:
+                        task_payload = json.loads(task_info['payload'])
+                        file_path = task_payload.get("input_file")
+                        model_size = task_payload.get("model_size", "tiny")
+                        language = task_payload.get("language")
+                    except (json.JSONDecodeError, KeyError) as e:
+                        await manager.broadcast_json({"type": "ERROR", "payload": f"解析任務 {task_id} 的 payload 失敗: {e}"})
+                        continue
 
                     if not file_path:
-                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少檔案路徑參數"})
+                        await manager.broadcast_json({"type": "ERROR", "payload": "任務 payload 中缺少檔案路徑"})
                     else:
-                        log.info(f"收到開始轉錄 '{file_path}' 的請求。")
+                        log.info(f"收到開始轉錄 '{file_path}' 的請求 (來自任務 {task_id})。")
                         loop = asyncio.get_running_loop()
                         trigger_transcription(task_id, file_path, model_size, language, loop)
 
                 else:
-                    # 處理其他類型的訊息
                     await manager.broadcast_json({
                         "type": "ECHO",
                         "payload": f"已收到未知類型的訊息: {msg_type}"
@@ -432,7 +532,9 @@ async def websocket_endpoint(websocket: WebSocket):
         log.info("WebSocket 用戶端已離線。")
     except Exception as e:
         log.error(f"WebSocket 發生未預期錯誤: {e}", exc_info=True)
-        manager.disconnect(websocket)
+        # 確保在發生錯誤時也中斷連線
+        if websocket in manager.active_connections:
+            manager.disconnect(websocket)
 
 
 @app.get("/api/health")
@@ -452,7 +554,7 @@ if __name__ == "__main__":
         default=8001,
         help="伺服器監聽的埠號"
     )
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     # 初始化資料庫
     database.initialize_database()
