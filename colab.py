@@ -296,6 +296,22 @@ def archive_reports(log_manager, start_time, end_time, status):
     except Exception as e: print(f"❌ 歸檔報告時發生錯誤: {e}")
 
 # ==============================================================================
+# SECTION 2.5: 安裝系統級依賴 (FFmpeg)
+# ==============================================================================
+print("檢查並安裝系統級依賴 FFmpeg...")
+try:
+    ffmpeg_check = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True)
+    if ffmpeg_check.returncode != 0:
+        print("未偵測到 FFmpeg，開始安裝...")
+        subprocess.run(["apt-get", "update", "-qq"], check=True)
+        subprocess.run(["apt-get", "install", "-y", "-qq", "ffmpeg"], check=True)
+        print("✅ FFmpeg 安裝完成。")
+    else:
+        print("✅ FFmpeg 已安裝。")
+except Exception as e:
+    print(f"❌ 安裝 FFmpeg 時發生錯誤: {e}")
+
+# ==============================================================================
 # SECTION 3: 主程式執行入口
 # ==============================================================================
 

@@ -22,9 +22,9 @@ def main():
     log.info("🚀 Local Test Runner: 啟動...")
     orchestrator_proc = None
     try:
-        # 1. 啟動協調器 (在 mock 模式下)
+        # 1. 啟動協調器 (在真實模式下)
         log.info("--- 步驟 1/4: 啟動協調器 ---")
-        cmd = [sys.executable, "orchestrator.py", "--mock"]
+        cmd = [sys.executable, "orchestrator.py"]
         orchestrator_proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
