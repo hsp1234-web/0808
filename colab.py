@@ -20,7 +20,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "1.0.1" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.2.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -136,7 +136,7 @@ class DisplayManager:
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def _build_output_buffer(self) -> list[str]:
-        output_buffer = ["🐦‍🔥 鳳凰之心 - V65.5 作戰指揮中心 🐦‍🔥", ""]
+        output_buffer = ["🐦‍🔥 鳳凰之心 - V66 作戰指揮中心 🐦‍🔥", ""]
         logs_to_display = self._log_manager.get_display_logs()
         for log in logs_to_display:
             ts, level = log['timestamp'].strftime('%H:%M:%S'), log['level']
