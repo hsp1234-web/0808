@@ -15,8 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from typing import Optional, Dict
 
-# 匯入新的資料庫模組
-from db import database
+# 匯入新的資料庫客戶端
+# from db import database # REMOVED: No longer used directly
+from db.client import get_client
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -51,16 +52,17 @@ logging.basicConfig(
 )
 log = logging.getLogger('api_server')
 
-def setup_database_logging():
-    """設定資料庫日誌處理器。"""
-    try:
-        from db.log_handler import DatabaseLogHandler
-        root_logger = logging.getLogger()
-        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
-            root_logger.addHandler(DatabaseLogHandler(source='api_server'))
-            log.info("資料庫日誌處理器設定完成 (source: api_server)。")
-    except Exception as e:
-        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+# def setup_database_logging():
+#     """設定資料庫日誌處理器。"""
+#     # NOTE: This is temporarily disabled as it requires direct DB access.
+#     try:
+#         from db.log_handler import DatabaseLogHandler
+#         root_logger = logging.getLogger()
+#         if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+#             root_logger.addHandler(DatabaseLogHandler(source='api_server'))
+#             log.info("資料庫日誌處理器設定完成 (source: api_server)。")
+#     except Exception as e:
+#         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
 # 建立一個專門用來記錄前端操作的日誌器
 run_log_file = ROOT_DIR / "run_log.txt"
@@ -105,6 +107,11 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# --- DB 客戶端 ---
+# 在模組加載時獲取客戶端單例
+# 客戶端內部有重試機制，會等待 DB 管理者服務就緒
+db_client = get_client()
+
 # --- FastAPI 應用實例 ---
 app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
 
@@ -139,16 +146,14 @@ async def serve_frontend(request: Request):
 def check_model_exists(model_size: str) -> bool:
     """
     檢查指定的 Whisper 模型是否已經被下載到本地快取。
-    在模擬模式下，此函式會永遠回傳 True。
     """
-    if IS_MOCK_MODE:
-        log.info(f"（模擬模式）假設模型 '{model_size}' 已存在。")
-        return True
+    tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+    log.info(f"使用 '{tool_script}' 檢查模型 '{model_size}' 是否存在...")
 
-    # 為了避免在 API Server 中直接依賴 heavy ML 函式庫，
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
-    check_command = [sys.executable, "tools/transcriber.py", "--command=check", f"--model_size={model_size}"]
+    check_command = [sys.executable, tool_script, "--command=check", f"--model_size={model_size}"]
     try:
+        # 在模擬模式下，mock_transcriber.py 會永遠回傳 "exists"
         result = subprocess.run(check_command, capture_output=True, text=True, check=True)
         output = result.stdout.strip().lower()
         log.info(f"模型 '{model_size}' 檢查結果: {output}")
@@ -196,7 +201,7 @@ async def create_transcription_task(
     if model_is_present:
         # 模型已存在，直接建立轉錄任務
         log.info(f"✅ 模型 '{model_size}' 已存在，直接建立轉錄任務: {transcribe_task_id}")
-        database.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe')
+        db_client.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe')
         return {"task_id": transcribe_task_id}
     else:
         # 模型不存在，建立下載任務和依賴的轉錄任務
@@ -204,9 +209,9 @@ async def create_transcription_task(
         log.warning(f"⚠️ 模型 '{model_size}' 不存在。建立下載任務 '{download_task_id}' 和依賴的轉錄任務 '{transcribe_task_id}'")
 
         download_payload = {"model_size": model_size}
-        database.add_task(download_task_id, json.dumps(download_payload), task_type='download')
+        db_client.add_task(download_task_id, json.dumps(download_payload), task_type='download')
 
-        database.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe', depends_on=download_task_id)
+        db_client.add_task(transcribe_task_id, json.dumps(transcription_payload), task_type='transcribe', depends_on=download_task_id)
 
         # 我們回傳轉錄任務的 ID，讓前端可以追蹤最終結果
         return JSONResponse(content={"tasks": [
@@ -216,19 +221,19 @@ async def create_transcription_task(
 
 
 @app.get("/api/status/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status_endpoint(task_id: str):
     """
     根據任務 ID，從資料庫查詢任務狀態。
     """
     log.debug(f"🔍 正在查詢任務狀態: {task_id}")
-    status_info = database.get_task_status(task_id)
+    status_info = db_client.get_task_status(task_id)
 
     if not status_info:
         log.warning(f"❓ 找不到任務 ID: {task_id}")
         raise HTTPException(status_code=404, detail="找不到指定的任務 ID")
 
-    # 將資料庫回傳的 Row 物件轉換為字典
-    response_data = dict(status_info)
+    # DBClient 回傳的已經是 dict，無需轉換
+    response_data = status_info
 
     # 嘗試解析 JSON 結果
     if response_data.get("result"):
@@ -312,7 +317,7 @@ async def get_all_tasks_endpoint():
     """
     獲取所有任務的列表，用於前端展示。
     """
-    tasks = database.get_all_tasks()
+    tasks = db_client.get_all_tasks()
     # 嘗試解析 payload 和 result 中的 JSON 字串
     for task in tasks:
         try:
@@ -335,7 +340,7 @@ async def download_transcript(task_id: str):
     """
     根據任務 ID 下載轉錄結果檔案。
     """
-    task = database.get_task_status(task_id)
+    task = db_client.get_task_status(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
 
@@ -370,7 +375,9 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     def _download_in_thread():
         log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
         try:
-            cmd = [sys.executable, "tools/transcriber.py", "--command=download", f"--model_size={model_size}"]
+            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+            cmd = [sys.executable, tool_script, "--command=download", f"--model_size={model_size}"]
+
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
             stdout, stderr = process.communicate()
 
@@ -472,7 +479,7 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                     "transcript": final_transcript,
                     "transcript_path": str(dummy_output_path)
                 }
-                database.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
+                db_client.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
                 log.info(f"✅ [執行緒] 已將任務 {task_id} 的狀態和結果更新至資料庫。")
 
                 final_message = {
@@ -533,12 +540,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
                         continue
 
-                    task_info = database.get_task_status(task_id)
+                    task_info = db_client.get_task_status(task_id)
                     if not task_info:
                         await manager.broadcast_json({"type": "ERROR", "payload": f"找不到任務 {task_id}"})
                         continue
 
                     try:
+                        # task_info is already a dict
                         task_payload = json.loads(task_info['payload'])
                         file_path = task_payload.get("input_file")
                         model_size = task_payload.get("model_size", "tiny")
@@ -579,6 +587,37 @@ async def health_check():
     """提供一個簡單的健康檢查端點。"""
     return {"status": "ok", "message": "API Server is running."}
 
+
+@app.post("/api/internal/notify_task_update", status_code=200)
+async def notify_task_update(payload: Dict):
+    """
+    一個內部端點，供 Worker 程序在任務完成時呼叫，
+    以便透過 WebSocket 將更新廣播給前端。
+    """
+    task_id = payload.get("task_id")
+    status = payload.get("status")
+    result = payload.get("result")
+    log.info(f"🔔 收到來自 Worker 的任務更新通知: Task {task_id} -> {status}")
+
+    # 確保 result 是字典格式
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError:
+            log.warning(f"來自 worker 的任務 {task_id} 結果不是有效的 JSON 格式。")
+
+    message = {
+        "type": "TRANSCRIPTION_STATUS",
+        "payload": {
+            "task_id": task_id,
+            "status": status,
+            "result": result
+        }
+    }
+    await manager.broadcast_json(message)
+    return {"status": "notification_sent"}
+
+
 # --- 主程式啟動 ---
 if __name__ == "__main__":
     import uvicorn
@@ -596,8 +635,8 @@ if __name__ == "__main__":
     # JULES: 移除此處的資料庫初始化呼叫。
     # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
 
-    # 設定日誌
-    setup_database_logging()
+    # NOTE: DB logging is disabled in the new architecture
+    # setup_database_logging()
 
     log.info("🚀 啟動 API 伺服器 (v3)...")
     log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")

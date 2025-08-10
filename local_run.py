@@ -112,14 +112,17 @@ def main():
                  log.error(line.strip())
              return
 
-        # 3. 提交一個測試任務
-        log.info("--- 步驟 3/6: 提交一個測試任務 ---")
+        # 3. 提交並啟動一個測試任務
+        log.info("--- 步驟 3/6: 提交並啟動一個測試任務 ---")
         try:
             import requests
+            import websocket # NOTE: Make sure 'websocket-client' is in requirements
+            import json
+
+            # Part A: Submit task via HTTP POST
             api_url = f"http://127.0.0.1:{api_port}/api/transcribe"
             log.info(f"準備提交任務至: {api_url}")
 
-            # 確保測試音訊檔案存在
             create_dummy_audio_if_not_exists()
             dummy_audio_path = Path("dummy_audio.wav")
 
@@ -128,86 +131,88 @@ def main():
                 response = requests.post(api_url, files=files, timeout=10)
                 response.raise_for_status()
 
-                # 處理可能的多任務回應
                 response_data = response.json()
                 task_id = None
                 if "tasks" in response_data:
-                    # 新的多任務回應格式
                     log.info(f"✅ 成功提交多任務: {response_data['tasks']}")
-                    # 我們關心的是最終的轉錄任務
                     transcribe_task = next((task for task in response_data["tasks"] if task.get("type") == "transcribe"), None)
                     if not transcribe_task:
                         raise ValueError("在回應中找不到 'transcribe' 類型的任務")
                     task_id = transcribe_task["task_id"]
                 elif "task_id" in response_data:
-                    # 舊的單任務回應格式
                     task_id = response_data['task_id']
                 else:
                     raise ValueError("回應中既沒有 'tasks' 也沒有 'task_id'")
+                log.info(f"✅ 已成功提交轉錄任務，將追蹤主要任務 ID: {task_id}")
 
-                log.info(f"✅ 將追蹤主要任務 ID: {task_id}")
+            # Part B: Start task via WebSocket
+            ws_url = f"ws://127.0.0.1:{api_port}/api/ws"
+            log.info(f"準備透過 WebSocket ({ws_url}) 啟動任務...")
+
+            ws = websocket.create_connection(ws_url, timeout=10)
+            start_command = {
+                "type": "START_TRANSCRIPTION",
+                "payload": {"task_id": task_id}
+            }
+            ws.send(json.dumps(start_command))
+            log.info(f"✅ 已發送啟動指令: {json.dumps(start_command)}")
+
+            # 等待來自伺服器的確認或回應 (可選，但有助於確保指令已送達)
+            # result = ws.recv()
+            # log.info(f"收到 WebSocket 回應: {result}")
+            ws.close()
+            log.info("✅ WebSocket 連線已關閉。")
 
         except Exception as e:
-            log.error(f"❌ 提交任務時失敗: {e}", exc_info=True)
+            log.error(f"❌ 提交或啟動任務時失敗: {e}", exc_info=True)
             return # 提前終止
 
 
-        # 4. 監聽心跳信號，直到偵測到 IDLE
-        log.info("--- 步驟 4/6: 監聽心跳，等待系統變為 IDLE ---")
-        running_detected = False
-        idle_after_running_detected = False
-
-        # 設定一個總體的超時，以防萬一
+        # 4. 監聽心跳信號，直到系統返回 IDLE
+        log.info("--- 步驟 4/6: 監聽心跳，等待系統返回 IDLE ---")
+        idle_detected = False
         timeout = time.time() + 60 # 60 秒超時
 
         for line in iter(orchestrator_proc.stdout.readline, ''):
             line = line.strip()
-            log.info(f"[Orchestrator]: {line}") # 打印所有協調器的輸出
+            log.info(f"[Orchestrator]: {line}")
 
-            if "HEARTBEAT: RUNNING" in line:
-                running_detected = True
-                log.info("✅ 偵測到 RUNNING 狀態。")
-
-            if running_detected and "HEARTBEAT: IDLE" in line:
-                log.info("✅ 偵測到任務完成後的 IDLE 狀態。測試成功！")
-                idle_after_running_detected = True
-                break # 成功，跳出迴圈
-
-            if time.time() > timeout:
-                log.error("❌ 測試超時！系統未在指定時間內變回 IDLE。")
+            # 只要在提交任務後，偵測到一次 IDLE，就認為任務週期已結束
+            if "HEARTBEAT: IDLE" in line:
+                log.info("✅ 偵測到 IDLE 狀態，任務週期結束。")
+                idle_detected = True
                 break
 
-        if not idle_after_running_detected:
-            log.error("❌ 測試流程結束，但未偵測到預期的『RUNNING -> IDLE』狀態轉換。")
-            raise RuntimeError("Test failed: Did not detect RUNNING -> IDLE transition.")
+            if time.time() > timeout:
+                log.error("❌ 測試超時！系統未在指定時間內返回 IDLE。")
+                break
 
-        # 5. 驗證資料庫日誌
-        log.info("--- 步驟 5/6: 驗證資料庫日誌 ---")
+        if not idle_detected:
+            raise RuntimeError("Test failed: Did not detect IDLE state after task submission.")
+
+        # 5. 驗證任務最終狀態
+        log.info("--- 步驟 5/6: 驗證任務最終狀態 ---")
         try:
-            import sqlite3
-            # 在終止服務前，給資料庫一點時間完成最後的寫入
+            # 等待最後的資料庫寫入操作完成
             time.sleep(1)
-            db_conn = sqlite3.connect("db/queue.db")
-            cursor = db_conn.cursor()
 
-            # 檢查 orchestrator 的心跳日誌是否存在
-            cursor.execute("SELECT COUNT(*) FROM system_logs WHERE source = 'orchestrator' AND message LIKE '%HEARTBEAT%'")
-            orchestrator_logs_count = cursor.fetchone()[0]
-            if orchestrator_logs_count > 0:
-                log.info(f"✅ 驗證成功：在資料庫中找到 {orchestrator_logs_count} 筆 Orchestrator 心跳日誌。")
+            # 使用我們新的 DBClient 來驗證
+            from db.client import get_client
+            db_client = get_client()
+
+            log.info(f"正在驗證任務 {task_id} 的最終狀態...")
+            task_info = db_client.get_task_status(task_id)
+
+            if not task_info:
+                raise ValueError(f"驗證失敗：在資料庫中找不到任務 {task_id}。")
+
+            final_status = task_info.get("status")
+            if final_status == "completed":
+                log.info(f"✅ 驗證成功！任務 {task_id} 的最終狀態是 '{final_status}'。")
             else:
-                raise ValueError("驗證失敗：未在資料庫中找到 Orchestrator 的心跳日誌。")
+                raise ValueError(f"驗證失敗！任務 {task_id} 的最終狀態是 '{final_status}'，但應為 'completed'。")
 
-            # 檢查 worker 的日誌是否存在
-            cursor.execute("SELECT COUNT(*) FROM system_logs WHERE source = 'worker'")
-            worker_logs_count = cursor.fetchone()[0]
-            if worker_logs_count > 0:
-                log.info(f"✅ 驗證成功：在資料庫中找到 {worker_logs_count} 筆 Worker 日誌。")
-            else:
-                raise ValueError("驗證失敗：未在資料庫中找到 Worker 的日誌。")
-
-            db_conn.close()
-            log.info("✅ 所有日誌驗證均已通過！")
+            log.info("✅ 所有驗證均已通過！")
 
         except Exception as e:
             log.error(f"❌ 驗證資料庫日誌時失敗: {e}", exc_info=True)

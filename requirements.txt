@@ -9,6 +9,7 @@ python-multipart
 
 # For e2e test script
 requests
+websocket-client
 
 # For system resource monitoring
 psutil

@@ -63,14 +63,13 @@ def run_verification():
 
     try:
         print("▶️ 啟動後端伺服器 (模擬模式)...")
-        server_command = [sys.executable, "api_server.py", "--port", "8000"]
-        # 設定 MOCK_MODE 環境變數，讓 API Server 也進入模擬模式
-        server_env = {**os.environ, "MOCK_MODE": "1"}
-        server_process = subprocess.Popen(server_command, preexec_fn=os.setsid, env=server_env)
+        # 統一使用 --mock 旗標，與 orchestrator.py 和 api_server.py 的設計保持一致
+        server_command = [sys.executable, "api_server.py", "--port", "8000", "--mock"]
+        server_process = subprocess.Popen(server_command, preexec_fn=os.setsid)
 
-        print("▶️ 啟動背景工作者 (模擬模式)...")
-        worker_command = [sys.executable, "worker.py", "--mock", "--poll-interval", "1"]
-        worker_process = subprocess.Popen(worker_command, preexec_fn=os.setsid)
+        # print("▶️ 啟動背景工作者 (模擬模式)...") # REMOVED: Worker is deprecated.
+        # worker_command = [sys.executable, "worker.py", "--mock", "--poll-interval", "1"]
+        worker_process = None # subprocess.Popen(worker_command, preexec_fn=os.setsid)
 
         start_time = time.time()
         server_ready = False
@@ -152,7 +151,7 @@ def run_verification():
         return False
     finally:
         print("▶️ 執行最終清理...")
-        processes = [server_process, worker_process]
+        processes = [server_process, worker_process] # worker_process is None, so this is safe
         for proc in processes:
             if proc and proc.poll() is None:
                 # 使用 SIGTERM 優雅地終止行程組

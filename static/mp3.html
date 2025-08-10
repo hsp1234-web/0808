@@ -497,10 +497,22 @@
                         }
 
                         if (transcribeTask && transcribeTask.task_id) {
-                            taskElements.set(transcribeTask.task_id, taskElement);
-                            // JULES: 移除 START_TRANSCRIPTION 訊息發送。
-                            // 新架構中，worker 會自動處理佇列中的任務。
-                            statusSpan.textContent = '任務已成功排入佇列。';
+                            const taskId = transcribeTask.task_id;
+                            taskElements.set(taskId, taskElement);
+
+                            // 恢復 START_TRANSCRIPTION 訊息發送，以符合新的 WebSocket 驅動架構
+                            if (socket && socket.readyState === WebSocket.OPEN) {
+                                const startCommand = {
+                                    type: 'START_TRANSCRIPTION',
+                                    payload: { task_id: taskId }
+                                };
+                                socket.send(JSON.stringify(startCommand));
+                                statusSpan.textContent = '已發送開始指令...';
+                                logAction('已發送開始轉錄指令', { task_id: taskId });
+                            } else {
+                                statusSpan.textContent = '錯誤: WebSocket 未連線';
+                                console.error('WebSocket is not open. Cannot send START_TRANSCRIPTION command.');
+                            }
                         } else {
                             statusSpan.textContent = '錯誤: 未收到有效的任務ID';
                         }
