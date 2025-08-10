@@ -97,6 +97,7 @@ class LogManager:
     """日誌管理器：負責記錄、過濾和儲存所有日誌訊息。"""
     def __init__(self, max_lines, timezone_str, log_levels_to_show):
         self._log_deque = deque(maxlen=max_lines)
+        self._full_history = []  # 新增一個無長度限制的列表來儲存所有日誌
         self._lock = threading.Lock()
         self.timezone = pytz.timezone(timezone_str)
         self.log_levels_to_show = log_levels_to_show
@@ -105,6 +106,7 @@ class LogManager:
         with self._lock:
             log_entry = {"timestamp": datetime.now(self.timezone), "level": level.upper(), "message": str(message)}
             self._log_deque.append(log_entry)
+            self._full_history.append(log_entry) # 同時也存入完整歷史記錄
 
     def get_display_logs(self) -> list:
         with self._lock:
@@ -113,7 +115,7 @@ class LogManager:
 
     def get_full_history(self) -> list:
         with self._lock:
-            return list(self._log_deque)
+            return self._full_history # 從完整歷史記錄中回傳
 
 ANSI_COLORS = {
     "SUCCESS": "\033[32m", "WARN": "\033[33m", "ERROR": "\033[31m",
@@ -176,6 +178,7 @@ class ServerManager:
             if FORCE_REPO_REFRESH and project_path.exists():
                 self._log_manager.log("INFO", f"偵測到舊的專案資料夾 '{project_path}'，正在強制刪除...")
                 shutil.rmtree(project_path)
+
             self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
             git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
             result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8')
@@ -183,19 +186,32 @@ class ServerManager:
 
             self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
 
+            # 動態將下載的專案路徑加入 sys.path，以便導入其模組
+            project_path_str = str(project_path.resolve())
+            if project_path_str not in sys.path:
+                sys.path.insert(0, project_path_str)
+
+            from db.database import initialize_database, add_system_log
+            initialize_database()
+            add_system_log("colab_setup", "INFO", "Git repository cloned successfully.")
+
             # ** 安裝後端依賴 **
             requirements_path = project_path / "requirements.txt"
             if requirements_path.is_file():
                 self._log_manager.log("INFO", f"檢測到 requirements.txt，正在安裝依賴...")
+                add_system_log("colab_setup", "INFO", "Installing dependencies from requirements.txt...")
                 # 在 Colab 環境中，使用 -q 來減少不必要的輸出
                 pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)]
                 install_result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
                 if install_result.returncode != 0:
                     self._log_manager.log("CRITICAL", f"依賴安裝失敗:\n{install_result.stderr}")
+                    add_system_log("colab_setup", "CRITICAL", f"Dependency installation failed: {install_result.stderr}")
                     return
                 self._log_manager.log("SUCCESS", "✅ 後端依賴安裝完成。")
+                add_system_log("colab_setup", "SUCCESS", "Dependencies installed successfully.")
             else:
                 self._log_manager.log("WARN", "未在倉庫中找到 requirements.txt，跳過依賴安裝。")
+                add_system_log("colab_setup", "WARN", "requirements.txt not found, skipping dependency installation.")
 
             # ** 適配新架構: 啟動 orchestrator.py **
             orchestrator_script_path = project_path / "orchestrator.py"

@@ -124,6 +124,15 @@ class DBClient:
     def get_all_tasks(self) -> list[dict]:
         return self._send_request("get_all_tasks")
 
+    def get_system_logs(self, levels: list[str] = None, sources: list[str] = None) -> list[dict]:
+        """
+        從資料庫獲取系統日誌，可選擇性地按等級和來源篩選。
+        """
+        return self._send_request("get_system_logs", {
+            "levels": levels or [],
+            "sources": sources or []
+        })
+
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
 
