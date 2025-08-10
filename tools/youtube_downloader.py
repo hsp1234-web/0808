@@ -10,7 +10,7 @@ from pathlib import Path
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)] # 確保日誌輸出到 stdout
+    handlers=[logging.StreamHandler(sys.stderr)] # 將日誌導向 stderr，保持 stdout 乾淨以進行 JSON 通訊
 )
 log = logging.getLogger('youtube_downloader_tool')
 

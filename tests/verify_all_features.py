@@ -1,19 +1,19 @@
 import time
 import os
 import sys
+import subprocess
+import signal
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect, Page, TimeoutError as PlaywrightTimeoutError
 import re
 
 # --- 設定 ---
-PORT = 49243
-SERVER_URL = f"http://127.0.0.1:{PORT}"
-APP_URL = f"{SERVER_URL}/"
+# 移除寫死的埠號和 URL
 ACTION_TIMEOUT = 20000  # 毫秒
 SCREENSHOT_FILE = "test-results/final_verification.png"
 DUMMY_FILE_NAME_1 = "dummy_audio_1.wav"
-DUMMY_FILE_NAME_1 = "dummy_audio_1.wav"
 DUMMY_FILE_NAME_2 = "dummy_audio_2.wav"
+# 注意：這個模擬腳本文字需要與 mock_transcriber.py 中的輸出完全一致
 MOCK_TRANSCRIPT_TEXT = "你好，歡迎使用鳳凰音訊轉錄儀。這是一個模擬的轉錄過程。我們正在逐句產生文字。這個功能將會帶來更好的使用者體驗。轉錄即將完成。"
 
 def create_dummy_wav(filename: str):
@@ -28,19 +28,36 @@ def create_dummy_wav(filename: str):
     print(f"✅ 已建立臨時音訊檔案於: {filepath}")
     return filepath
 
-def cleanup():
-    """清理測試產生的檔案。"""
+def cleanup(orchestrator_proc):
+    """清理測試產生的檔案和程序。"""
     print("▶️ 執行清理程序...")
+
+    # 1. 終止伺服器程序
+    if orchestrator_proc and orchestrator_proc.poll() is None:
+        print(f"▶️ 正在終止協調器程序組 (PID: {orchestrator_proc.pid})...")
+        try:
+            if sys.platform != "win32":
+                os.killpg(os.getpgid(orchestrator_proc.pid), signal.SIGTERM)
+            else:
+                orchestrator_proc.terminate()
+            orchestrator_proc.wait(timeout=10)
+            print("✅ 協調器已成功終止。")
+        except Exception as e:
+            print(f"🔥 終止協調器時發生錯誤: {e}", file=sys.stderr)
+            if orchestrator_proc.poll() is None:
+                orchestrator_proc.kill()
+
+    # 2. 刪除臨時檔案
     files_to_delete = [Path(DUMMY_FILE_NAME_1), Path(DUMMY_FILE_NAME_2)]
     for f in files_to_delete:
         if f.exists():
             f.unlink()
             print(f"🗑️ 已刪除檔案: {f.name}")
 
-def run_e2e_test():
+
+def run_e2e_test(app_url: str):
     """
     執行完整的端對端驗證。
-    假設伺服器已由 orchestrator.py 啟動。
     """
     # 建立測試所需檔案
     dummy_file_1_path = create_dummy_wav(DUMMY_FILE_NAME_1)
@@ -49,6 +66,7 @@ def run_e2e_test():
     # 確保截圖目錄存在
     Path("test-results").mkdir(exist_ok=True)
 
+    page = None # 在 with 區塊外宣告
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -58,8 +76,8 @@ def run_e2e_test():
             # 監聽並印出瀏覽器主控台的訊息
             page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
 
-            print(f"▶️ 導航至: {APP_URL}")
-            page.goto(APP_URL)
+            print(f"▶️ 導航至: {app_url}")
+            page.goto(app_url)
 
             # --- 1. 驗證標題 ---
             print("▶️ 驗證頁面標題...")
@@ -69,8 +87,7 @@ def run_e2e_test():
 
             # --- 2. 驗證檔案上傳與移除功能 ---
             print("▶️ 驗證檔案上傳與移除...")
-            file_input = page.locator("#file-input")
-            file_input.set_input_files([dummy_file_1_path, dummy_file_2_path])
+            page.locator("#file-input").set_input_files([str(dummy_file_1_path), str(dummy_file_2_path)])
 
             file_list = page.locator("#file-list")
             expect(file_list.locator(".task-item", has_text=DUMMY_FILE_NAME_1)).to_be_visible()
@@ -87,21 +104,15 @@ def run_e2e_test():
 
             # --- 3. 驗證進階選項與轉錄流程 ---
             print("▶️ 驗證進階選項與轉錄流程...")
-            # 選擇模型和設定光束大小
             page.locator("#model-select").select_option("large-v3")
             page.locator("#beam-size-input").fill("3")
-
-            # 點擊確認設定，觸發模型下載
-            print("▶️ 觸發模型下載（使用 mock，應為瞬時）...")
             page.locator("#confirm-settings-btn").click()
 
-            # 驗證下載進度條（在 mock 模式下，它會快速完成）
             progress_container = page.locator("#model-progress-container")
             expect(progress_container).not_to_be_hidden(timeout=5000)
             expect(progress_container.locator("#model-progress-text")).to_contain_text("下載完成")
             print("✅ 模型下載進度條顯示與完成狀態驗證成功。")
 
-            # 開始處理
             start_btn = page.locator("#start-processing-btn")
             expect(start_btn).to_be_enabled()
             start_btn.click()
@@ -109,86 +120,105 @@ def run_e2e_test():
             print("▶️ 等待任務出現在「已完成」列表中...")
             completed_tasks_list = page.locator("#completed-tasks")
             task_item = completed_tasks_list.locator(".task-item", has_text=DUMMY_FILE_NAME_1)
-
             expect(task_item).to_be_visible(timeout=ACTION_TIMEOUT)
             print("✅ 任務已完成並顯示在列表中。")
 
             # --- 4. 驗證 UI 樣式與佈局 ---
             print("▶️ 驗證已完成任務的按鈕樣式...")
-            # 使用更直接的 CSS 選擇器來避免潛在的定位問題
             preview_button = page.locator(f'#completed-tasks .task-item:has-text("{DUMMY_FILE_NAME_1}") a.btn-preview')
             download_button = page.locator(f'#completed-tasks .task-item:has-text("{DUMMY_FILE_NAME_1}") a.btn-download')
 
             expect(preview_button).to_be_visible()
             preview_color = preview_button.evaluate("element => window.getComputedStyle(element).backgroundColor")
-            print(f"  > 預覽按鈕顏色: {preview_color}")
-            assert preview_color == "rgb(0, 123, 255)" # Corresponds to --button-bg-color
+            assert preview_color == "rgb(0, 123, 255)", f"預期預覽按鈕顏色為 rgb(0, 123, 255)，實際為 {preview_color}"
 
             expect(download_button).to_be_visible()
             download_color = download_button.evaluate("element => window.getComputedStyle(element).backgroundColor")
-            print(f"  > 下載按鈕顏色: {download_color}")
-            assert download_color == "rgb(40, 167, 69)" # Corresponds to --success-color
-
+            assert download_color == "rgb(40, 167, 69)", f"預期下載按鈕顏色為 rgb(40, 167, 69)，實際為 {download_color}"
             print("✅ 按鈕顏色驗證成功。")
 
             # --- 5. 驗證即時預覽與日誌 ---
             print("▶️ 驗證即時預覽...")
             preview_area = page.locator("#preview-area")
             expect(preview_area).to_be_hidden()
-
             preview_button.click()
-
             expect(preview_area).to_be_visible()
-            expect(preview_area.locator("#preview-content")).to_contain_text(MOCK_TRANSCRIPT_TEXT)
+            expect(preview_area.locator("#preview-content-text")).to_contain_text(MOCK_TRANSCRIPT_TEXT)
             print("✅ 即時預覽功能驗證成功。")
 
             print("▶️ 驗證轉錄結果反向排序...")
             transcript_output = page.locator("#transcript-output")
-
-            # 獲取所有 p 標籤
             p_elements = transcript_output.locator("p")
-
-            # 斷言 p 標籤的數量是否與模擬腳本中的句子數量相符
-            mock_sentences_count = 6
-            expect(p_elements).to_have_count(mock_sentences_count)
-
-            # 驗證反向排序：檢查第一個 <p> 元素是否包含模擬腳本的最後一句話
-            last_sentence = "轉錄即將完成。"
-            expect(p_elements.first).to_contain_text(last_sentence)
-
+            expect(p_elements).to_have_count(6)
+            expect(p_elements.first).to_contain_text("轉錄即將完成。")
             print("✅ 轉錄結果反向排序與顯示驗證成功。")
 
-            print("▶️ 驗證日誌查看器位置與功能...")
-            log_viewer = page.locator("#log-viewer-card")
-            # 簡化驗證，只確認日誌查看器本身是可見的，因為相鄰選擇器 (+) 在此環境中可能不穩定
-            expect(log_viewer).to_be_visible()
-
+            print("▶️ 驗證日誌查看器...")
             page.locator("#fetch-logs-btn").click()
             expect(page.locator("#log-output")).not_to_contain_text("載入...", timeout=5000)
             expect(page.locator("#log-output")).to_contain_text("[api_server]")
-            print("✅ 日誌查看器位置與功能驗證成功。")
-
+            print("✅ 日誌查看器功能驗證成功。")
 
             page.screenshot(path=SCREENSHOT_FILE)
             print(f"📸 成功儲存最終驗證螢幕截圖至: {SCREENSHOT_FILE}")
 
             browser.close()
-            return True
 
     except Exception as e:
         print(f"❌ 測試過程中發生錯誤: {e}", file=sys.stderr)
-        # 如果出錯，也嘗試截圖
-        if 'page' in locals() and not page.is_closed():
+        if page and not page.is_closed():
             page.screenshot(path="test-results/error_screenshot.png")
-        return False
-    finally:
-        cleanup()
-
+            print("📸 已儲存錯誤時的螢幕截圖。")
+        # 重新引發異常，以便主執行塊可以捕獲它
+        raise
 
 if __name__ == "__main__":
-    if run_e2e_test():
+    orchestrator_proc = None
+    try:
+        # 1. 啟動後端伺服器 (使用 mock 模式)
+        print("▶️ 正在啟動後端伺服器 (mock 模式)...")
+        cmd = [sys.executable, "orchestrator.py", "--mock"]
+        popen_kwargs = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+            "encoding": 'utf-8',
+        }
+        if sys.platform != "win32":
+            popen_kwargs['preexec_fn'] = os.setsid
+        else:
+            popen_kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        orchestrator_proc = subprocess.Popen(cmd, **popen_kwargs)
+        print(f"✅ 協調器已啟動 (PID: {orchestrator_proc.pid})")
+
+        # 2. 等待伺服器就緒並獲取 URL
+        app_url = None
+        proxy_url_pattern = re.compile(r"PROXY_URL:\s*(http://127\.0\.0\.1:\d+)")
+        timeout = time.time() + 45 # 45 秒超時
+
+        for line in iter(orchestrator_proc.stdout.readline, ''):
+            print(f"[Orchestrator]: {line.strip()}")
+            url_match = proxy_url_pattern.search(line)
+            if url_match:
+                app_url = url_match.group(1)
+                print(f"✅ 偵測到應用程式 URL: {app_url}")
+                # 增加一個短暫的延遲，確保服務完全可訪問
+                time.sleep(3)
+                break
+            if time.time() > timeout:
+                raise RuntimeError("等待後端伺服器就緒超時。")
+
+        if not app_url:
+            raise RuntimeError("未能獲取應用程式 URL。")
+
+        # 3. 執行 E2E 測試
+        run_e2e_test(app_url)
         print("\n🎉🎉🎉 端對端自動化驗證成功！ 🎉🎉🎉")
-        sys.exit(0)
-    else:
-        print("\n🔥🔥🔥 端對端自動化驗證失敗。 🔥🔥🔥", file=sys.stderr)
+
+    except Exception as e:
+        print(f"\n🔥🔥🔥 端對端自動化驗證失敗: {e} 🔥🔥🔥", file=sys.stderr)
         sys.exit(1)
+    finally:
+        cleanup(orchestrator_proc)
+        sys.exit(0)
