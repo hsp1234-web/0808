@@ -22,22 +22,13 @@ class DBClient:
 
     def _get_server_port(self) -> int:
         """
-        從 .port 檔案讀取伺服器的埠號，帶有重試機制。
+        返回資料庫管理者伺服器的硬編碼埠號。
+        這個改動是為了消除因讀取 .port 檔案而引起的競爭條件。
         """
-        start_time = time.time()
-        while time.time() - start_time < RETRY_TIMEOUT:
-            if PORT_FILE.exists():
-                try:
-                    port_str = PORT_FILE.read_text().strip()
-                    if port_str:
-                        log.info(f"成功讀取到伺服器埠號: {port_str}")
-                        return int(port_str)
-                except Exception as e:
-                    log.warning(f"讀取埠號檔案時出錯: {e}, 稍後重試...")
-            log.info(f"等待 DB 管理者伺服器啟動並寫入埠號檔案 ({PORT_FILE})...")
-            time.sleep(0.5)
-
-        raise ConnectionError(f"在 {RETRY_TIMEOUT} 秒內無法找到 DB 管理者伺服器的埠號檔案。")
+        # JULES' FIX: 根據 YouTube.md 中的發現，直接使用硬編碼的埠號
+        hardcoded_port = 49999
+        log.info(f"使用硬編碼的 DB Manager 埠號: {hardcoded_port}")
+        return hardcoded_port
 
     def _send_request(self, action: str, params: dict = None) -> dict:
         """
