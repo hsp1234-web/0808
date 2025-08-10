@@ -404,48 +404,36 @@
         </div>
     </div>
 
-    <!-- 全新、重構後的 JavaScript 邏輯 -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- DOM 元素 ---
-            const tabButtons = document.querySelectorAll('.tab-button');
-            const tabContents = document.querySelectorAll('.tab-content');
             const fileInput = document.getElementById('file-input');
             const fileListDisplay = document.getElementById('file-list');
             const startBtn = document.getElementById('start-processing-btn');
             const confirmBtn = document.getElementById('confirm-settings-btn');
             const modelSelect = document.getElementById('model-select');
             const languageSelect = document.getElementById('language-select');
-            const youtubeUrlsInput = document.getElementById('youtube-urls-input');
-            const geminiModelSelect = document.getElementById('gemini-model-select');
-            const startYoutubeBtn = document.getElementById('start-youtube-processing-btn');
+            const beamSizeInput = document.getElementById('beam-size-input');
+
             const ongoingTasksContainer = document.getElementById('ongoing-tasks');
             const completedTasksContainer = document.getElementById('completed-tasks');
             const noOngoingTaskMsg = document.getElementById('no-ongoing-task-msg');
             const noCompletedTaskMsg = document.getElementById('no-completed-task-msg');
+
             const transcriptOutput = document.getElementById('transcript-output');
             const modelDisplay = document.getElementById('model-display');
             const statusText = document.getElementById('status-text');
             const statusLight = document.getElementById('status-light');
-            const zoomInBtn = document.getElementById('zoom-in-btn');
-            const zoomOutBtn = document.getElementById('zoom-out-btn');
-            const fontSizeDisplay = document.getElementById('font-size-display');
+
             const modelProgressContainer = document.getElementById('model-progress-container');
             const modelProgressBar = document.getElementById('model-progress-bar');
             const modelProgressText = document.getElementById('model-progress-text');
-            const apiKeyPrompt = document.getElementById('api-key-prompt');
-            const apiKeySuccess = document.getElementById('api-key-success');
-            const apiKeyInput = document.getElementById('api-key-input');
-            const saveApiKeyBtn = document.getElementById('save-api-key-btn');
-            const apiKeyError = document.getElementById('api-key-error');
-            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
+
             const previewArea = document.getElementById('preview-area');
             const previewContentText = document.getElementById('preview-content-text');
-            const previewContentHtml = document.getElementById('preview-content-html');
             const closePreviewBtn = document.getElementById('close-preview-btn');
 
             // --- 狀態變數 ---
-            let currentFontSize = 100;
             let uploadedFiles = [];
             let socket;
             const taskElements = new Map();
@@ -461,8 +449,6 @@
                     console.log('WebSocket 連線成功');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
-                    // 連線成功後，檢查 API 金鑰狀態
-                    checkApiKeyStatus();
                 };
 
                 socket.onmessage = (event) => {
@@ -487,63 +473,25 @@
             const handleWebSocketMessage = (message) => {
                 const { type, payload } = message;
 
-                if (type === 'YOUTUBE_PROCESS_STATUS' || type === 'YOUTUBE_DOWNLOAD_PROGRESS') {
-                    if (!payload || !payload.task_id) return;
-                    const taskElement = taskElements.get(payload.task_id);
-                    if (!taskElement) return;
-
-                    const statusSpan = taskElement.querySelector('.task-status');
-                    if (type === 'YOUTUBE_PROCESS_STATUS') {
-                        statusSpan.textContent = payload.detail || payload.status;
-                        if (payload.status === 'completed') {
-                            statusSpan.innerHTML = '';
-                            const buttonGroup = document.createElement('div');
-                            buttonGroup.className = 'task-actions';
-
-                            const reportPath = payload.result.html_report_path;
-                            if (reportPath) {
-                                const previewBtn = document.createElement('a');
-                                previewBtn.href = reportPath;
-                                previewBtn.className = 'btn-preview';
-                                previewBtn.textContent = '預覽';
-                                previewBtn.onclick = (e) => {
-                                    e.preventDefault();
-                                    previewContentText.classList.add('hidden');
-                                    previewContentHtml.classList.remove('hidden');
-                                    previewContentHtml.src = reportPath;
-                                    previewArea.classList.remove('hidden');
-                                    previewArea.scrollIntoView({ behavior: 'smooth' });
-                                };
-
-                                const downloadBtn = document.createElement('a');
-                                downloadBtn.href = reportPath;
-                                downloadBtn.className = 'btn-download';
-                                downloadBtn.textContent = '下載';
-                                const originalFilename = payload.result.video_title || 'report';
-                                downloadBtn.download = `${originalFilename.replace(/[^a-z0-9]/gi, '_')}_report.html`;
-
-                                buttonGroup.appendChild(previewBtn);
-                                buttonGroup.appendChild(downloadBtn);
-                            }
-                            statusSpan.appendChild(buttonGroup);
-
-                            if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
-                            completedTasksContainer.appendChild(taskElement);
-
-                        } else if (payload.status === 'failed') {
-                            statusSpan.textContent = `❌ 失敗: ${payload.error}`;
-                            if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
-                            completedTasksContainer.appendChild(taskElement);
-                        }
-                    } else { // YOUTUBE_DOWNLOAD_PROGRESS
-                        const percent = payload.percent ? `${payload.percent.toFixed(1)}%` : '';
-                        statusSpan.textContent = `下載中 ${percent}: ${payload.description}`;
-                    }
-                    return;
-                }
-
                 if (type === 'DOWNLOAD_STATUS') {
-                    // ... (此部分邏輯不變，省略以保持簡潔)
+                    if (!modelStatus[payload.model]) {
+                        modelStatus[payload.model] = {};
+                    }
+                    modelStatus[payload.model].status = payload.status;
+
+                    modelProgressContainer.classList.remove('hidden');
+                    if (payload.status === 'downloading') {
+                        const percent = payload.percent || 0;
+                        modelProgressBar.style.width = `${percent}%`;
+                        modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
+                    } else if (payload.status === 'completed') {
+                        modelProgressBar.style.width = '100%';
+                        modelProgressText.textContent = '下載完成';
+                    } else if (payload.status === 'failed') {
+                        modelProgressBar.style.width = '100%';
+                        modelProgressBar.style.backgroundColor = '#dc3545';
+                        modelProgressText.textContent = `下載失敗: ${payload.error}`;
+                    }
                     return;
                 }
 
@@ -551,6 +499,7 @@
                 const taskElement = taskElements.get(payload.task_id);
                 if (!taskElement) return;
                 const statusSpan = taskElement.querySelector('.task-status');
+
                 switch (type) {
                     case 'TRANSCRIPTION_STATUS':
                         if (payload.status === 'starting') {
@@ -592,6 +541,7 @@
                             buttonGroup.appendChild(previewBtn);
                             buttonGroup.appendChild(downloadBtn);
                             statusSpan.appendChild(buttonGroup);
+
                             if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                             completedTasksContainer.appendChild(taskElement);
                         } else if (payload.status === 'failed') {
@@ -599,134 +549,136 @@
                         }
                         break;
                     case 'TRANSCRIPTION_UPDATE':
-                        // ... (此部分邏輯不變，省略以保持簡潔)
+                        if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
+                             const p = document.createElement('p');
+                             p.dataset.start = payload.start;
+                             p.textContent = `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] ${payload.text}`;
+                             transcriptOutput.appendChild(p);
+                             transcriptOutput.scrollTop = transcriptOutput.scrollHeight;
+                        }
                         break;
                 }
             };
 
-            // --- 新增：金鑰管理與模型載入 ---
-            const checkApiKeyStatus = async () => {
-                try {
-                    const response = await fetch('/api/key_status');
-                    const data = await response.json();
-                    if (data.is_configured) {
-                        apiKeyPrompt.classList.add('hidden');
-                        apiKeySuccess.classList.remove('hidden');
-                        youtubeControlsFieldset.disabled = false;
-                        startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
-                        loadGeminiModels();
-                    } else {
-                        apiKeyPrompt.classList.remove('hidden');
-                        apiKeySuccess.classList.add('hidden');
-                        youtubeControlsFieldset.disabled = true;
-                        startYoutubeBtn.textContent = '🚀 請先設定 API 金鑰';
-                    }
-                } catch (error) {
-                    console.error('無法檢查 API 金鑰狀態:', error);
-                    apiKeyError.textContent = '無法連接到伺服器檢查金鑰狀態。';
-                    apiKeyError.classList.remove('hidden');
-                }
-            };
-
-
-            const loadGeminiModels = async () => {
-                try {
-                    const response = await fetch('/api/models');
-                    const models = await response.json();
-                    geminiModelSelect.innerHTML = ''; // 清空
-                    if (models.length === 0) {
-                         geminiModelSelect.innerHTML = '<option>無法載入模型</option>';
-                         return;
-                    }
-                    models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.api_name;
-                        option.textContent = model.display_name;
-                        geminiModelSelect.appendChild(option);
+            const updateFileDisplay = () => {
+                fileListDisplay.innerHTML = '';
+                if (uploadedFiles.length === 0) {
+                    fileListDisplay.innerHTML = '<p style="color: #666; text-align: center;">尚未選擇任何檔案</p>';
+                } else {
+                    uploadedFiles.forEach((file, index) => {
+                        const fileElement = document.createElement('div');
+                        fileElement.className = 'task-item';
+                        fileElement.innerHTML = `
+                            <span class="task-filename">${file.name}</span>
+                            <button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>
+                        `;
+                        fileListDisplay.appendChild(fileElement);
                     });
-                } catch (error) {
-                    console.error('載入 Gemini 模型失敗:', error);
-                    geminiModelSelect.innerHTML = '<option>載入模型列表失敗</option>';
+                }
+
+                document.querySelectorAll('.remove-file-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const indexToRemove = parseInt(e.target.dataset.index, 10);
+                        uploadedFiles.splice(indexToRemove, 1);
+                        updateFileDisplay();
+                    });
+                });
+
+                if (uploadedFiles.length > 0) {
+                    startBtn.disabled = false;
+                    startBtn.textContent = `✨ 開始處理 ${uploadedFiles.length} 個檔案`;
+                } else {
+                    startBtn.disabled = true;
+                    startBtn.textContent = '✨ 請先選擇檔案';
                 }
             };
 
-            // --- YouTube 影片處理 (原邏輯不變，省略) ---
-            const startYoutubeProcessing = async () => {
-                const urls = youtubeUrlsInput.value.trim().split(/\\s+/).filter(url => url.startsWith('http'));
-                if (urls.length === 0) {
-                    alert('請至少輸入一個有效的 YouTube 網址。');
+            fileInput.addEventListener('change', () => {
+                const newFiles = Array.from(fileInput.files);
+                newFiles.forEach(newFile => {
+                    if (!uploadedFiles.some(existingFile => existingFile.name === newFile.name)) {
+                        uploadedFiles.push(newFile);
+                    }
+                });
+                updateFileDisplay();
+                fileInput.value = '';
+            });
+
+            confirmBtn.addEventListener('click', () => {
+                // logAction('確認設定', { model: modelSelect.value });
+                modelDisplay.textContent = modelSelect.value;
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'DOWNLOAD_MODEL',
+                        payload: { model: modelSelect.value }
+                    }));
+                } else {
+                    alert('WebSocket 未連線，無法下載模型。');
+                }
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (uploadedFiles.length === 0) {
+                    alert('請先選擇要處理的檔案。');
                     return;
                 }
-                const model = geminiModelSelect.value;
-                logAction('開始處理 YouTube 影片', { url_count: urls.length, model: model });
-                startYoutubeBtn.disabled = true;
-                startYoutubeBtn.textContent = '⏳ 正在建立任務...';
-                try {
-                    const response = await fetch('/api/process_youtube', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ urls, model })
-                    });
-                    if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
-                    const result = await response.json();
-                    result.tasks.forEach(task => {
-                        if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
-                        const taskElement = document.createElement('div');
-                        taskElement.className = 'task-item';
-                        taskElement.innerHTML = `<span class="task-filename" title="${task.url}">${task.url.substring(0, 50)}...</span><span class="task-status">已建立</span>`;
-                        ongoingTasksContainer.appendChild(taskElement);
-                        taskElements.set(task.task_id, taskElement);
-                        if (socket && socket.readyState === WebSocket.OPEN) {
-                            socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id } }));
-                            taskElement.querySelector('.task-status').textContent = '已發送開始指令...';
-                        } else {
-                            taskElement.querySelector('.task-status').textContent = '錯誤: WebSocket 未連線';
+
+                startBtn.disabled = true;
+                startBtn.textContent = '正在建立任務...';
+
+                for (const file of uploadedFiles) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('model_size', modelSelect.value);
+                    formData.append('language', languageSelect.value);
+                    formData.append('beam_size', beamSizeInput.value);
+
+                    try {
+                        const response = await fetch('/api/transcribe', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || '上傳失敗');
                         }
-                    });
-                } catch (error) {
-                    alert(`錯誤: ${error.message}`);
-                } finally {
-                     startYoutubeBtn.disabled = false;
-                     startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
-                }
-            };
 
-            // --- 其他 UI 輔助函式與事件監聽器 (大部分不變，省略以保持簡潔) ---
-            const logAction = (action, payload = {}) => {
-                fetch('/api/log/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, ...payload }),
-                }).catch(error => console.warn('無法發送日誌到伺服器:', error));
-            };
+                        const result = await response.json();
 
-            // --- 事件監聽器與初始化 ---
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const tabId = button.dataset.tab;
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    tabContents.forEach(content => content.classList.remove('active'));
-                    button.classList.add('active');
-                    document.getElementById(tabId).classList.add('active');
-                    if (tabId === 'youtube-tab') {
-                        checkApiKeyStatus(); // 切換到 YouTube 分頁時也檢查一次
+                        const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
+
+                        tasks.forEach(task => {
+                            if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
+                            const taskElement = document.createElement('div');
+                            taskElement.className = 'task-item';
+                            taskElement.innerHTML = `<span class="task-filename">${file.name} (${task.type})</span><span class="task-status">已建立</span>`;
+                            ongoingTasksContainer.appendChild(taskElement);
+                            taskElements.set(task.task_id, taskElement);
+
+                            // 修正：無論 result.tasks 是否存在，都應檢查 task.type
+                            if (socket && task.type === 'transcribe') {
+                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
+                            } else if (socket && !result.tasks) {
+                                // 如果 result.tasks 不存在，代表這就是唯一的轉錄任務
+                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
+                            }
+                        });
+
+                    } catch (error) {
+                        alert(`處理檔案 ${file.name} 時發生錯誤: ${error.message}`);
                     }
-                    logAction('分頁切換', { tab: tabId });
-                });
+                }
+
+                uploadedFiles = [];
+                updateFileDisplay();
             });
 
-            youtubeUrlsInput.addEventListener('input', () => {
-                startYoutubeBtn.disabled = youtubeUrlsInput.value.trim() === '' || youtubeControlsFieldset.disabled;
-            });
-
-            startYoutubeBtn.addEventListener('click', startYoutubeProcessing);
             closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
-
-            // (其他既有的事件監聽器，如本地檔案上傳、日誌查看器等，此處省略)
 
             // --- Init ---
             setupWebSocket();
-            // 其他初始化，如 updateSystemStats() 和 logAction()，可以保留
+            updateFileDisplay();
         });
     </script>
 </body>

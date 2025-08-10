@@ -15,6 +15,9 @@ import argparse
 import torch
 from pathlib import Path
 from opencc import OpenCC
+import json
+import sys
+from faster_whisper.utils import get_assets_path
 
 # --- 日誌設定 ---
 # 設定一個基本的日誌記錄器，以便在工具執行時提供有用的輸出
@@ -134,10 +137,6 @@ class Transcriber:
         except Exception as e:
             log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
             raise e
-
-import json
-import sys
-from faster_whisper.utils import get_assets_path
 
 def check_model(model_size: str):
     """檢查模型是否已下載"""

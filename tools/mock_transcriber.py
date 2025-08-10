@@ -8,6 +8,8 @@ import time
 import logging
 import argparse
 from pathlib import Path
+import json
+import sys
 
 # --- 日誌設定 ---
 logging.basicConfig(
@@ -16,9 +18,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 log = logging.getLogger('mock_transcriber_tool')
-
-import json
-import sys
 
 def do_mock_transcription(output_file_path: str):
     """
