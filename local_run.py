@@ -103,12 +103,38 @@ def main():
     log.info("🚀 Local YouTube Test Runner: 啟動...")
     orchestrator_proc = None
     try:
-        # 1. 啟動協調器 (在真實模式下)
-        log.info("--- 步驟 1/6: 啟動協調器 (真實模式) ---")
-        cmd = [sys.executable, "orchestrator.py", "--no-mock"]
+        # --- JULES 於 2025-08-10 的修改：從 config.json 讀取金鑰 ---
+        log.info("--- 步驟 1/6: 正在讀取 config.json 以設定 API 金鑰 ---")
 
-        # 將 GOOGLE_API_KEY 從當前環境傳遞給子程序
+        # 複製當前環境變數，我們將在此基礎上進行修改
         proc_env = os.environ.copy()
+        config_path = Path("config.json")
+        api_key_placeholder = "在此處填入您的 GOOGLE API 金鑰"
+
+        if config_path.exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+
+                api_key = config_data.get("GOOGLE_API_KEY")
+
+                if api_key and api_key != api_key_placeholder:
+                    log.info("✅ 成功從 config.json 讀取 GOOGLE_API_KEY。")
+                    proc_env["GOOGLE_API_KEY"] = api_key
+                else:
+                    log.warning("⚠️  警告：在 config.json 中未找到有效的 GOOGLE_API_KEY。")
+                    log.warning("YouTube 相關功能將被停用。請在 config.json 中設定您的金鑰以啟用完整功能。")
+            except (json.JSONDecodeError, IOError) as e:
+                log.error(f"❌ 讀取或解析 config.json 時發生錯誤: {e}")
+                log.warning("將繼續啟動，但 YouTube 功能將無法使用。")
+        else:
+            log.warning("⚠️  警告：找不到 config.json 檔案。")
+            log.warning("YouTube 相關功能將被停用。請建立 config.json 並設定您的 GOOGLE_API_KEY。")
+        # --- 金鑰讀取設定結束 ---
+
+        # 1. 啟動協調器 (在真實模式下)
+        log.info("--- 步驟 1.5/6: 啟動協調器 (真實模式) ---")
+        cmd = [sys.executable, "orchestrator.py", "--no-mock"]
 
         # 根據作業系統平台，設定對應的參數以建立新的程序組
         popen_kwargs = {

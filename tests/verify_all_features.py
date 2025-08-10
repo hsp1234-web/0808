@@ -113,6 +113,11 @@ def run_e2e_test(app_url: str):
             expect(progress_container.locator("#model-progress-text")).to_contain_text("下載完成")
             print("✅ 模型下載進度條顯示與完成狀態驗證成功。")
 
+            # JULES' FIX: Disable timestamps to match original test expectation
+            print("▶️  停用時間戳記以進行測試...")
+            page.locator("#timestamp-toggle").click()
+            print("✅ 時間戳記已停用。")
+
             start_btn = page.locator("#start-processing-btn")
             expect(start_btn).to_be_enabled()
             start_btn.click()

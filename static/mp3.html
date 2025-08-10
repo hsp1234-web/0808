@@ -364,8 +364,14 @@
 
         <!-- 即時轉錄輸出 -->
         <div id="transcript-container" class="card">
-            <h2>📝 即時轉錄輸出</h2>
-            <div id="transcript-output" class="transcript-output">等待任務開始...</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <h2>📝 即時轉錄輸出</h2>
+                <div class="toggle-switch-container" style="display: flex; align-items: center; gap: 8px;">
+                    <label for="timestamp-toggle" style="font-weight: 500; font-size: 0.9em; cursor: pointer;">顯示時間戳記</label>
+                    <input type="checkbox" id="timestamp-toggle" checked>
+                </div>
+            </div>
+            <div id="transcript-output" class="transcript-output" style="margin-top: 16px;">等待任務開始...</div>
         </div>
 
         <!-- 系統日誌查看器 -->
@@ -525,11 +531,19 @@
                     }
                 } else if (type === 'TRANSCRIPTION_UPDATE') {
                     if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
+                        const timestampToggle = document.getElementById('timestamp-toggle');
                         const p = document.createElement('p');
                         p.dataset.start = payload.start;
-                        p.textContent = `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] ${payload.text}`;
-                        transcriptOutput.appendChild(p);
-                        transcriptOutput.scrollTop = transcriptOutput.scrollHeight;
+
+                        let lineContent = '';
+                        if (timestampToggle.checked) {
+                            lineContent += `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] `;
+                        }
+                        lineContent += payload.text;
+
+                        p.textContent = lineContent;
+                        transcriptOutput.prepend(p); // JULES: Changed from appendChild to prepend for reverse chronological order
+                        transcriptOutput.scrollTop = 0; // Scroll to top to see the latest entry
                     }
                 }
             };
@@ -710,13 +724,28 @@
                             geminiModelSelect.appendChild(option);
                         });
                     } else {
+                        // --- JULES 於 2025-08-10 的修改 ---
                         apiKeyPrompt.classList.remove('hidden');
                         apiKeySuccess.classList.add('hidden');
+                        // 從 API 回應中動態顯示原因
+                        if (status.reason) {
+                            apiKeyPrompt.innerHTML = `
+                                <p style="margin-top: 0; font-weight: bold;">功能異常：API 金鑰設定</p>
+                                <p style="margin-bottom: 0;">${status.reason}</p>
+                            `;
+                        } else {
+                            // 為舊版 API 或非預期錯誤提供備用訊息
+                             apiKeyPrompt.innerHTML = `
+                                <p style="margin-top: 0; font-weight: bold;">後端尚未設定 Google API 金鑰</p>
+                                <p style="margin-bottom: 0;">請設定 <code>GOOGLE_API_KEY</code> 環境變數，然後重新啟動伺服器以啟用此功能。</p>
+                            `;
+                        }
+                        // --- 修改結束 ---
                     }
                 } catch (error) {
                     console.error("初始化 YouTube 分頁時出錯:", error);
                     apiKeyPrompt.classList.remove('hidden');
-                    apiKeyPrompt.querySelector('p').textContent = `無法連接後端: ${error.message}`;
+                    apiKeyPrompt.innerHTML = `<p>無法連接後端或解析 API 狀態: ${error.message}</p>`;
                 }
             };
 
@@ -773,6 +802,75 @@
             // --- Init ---
             setupWebSocket();
             updateFileDisplay();
+
+            // --- JULES'S ADDITION: Log Viewer Logic ---
+            const fetchLogsBtn = document.getElementById('fetch-logs-btn');
+            const logOutput = document.getElementById('log-output');
+            const copyLogsBtn = document.getElementById('copy-logs-btn');
+
+            fetchLogsBtn.addEventListener('click', async () => {
+                logOutput.textContent = '載入中...';
+                try {
+                    const levels = Array.from(document.querySelectorAll('input[name="log-level"]:checked')).map(el => el.value);
+                    const sources = Array.from(document.querySelectorAll('input[name="log-source"]:checked')).map(el => el.value);
+                    const params = new URLSearchParams();
+                    levels.forEach(level => params.append('level', level));
+                    sources.forEach(source => params.append('source', source));
+
+                    const response = await fetch(`/api/logs?${params.toString()}`);
+                    if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
+
+                    const logs = await response.json();
+                    if (logs.length === 0) {
+                        logOutput.textContent = '找不到符合條件的日誌。';
+                    } else {
+                        logOutput.textContent = logs.map(log => `[${new Date(log.timestamp).toLocaleString()}] [${log.source}] [${log.level}] ${log.message}`).join('\n');
+                    }
+                } catch (error) {
+                    logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
+                }
+            });
+
+            copyLogsBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(logOutput.textContent)
+                    .then(() => alert('日誌已複製到剪貼簿！'))
+                    .catch(err => alert('複製失敗: ' + err));
+            });
+            // --- END LOG VIEWER LOGIC ---
+
+            // --- JULES's ADDITION: System Stats Polling ---
+            const cpuLabel = document.getElementById('cpu-label');
+            const ramLabel = document.getElementById('ram-label');
+            const gpuLabel = document.getElementById('gpu-label');
+            const gpuDisplay = document.getElementById('gpu-display'); // The one in the top dashboard
+
+            const updateSystemStats = async () => {
+                try {
+                    const response = await fetch('/api/system_stats');
+                    if (!response.ok) return; // Fail silently
+                    const stats = await response.json();
+
+                    cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
+                    ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
+
+                    if (stats.gpu_detected) {
+                        gpuLabel.textContent = `${stats.gpu_usage !== null ? stats.gpu_usage.toFixed(1) + '%' : 'N/A'}`;
+                        gpuDisplay.textContent = '已偵測到';
+                    } else {
+                        gpuLabel.textContent = '--%';
+                        gpuDisplay.textContent = '未偵測到';
+                    }
+
+                } catch (error) {
+                    // console.error('Error fetching system stats:', error);
+                    // Do not log to avoid spamming console on connection drops
+                }
+            };
+
+            // Call it once immediately, then set an interval
+            updateSystemStats();
+            setInterval(updateSystemStats, 2000); // Update every 2 seconds
+            // --- END ADDITION ---
         });
     </script>
 </body>

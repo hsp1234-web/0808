@@ -82,6 +82,7 @@ from datetime import datetime
 import threading
 from collections import deque
 import re
+import json
 from IPython.display import clear_output
 from google.colab import output as colab_output, userdata
 
@@ -240,22 +241,46 @@ class ServerManager:
             # 在 Colab 環境中，我們總是希望以真實模式運行
             launch_command = [sys.executable, "orchestrator.py", "--no-mock"]
 
-            # --- JULES 於 2025-08-10 的修復：傳遞 Colab Secret 中的 API 金鑰 ---
-            # 1. 準備一個繼承自當前環境的變數字典
+            # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
-            # 2. 從 Colab Secrets 讀取金鑰
-            try:
-                google_api_key = userdata.get('GOOGLE_API_KEY')
-                if google_api_key:
-                    # 3. 如果金鑰存在，將其加入到子程序的環境變數中
-                    process_env['GOOGLE_API_KEY'] = google_api_key
-                    self._log_manager.log("SUCCESS", "✅ 成功讀取 Colab Secret (GOOGLE_API_KEY) 並設定為環境變數。")
-                else:
-                    self._log_manager.log("WARN", "⚠️ 在 Colab Secrets 中未找到 GOOGLE_API_KEY。YouTube 功能將無法使用。")
-            except Exception as e:
-                self._log_manager.log("ERROR", f"讀取 Colab Secret 時發生錯誤: {e}")
-            # --- 修復結束 ---
+            google_api_key = None
+            key_source = None
 
+            # 1. 優先從 Colab Secrets 讀取金鑰
+            try:
+                key_from_secret = userdata.get('GOOGLE_API_KEY')
+                if key_from_secret:
+                    google_api_key = key_from_secret
+                    key_source = "Colab Secret"
+            except Exception as e:
+                self._log_manager.log("WARN", f"讀取 Colab Secret 時發生錯誤: {e}。將嘗試從 config.json 讀取。")
+
+            # 2. 如果 Colab Secrets 中沒有，則從 config.json 讀取
+            if not google_api_key:
+                config_path = project_path / "config.json"
+                if config_path.is_file():
+                    try:
+                        self._log_manager.log("INFO", "正在嘗試從 config.json 讀取 API 金鑰...")
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+
+                        key_from_config = config_data.get("GOOGLE_API_KEY")
+                        api_key_placeholder = "在此處填入您的 GOOGLE API 金鑰"
+
+                        if key_from_config and key_from_config != api_key_placeholder:
+                            google_api_key = key_from_config
+                            key_source = "config.json"
+                    except (json.JSONDecodeError, IOError) as e:
+                        self._log_manager.log("ERROR", f"讀取或解析 config.json 時發生錯誤: {e}")
+
+            # 3. 根據讀取結果設定環境變數或顯示警告
+            if google_api_key:
+                process_env['GOOGLE_API_KEY'] = google_api_key
+                self._log_manager.log("SUCCESS", f"✅ 成功從 {key_source} 讀取 GOOGLE_API_KEY 並設定為環境變數。")
+            else:
+                self._log_manager.log("WARN", "⚠️ 在 Colab Secrets 和 config.json 中均未找到有效的 GOOGLE_API_KEY。")
+                self._log_manager.log("WARN", "YouTube 相關功能將被停用。請設定 Colab Secret 或在專案中提供 config.json 以啟用完整功能。")
+            # --- 金鑰讀取邏輯結束 ---
 
             self.server_process = subprocess.Popen(
                 launch_command,

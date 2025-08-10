@@ -409,9 +409,16 @@ async def get_youtube_status():
     """檢查 YouTube 功能是否已啟用 (透過檢查 GOOGLE_API_KEY)。"""
     # 在模擬模式下，永遠回傳啟用
     if IS_MOCK_MODE:
-        return {"enabled": True}
+        return {"enabled": True, "reason": "模擬模式已啟用。"}
+
     api_key = os.environ.get("GOOGLE_API_KEY")
-    return {"enabled": bool(api_key)}
+    if api_key:
+        return {"enabled": True}
+    else:
+        return {
+            "enabled": False,
+            "reason": "後端尚未設定 Google API 金鑰。請在 config.json 中設定您的 GOOGLE_API_KEY，然後重新啟動伺服器以啟用此功能。"
+        }
 
 @app.get("/api/youtube/models")
 async def get_youtube_models():
@@ -595,11 +602,13 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
                     try:
                         data = json.loads(line)
-                        message = {
-                            "type": "TRANSCRIPTION_UPDATE",
-                            "payload": {"task_id": task_id, **data}
-                        }
-                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                        # JULES' FIX: 只轉發 'segment' 類型的訊息以避免非預期的 UI 元素
+                        if data.get("type") == "segment":
+                            message = {
+                                "type": "TRANSCRIPTION_UPDATE",
+                                "payload": {"task_id": task_id, **data}
+                            }
+                            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
                     except json.JSONDecodeError:
                         log.warning(f"[執行緒] 無法解析來自 transcriber 的 JSON 行: {line}")
 
