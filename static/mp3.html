@@ -3,253 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>音訊轉錄儀</title>
-    <!-- 移除了所有外部 CDN 依賴，使用內聯樣式 -->
+    <title>鳳凰轉錄儀 v3.2</title>
     <style>
-        /* --- 變數與基本設定 --- */
         :root {
-            --bg-color: #F8F9FA;
-            --text-color: #202124;
-            --card-bg-color: rgba(255, 255, 255, 0.85);
-            --card-border-color: #e0e0e0;
-            --button-bg-color: #007bff;
-            --button-hover-bg-color: #0056b3;
-            --disabled-bg-color: #ccc;
-            --progress-bar-bg: #e9ecef;
-            --success-color: #28a745;
-            --status-green: #28a745;
-            --status-yellow: #ffc107;
+            --bg-color: #F8F9FA; --text-color: #202124; --card-bg-color: rgba(255, 255, 255, 0.85);
+            --card-border-color: #e0e0e0; --button-bg-color: #007bff; --button-hover-bg-color: #0056b3;
+            --disabled-bg-color: #ccc; --progress-bar-bg: #e9ecef; --success-color: #28a745;
+            --status-green: #28a745; --status-yellow: #ffc107; --status-red: #dc3545;
         }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            padding: 20px;
-            font-size: 100%;
-            line-height: 1.5;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; font-size: 100%; line-height: 1.5; }
         .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; gap: 24px; }
-
-        /* --- 卡片與佈局 --- */
-        .card {
-            border: 1px solid var(--card-border-color);
-            border-radius: 12px;
-            padding: 24px;
-            background-color: var(--card-bg-color);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .grid-2-col {
-            display: grid;
-            grid-template-columns: 1fr; /* Default to 1 column */
-            gap: 24px;
-        }
-        @media (min-width: 768px) { /* 2 columns on medium screens and up */
-            .grid-2-col {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
+        .card { border: 1px solid var(--card-border-color); border-radius: 12px; padding: 24px; background-color: var(--card-bg-color); backdrop-filter: blur(10px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .grid-2-col { display: grid; grid-template-columns: 1fr; gap: 24px; }
+        @media (min-width: 768px) { .grid-2-col { grid-template-columns: 1fr 1fr; } }
         .flex-col { display: flex; flex-direction: column; gap: 16px; }
         h1 { font-size: 1.8em; font-weight: 700; }
         h2 { font-size: 1.3em; font-weight: 600; margin-bottom: 12px; }
-
-        /* --- 分頁樣式 --- */
-        .tab-container {
-            display: flex;
-            gap: 8px;
-            padding: 0;
-        }
-        .tab-button {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            background-color: #e9ecef;
-            color: var(--text-color);
-            opacity: 0.8;
-            font-size: 1em;
-            font-weight: 600;
-            border-radius: 8px;
-            transition: all 0.2s;
-        }
-        .tab-button:hover {
-            opacity: 1;
-        }
-        .tab-button.active {
-            background-color: var(--button-bg-color);
-            color: white;
-            opacity: 1;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .tab-content {
-            display: none; /* 預設隱藏 */
-        }
-        .tab-content.active {
-            display: block; /* 顯示作用中的分頁 */
-        }
-
-        @media (max-width: 767px) {
-            body { padding: 10px; }
-            .card { padding: 16px; }
-            h1 { font-size: 1.5em; }
-            h2 { font-size: 1.2em; }
-        }
-
-        /* --- 表單與按鈕 --- */
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            background-color: var(--button-bg-color);
-            color: white;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
+        .tab-container { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; }
+        .tab-button { padding: 10px 20px; cursor: pointer; border: none; background-color: #e9ecef; color: var(--text-color); opacity: 0.8; font-size: 1em; font-weight: 600; border-radius: 8px; transition: all 0.2s; }
+        .tab-button:hover { opacity: 1; }
+        .tab-button.active { background-color: var(--button-bg-color); color: white; opacity: 1; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background-color: var(--button-bg-color); color: white; font-weight: 500; transition: all 0.2s; }
         button:hover:not(:disabled) { background-color: var(--button-hover-bg-color); transform: translateY(-1px); }
         button:disabled { background-color: var(--disabled-bg-color); cursor: not-allowed; transform: none; }
-        select {
-            width: 100%;
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-        }
-        .file-drop-zone {
-            border: 2px dashed #ccc;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            cursor: pointer;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
-        .file-drop-zone:hover { background-color: #f0f8ff; border-color: var(--button-bg-color); }
+        select, input[type="text"], input[type="password"], input[type="number"], textarea { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
         .hidden { display: none; }
-
-        /* --- 進度條 --- */
-        .progress-container {
-            width: 100%;
-            background-color: var(--progress-bar-bg);
-            border-radius: 8px;
-            margin-top: 16px;
-            overflow: hidden;
-            position: relative;
-            height: 28px;
-            display: flex;
-            align-items: center;
-        }
-        .progress-bar {
-            height: 100%;
-            width: 0%;
-            background-color: var(--button-bg-color);
-            transition: width 0.2s ease-in-out;
-        }
-        .progress-text {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            color: var(--text-color);
-            font-weight: 600;
-            line-height: 28px;
-        }
-
-        /* --- 儀表板 --- */
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-        .stat-item { font-size: 0.9em; }
-        .status-light { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .status-green { background-color: var(--status-green); box-shadow: 0 0 6px var(--status-green); }
-        .status-yellow { background-color: var(--status-yellow); box-shadow: 0 0 6px var(--status-yellow); }
-
-        /* --- 任務列表 --- */
         .task-list { min-height: 60px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-        .task-item {
-            padding: 12px;
-            border-radius: 8px;
-            background-color: #f9f9f9;
-            border: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .task-filename { font-weight: 600; }
+        .task-item { padding: 12px; border-radius: 8px; background-color: #f9f9f9; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .task-filename { font-weight: 600; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 150px; }
         .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
-
-        /* --- 任務列表中的按鈕 --- */
-        .task-list .task-actions a {
-            text-decoration: none;
-            padding: 5px 12px;
-            border-radius: 6px;
-            color: white;
-            font-size: 0.9em;
-            transition: all 0.2s;
-            display: inline-block;
-            border: none;
-            font-weight: 500;
-            text-align: center;
-        }
-        .task-list .task-actions a:hover {
-            transform: translateY(-1px);
-            opacity: 0.9;
-        }
-        .task-list .btn-preview {
-             background-color: var(--button-bg-color); /* Blue */
-        }
-        .task-list .btn-download {
-             background-color: var(--success-color); /* Green */
-        }
-
-        /* --- 即時輸出 --- */
-        .transcript-output {
-            min-height: 100px;
-            background-color: #e9ecef;
-            padding: 16px;
-            border-radius: 8px;
-            white-space: pre-wrap;
-            font-family: monospace;
-            color: #495057;
-        }
-        .transcript-output p {
-            margin: 0 0 0.5em 0; /* 為每個段落增加一些底邊距，增加可讀性 */
-            line-height: 1.6; /* 增加行高 */
-        }
-        .log-controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px 20px;
-            align-items: center;
-        }
+        .task-actions { display: flex; gap: 8px; }
+        .task-actions a, .task-actions button { text-decoration: none; padding: 5px 12px; border-radius: 6px; color: white; font-size: 0.9em; display: inline-block; border: none; font-weight: 500; text-align: center; cursor: pointer; }
+        .task-actions a:hover, .task-actions button:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.9; }
+        .btn-download { background-color: var(--success-color); }
+        .btn-send-to-whisper { background-color: #ffc107; color: #212529; }
+        .api-key-status-box { padding: 10px; border-radius: 6px; margin-top: 10px; font-weight: bold; }
+        .api-key-status-box.valid { border: 1px solid var(--status-green); background-color: #e6ffed; color: #155724; }
+        .api-key-status-box.invalid { border: 1px solid var(--status-red); background-color: #f8d7da; color: #721c24; }
+        .api-key-status-box.validating { border: 1px solid var(--status-yellow); background-color: #fff3cd; color: #856404; }
     </style>
 </head>
 <body>
     <div id="app" class="container">
-        <!-- 標題與控制項 -->
-        <header class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-            <h1>音訊轉錄儀</h1>
-            <div>
-                <span>字體:</span>
-                <button id="zoom-out-btn" style="padding: 5px 10px;">-</button>
-                <span id="font-size-display" style="display: inline-block; width: 50px; text-align: center; font-weight: bold;">100%</span>
-                <button id="zoom-in-btn" style="padding: 5px 10px;">+</button>
-            </div>
-        </header>
+        <header class="card"><h1>鳳凰轉錄儀</h1></header>
 
-        <!-- 全域儀表板 -->
-        <div class="card">
-            <h2>📊 全域儀表板</h2>
-            <div class="dashboard-grid">
-                <div class="stat-item">
-                    <span id="status-light" class="status-light status-green"></span>
-                    <strong>狀態:</strong> <span id="status-text">準備就緒</span>
-                </div>
-                <div class="stat-item"><strong>模型:</strong> <span id="model-display">medium</span></div>
-                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">未偵測到</span></div>
-            </div>
-            <div class="dashboard-grid" style="margin-top: 16px;">
-                 <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
-                 <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
-                 <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
-            </div>
-        </div>
-
-        <!-- 功能分頁導覽 -->
         <div class="card">
             <div class="tab-container">
                 <button class="tab-button active" data-tab="local-file-tab">📁 本機檔案轉錄</button>
@@ -257,11 +56,10 @@
             </div>
         </div>
 
-        <!-- 分頁內容 -->
         <div id="local-file-tab" class="tab-content active">
-            <div class="grid-2-col">
-                <div class="card flex-col">
-                    <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
+            <div class="card">
+                <h2>⚙️ Whisper 模型設定</h2>
+                 <div class="flex-col">
                     <div>
                         <label for="model-select">模型大小</label>
                         <select id="model-select">
@@ -269,7 +67,6 @@
                             <option value="base">Base</option>
                             <option value="small">Small</option>
                             <option value="medium" selected>Medium (建議)</option>
-                            <option value="large-v2">Large-v2 (準確)</option>
                             <option value="large-v3">Large-v3 (最準確)</option>
                         </select>
                     </div>
@@ -281,597 +78,293 @@
                         </select>
                     </div>
                     <div>
-                        <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
-                        <input type="number" id="beam-size-input" value="5" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                        <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
+                        <label for="beam-size-input">光束大小 (Beam Size)</label>
+                        <input type="number" id="beam-size-input" value="5" min="1" max="10">
                     </div>
-                    <button id="confirm-settings-btn">✓ 確認設定</button>
-                    <!-- 模型下載進度條 -->
-                    <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
-                        <div id="model-progress-bar" class="progress-bar"></div>
-                        <span id="model-progress-text" class="progress-text"></span>
-                    </div>
-                </div>
-                <div class="card flex-col">
-                    <h2>📤 步驟 2: 上傳檔案</h2>
-                    <label for="file-input" class="file-drop-zone">
-                        點擊此處選擇檔案
-                    </label>
-                    <input id="file-input" type="file" multiple class="hidden">
-                    <div id="file-list"></div>
-                </div>
-            </div>
-            <div style="text-align: center; margin-top: 24px;">
-                <button id="start-processing-btn" disabled>✨ 請先選擇檔案</button>
-                <!-- 上傳進度條 -->
-                <div id="upload-progress-container" class="progress-container hidden">
-                    <div id="upload-progress-bar" class="progress-bar"></div>
-                    <span id="upload-progress-text" class="progress-text"></span>
                 </div>
             </div>
         </div>
 
         <div id="youtube-tab" class="tab-content">
             <div class="card">
-                <!-- 新增：API 金鑰狀態與設定區域 -->
                 <div id="api-key-area">
                     <h2>🔑 API 金鑰設定</h2>
-                    <div id="api-key-prompt" class="hidden" style="padding: 15px; border: 1px solid var(--status-yellow); border-radius: 8px; background-color: #fffbe6; margin-bottom: 20px;">
-                        <p style="margin-top: 0; font-weight: bold;">後端尚未設定 Google API 金鑰</p>
-                        <p style="margin-bottom: 0;">請設定 <code>GOOGLE_API_KEY</code> 環境變數，然後重新啟動伺服器以啟用此功能。</p>
+                    <p>請在此處輸入您的 Google API 金鑰以啟用 Gemini AI 分析功能。</p>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+                        <input type="password" id="google-api-key-input" placeholder="在此貼上您的 API 金鑰" style="flex-grow: 1;">
+                        <button id="validate-api-key-btn">驗證金鑰</button>
                     </div>
-                    <div id="api-key-success" class="hidden" style="padding: 15px; border: 1px solid var(--status-green); border-radius: 8px; background-color: #e6ffed;">
-                        <p style="margin-top: 0;">✅ <strong>API 金鑰已設定成功！</strong></p>
-                    </div>
+                    <div id="api-key-status" style="margin-top: 10px;"></div>
                 </div>
-
+                <hr style="margin: 24px 0;">
                 <h2>▶️ 輸入 YouTube 影片資訊</h2>
-                <fieldset id="youtube-controls-fieldset" disabled>
-                    <div class="flex-col">
-                        <div>
-                            <label for="youtube-urls-input">YouTube 影片網址 (可輸入多個，每行一個)</label>
-                            <textarea id="youtube-urls-input" rows="4" placeholder="例如：&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=another_video_id" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
-                        </div>
-                        <div>
-                            <label for="gemini-model-select">選擇 Gemini AI 模型</label>
-                            <select id="gemini-model-select">
-                                <option>等待從伺服器載入模型列表...</option>
-                            </select>
-                        </div>
+                <div class="flex-col">
+                    <div>
+                        <label for="youtube-urls-input">YouTube 影片網址 (可輸入多個，每行一個)</label>
+                        <textarea id="youtube-urls-input" rows="4" placeholder="例如：&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=another_video_id"></textarea>
                     </div>
-                </fieldset>
-            </div>
-            <div style="text-align: center; margin-top: 24px;">
-                <button id="start-youtube-processing-btn" disabled>🚀 請先設定 API 金鑰</button>
-            </div>
-        </div>
-
-        <!-- 任務儀表板 -->
-        <div class="grid-2-col">
-            <div class="card">
-                <h2>🔄 進行中任務</h2>
-                <div id="ongoing-tasks" class="task-list">
-                    <p id="no-ongoing-task-msg">暫無執行中任務</p>
+                    <fieldset id="youtube-controls-fieldset" disabled>
+                        <label for="gemini-model-select">選擇 Gemini AI 模型</label>
+                        <select id="gemini-model-select"><option>請先驗證 API 金鑰</option></select>
+                    </fieldset>
                 </div>
             </div>
-            <div class="card">
-                <h2>✅ 已完成任務</h2>
-                <div id="completed-tasks" class="task-list">
-                    <p id="no-completed-task-msg">尚無完成的任務</p>
+            <div style="text-align: center; margin-top: 24px; display: flex; gap: 15px; justify-content: center;">
+                <button id="start-youtube-download-only-btn">僅下載音訊</button>
+                <button id="start-youtube-processing-btn" disabled>🚀 進行 AI 分析</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 任務儀表板</h2>
+            <div class="grid-2-col">
+                <div>
+                    <h3>🔄 進行中</h3>
+                    <div id="ongoing-tasks" class="task-list"><p id="no-ongoing-task-msg">暫無執行中任務</p></div>
                 </div>
-            </div>
-        </div>
-
-        <!-- 即時轉錄輸出 -->
-        <div id="transcript-container" class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <h2>📝 即時轉錄輸出</h2>
-                <div class="toggle-switch-container" style="display: flex; align-items: center; gap: 8px;">
-                    <label for="timestamp-toggle" style="font-weight: 500; font-size: 0.9em; cursor: pointer;">顯示時間戳記</label>
-                    <input type="checkbox" id="timestamp-toggle" checked>
+                <div>
+                    <h3>✅ 已完成</h3>
+                    <div id="completed-tasks" class="task-list"><p id="no-completed-task-msg">尚無完成的任務</p></div>
                 </div>
-            </div>
-            <div id="transcript-output" class="transcript-output" style="margin-top: 16px;">等待任務開始...</div>
-        </div>
-
-        <!-- 系統日誌查看器 -->
-        <div id="log-viewer-card" class="card">
-            <h2>📜 系統日誌查看器</h2>
-            <div class="log-controls">
-                <strong>等級:</strong>
-                <label><input type="checkbox" name="log-level" value="INFO" checked> INFO</label>
-                <label><input type="checkbox" name="log-level" value="SUCCESS" checked> SUCCESS</label>
-                <label><input type="checkbox" name="log-level" value="WARN" checked> WARN</label>
-                <label><input type="checkbox" name="log-level" value="ERROR" checked> ERROR</label>
-                <label><input type="checkbox" name="log-level" value="CRITICAL" checked> CRITICAL</label>
-            </div>
-            <div class="log-controls" style="margin-top: 10px;">
-                <strong>來源:</strong>
-                <label><input type="checkbox" name="log-source" value="colab_setup" checked> Setup</label>
-                <label><input type="checkbox" name="log-source" value="orchestrator" checked> Orchestrator</label>
-                <label><input type="checkbox" name="log-source" value="api_server" checked> API Server</label>
-                <label><input type="checkbox" name="log-source" value="worker" checked> Worker</label>
-            </div>
-            <div style="margin-top: 16px; display: flex; gap: 10px;">
-                <button id="fetch-logs-btn">🔄 更新日誌</button>
-                <button id="copy-logs-btn">📋 複製日誌</button>
-            </div>
-            <pre id="log-output" class="transcript-output" style="margin-top: 16px; min-height: 200px; max-height: 500px; overflow-y: auto;">點擊「更新日誌」以載入...</pre>
-        </div>
-
-        <!-- 檔案預覽區 -->
-        <div id="preview-area" class="card hidden">
-            <h2>📄 檔案預覽</h2>
-            <button id="close-preview-btn" style="position: absolute; top: 15px; right: 15px; padding: 5px 10px; background-color: #6c757d;">關閉</button>
-            <div id="preview-content-wrapper" style="margin-top: 20px;">
-                <pre id="preview-content-text" class="transcript-output" style="min-height: 200px; max-height: 70vh; overflow-y: auto;"></pre>
-                <iframe id="preview-content-html" style="width: 100%; height: 70vh; border: 1px solid #ccc; border-radius: 8px;" class="hidden"></iframe>
             </div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- DOM 元素 ---
-            const fileInput = document.getElementById('file-input');
-            const fileListDisplay = document.getElementById('file-list');
-            const startBtn = document.getElementById('start-processing-btn');
-            const confirmBtn = document.getElementById('confirm-settings-btn');
-            const modelSelect = document.getElementById('model-select');
-            const languageSelect = document.getElementById('language-select');
-            const beamSizeInput = document.getElementById('beam-size-input');
-            const ongoingTasksContainer = document.getElementById('ongoing-tasks');
-            const completedTasksContainer = document.getElementById('completed-tasks');
-            const noOngoingTaskMsg = document.getElementById('no-ongoing-task-msg');
-            const noCompletedTaskMsg = document.getElementById('no-completed-task-msg');
-            const transcriptOutput = document.getElementById('transcript-output');
-            const modelDisplay = document.getElementById('model-display');
-            const statusText = document.getElementById('status-text');
-            const statusLight = document.getElementById('status-light');
-            const modelProgressContainer = document.getElementById('model-progress-container');
-            const modelProgressBar = document.getElementById('model-progress-bar');
-            const modelProgressText = document.getElementById('model-progress-text');
-            const previewArea = document.getElementById('preview-area');
-            const previewContentText = document.getElementById('preview-content-text');
-            const previewContentHtml = document.getElementById('preview-content-html');
-            const closePreviewBtn = document.getElementById('close-preview-btn');
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Global State ---
+        const socket = setupWebSocket();
+        const taskElements = new Map();
 
-            // YouTube Tab Elements
-            const apiKeyPrompt = document.getElementById('api-key-prompt');
-            const apiKeySuccess = document.getElementById('api-key-success');
-            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
-            const geminiModelSelect = document.getElementById('gemini-model-select');
-            const youtubeUrlsInput = document.getElementById('youtube-urls-input');
-            const startYoutubeBtn = document.getElementById('start-youtube-processing-btn');
+        // --- Element Cache ---
+        const getElement = (id) => document.getElementById(id);
+        const elements = {
+            // Whisper Tab
+            modelSelect: getElement('model-select'),
+            languageSelect: getElement('language-select'),
+            beamSizeInput: getElement('beam-size-input'),
+            // YouTube Tab
+            apiKeyInput: getElement('google-api-key-input'),
+            validateApiKeyBtn: getElement('validate-api-key-btn'),
+            apiKeyStatus: getElement('api-key-status'),
+            youtubeControlsFieldset: getElement('youtube-controls-fieldset'),
+            geminiModelSelect: getElement('gemini-model-select'),
+            youtubeUrlsInput: getElement('youtube-urls-input'),
+            startDownloadOnlyBtn: getElement('start-youtube-download-only-btn'),
+            startProcessingBtn: getElement('start-youtube-processing-btn'),
+            // Task Lists
+            ongoingTasks: getElement('ongoing-tasks'),
+            noOngoingTaskMsg: getElement('no-ongoing-task-msg'),
+            completedTasks: getElement('completed-tasks'),
+            noCompletedTaskMsg: getElement('no-completed-task-msg'),
+        };
 
-            // --- 狀態變數 ---
-            let uploadedFiles = [];
-            let socket;
-            const taskElements = new Map();
-            const modelStatus = {};
+        // --- WebSocket Logic ---
+        function setupWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+            const ws = new WebSocket(wsUrl);
+            ws.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
+            ws.onclose = () => setTimeout(setupWebSocket, 3000);
+            return ws;
+        }
 
-            // --- 核心邏輯 ---
-            const setupWebSocket = () => {
-                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
-                socket = new WebSocket(wsUrl);
+        function handleWebSocketMessage({ type, payload }) {
+            if (type === 'YOUTUBE_STATUS') handleYoutubeStatus(payload);
+            else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') handleTranscriptionStatus(type, payload);
+        }
 
-                socket.onopen = () => {
-                    console.log('WebSocket 連線成功');
-                    statusText.textContent = '已連線';
-                    statusLight.className = 'status-light status-green';
-                    initializeYouTubeTab(); // 初始化 YouTube 分頁
-                };
+        function sendWebSocketMessage(type, payload) {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type, payload }));
+            }
+        }
 
-                socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
-                socket.onclose = () => {
-                    console.log('WebSocket 連線已關閉');
-                    statusText.textContent = '已離線';
-                    statusLight.className = 'status-light status-yellow';
-                    setTimeout(setupWebSocket, 3000);
-                };
-                socket.onerror = (error) => {
-                    console.error('WebSocket 發生錯誤:', error);
-                    statusText.textContent = '連線錯誤';
-                };
-            };
+        // --- UI Update Logic ---
+        function createNewTaskElement(displayName, taskId, taskType) {
+            elements.noOngoingTaskMsg.classList.add('hidden');
+            const taskElement = document.createElement('div');
+            taskElement.className = 'task-item';
+            taskElement.innerHTML = `<span class="task-filename" title="${displayName}">${displayName} (${taskType})</span><span class="task-status">已建立</span>`;
+            elements.ongoingTasks.appendChild(taskElement);
+            taskElements.set(taskId, taskElement);
+            return taskElement;
+        }
 
-            const handleWebSocketMessage = (message) => {
-                const { type, payload } = message;
-
-                if (type === 'DOWNLOAD_STATUS') {
-                    handleDownloadStatus(payload);
-                } else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
-                    handleTranscriptionUpdate(type, payload);
-                } else if (type === 'YOUTUBE_STATUS') {
-                    handleYoutubeStatus(payload);
-                }
-            };
-
-            const handleDownloadStatus = (payload) => {
-                if (!modelStatus[payload.model]) modelStatus[payload.model] = {};
-                modelStatus[payload.model].status = payload.status;
-                modelProgressContainer.classList.remove('hidden');
-                if (payload.status === 'downloading') {
-                    const percent = payload.percent || 0;
-                    modelProgressBar.style.width = `${percent}%`;
-                    modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
-                } else if (payload.status === 'completed') {
-                    modelProgressBar.style.width = '100%';
-                    modelProgressText.textContent = '下載完成';
-                } else if (payload.status === 'failed') {
-                    modelProgressBar.style.width = '100%';
-                    modelProgressBar.style.backgroundColor = '#dc3545';
-                    modelProgressText.textContent = `下載失敗: ${payload.error}`;
-                }
-            };
-
-            const handleTranscriptionUpdate = (type, payload) => {
-                if (!payload || !payload.task_id) return;
-                let taskElement = taskElements.get(payload.task_id);
-                if (!taskElement) {
-                     // 如果找不到，可能是因為這是個依賴任務，我們需要用它的 payload 中的檔名來建立 taskElement
-                    const filename = payload.filename || payload.task_id;
-                    taskElement = createNewTaskElement(filename, payload.task_id, '轉錄');
-                }
-                const statusSpan = taskElement.querySelector('.task-status');
-
-                if (type === 'TRANSCRIPTION_STATUS') {
-                    if (payload.status === 'starting') {
-                        statusSpan.textContent = '轉錄中...';
-                        transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
-                    } else if (payload.status === 'completed') {
-                        statusSpan.innerHTML = '';
-                        const buttonGroup = createActionButtons(payload.task_id, 'text/plain', '.txt');
-                        statusSpan.appendChild(buttonGroup);
-                        completedTasksContainer.appendChild(taskElement);
-                        if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
-                    } else if (payload.status === 'failed') {
-                        statusSpan.textContent = `❌ 失敗: ${payload.error}`;
-                    }
-                } else if (type === 'TRANSCRIPTION_UPDATE') {
-                    if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
-                        const timestampToggle = document.getElementById('timestamp-toggle');
-                        const p = document.createElement('p');
-                        p.dataset.start = payload.start;
-
-                        let lineContent = '';
-                        if (timestampToggle.checked) {
-                            lineContent += `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] `;
-                        }
-                        lineContent += payload.text;
-
-                        p.textContent = lineContent;
-                        transcriptOutput.prepend(p); // JULES: Changed from appendChild to prepend for reverse chronological order
-                        transcriptOutput.scrollTop = 0; // Scroll to top to see the latest entry
-                    }
-                }
-            };
-
-            const handleYoutubeStatus = (payload) => {
-                if (!payload || !payload.task_id) return;
-                let taskElement = taskElements.get(payload.task_id);
-                 if (!taskElement) {
-                    const url = payload.url || payload.message || payload.task_id;
-                    const type = payload.status === 'downloading' ? '下載' : 'AI分析';
-                    taskElement = createNewTaskElement(url, payload.task_id, type);
-                }
-                const statusSpan = taskElement.querySelector('.task-status');
-                statusSpan.textContent = payload.message || payload.status;
-
-                if (payload.status === 'completed') {
-                    statusSpan.innerHTML = '';
-                    // JULES: YouTube 報告現在是 PDF 格式
-                    const buttonGroup = createActionButtons(payload.task_id, 'application/pdf', '.pdf');
-                    statusSpan.appendChild(buttonGroup);
-                    completedTasksContainer.appendChild(taskElement);
-                    if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
-                } else if (payload.status === 'failed') {
-                    statusSpan.textContent = `❌ 失敗: ${payload.error}`;
-                }
-            };
-
-            const createActionButtons = (taskId, previewType, extension) => {
+        function handleTranscriptionStatus(type, payload) {
+            if (!payload || !payload.task_id) return;
+            let taskElement = taskElements.get(payload.task_id);
+            if (!taskElement) {
+                taskElement = createNewTaskElement(payload.filename || payload.task_id, payload.task_id, '轉錄');
+            }
+            const statusSpan = taskElement.querySelector('.task-status');
+            if (type === 'TRANSCRIPTION_STATUS' && payload.status === 'completed') {
+                statusSpan.innerHTML = '';
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'task-actions';
-                const previewBtn = document.createElement('a');
-                previewBtn.className = 'btn-preview';
-                previewBtn.textContent = '預覽';
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `/api/download/${payload.task_id}`;
+                downloadBtn.className = 'btn-download';
+                downloadBtn.textContent = '下載產出';
+                buttonGroup.appendChild(downloadBtn);
+                statusSpan.appendChild(buttonGroup);
+                elements.completedTasks.appendChild(taskElement);
+                elements.noCompletedTaskMsg.classList.add('hidden');
+            } else {
+                 statusSpan.textContent = payload.status === 'starting' ? '轉錄中...' : `❌ 失敗: ${payload.error}`;
+            }
+        }
 
-                const isPdf = previewType === 'application/pdf';
-
-                if (isPdf) {
-                    // 對於 PDF 報告 (YouTube)，直接連結到新分頁開啟
-                    previewBtn.href = `/api/download/${taskId}`;
-                    previewBtn.target = '_blank';
-                } else {
-                    // 對於文字轉錄 (本地檔案)，維持頁內預覽
-                    previewBtn.href = `#preview-area`;
-                    previewBtn.addEventListener('click', async (e) => {
-                        e.preventDefault();
-                        previewArea.classList.remove('hidden');
-                        previewArea.scrollIntoView();
-
-                        previewContentText.classList.remove('hidden');
-                        previewContentHtml.classList.add('hidden');
-
-                        previewContentText.textContent = '正在載入預覽...';
-                        try {
-                            const response = await fetch(`/api/download/${taskId}`);
-                            if (!response.ok) throw new Error('無法獲取檔案內容');
-                            previewContentText.textContent = await response.text();
-                        } catch (error) {
-                            previewContentText.textContent = `預覽載入失敗: ${error.message}`;
-                        }
-                    });
-                }
-
+        function handleYoutubeStatus(payload) {
+            const taskId = payload.task_id;
+            let taskElement = taskElements.get(taskId) || taskElements.get(payload.dependent_task_id);
+            if (!taskElement) {
+                const type = payload.status === 'downloading' ? '下載' : 'AI分析';
+                taskElement = createNewTaskElement(payload.url || payload.message || taskId, taskId, type);
+            }
+            const statusSpan = taskElement.querySelector('.task-status');
+            statusSpan.textContent = payload.message || payload.status;
+            if (payload.status === 'completed') {
+                statusSpan.innerHTML = '';
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'task-actions';
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `/api/download/${taskId}`;
                 downloadBtn.className = 'btn-download';
-                downloadBtn.textContent = '下載';
-                const taskElement = taskElements.get(taskId);
-                const originalFilename = taskElement.querySelector('.task-filename').textContent;
-                const baseName = originalFilename.substring(0, originalFilename.lastIndexOf('.')) || originalFilename;
-                downloadBtn.download = `${baseName}_result${extension}`;
-
-                buttonGroup.appendChild(previewBtn);
+                downloadBtn.textContent = '下載產出';
                 buttonGroup.appendChild(downloadBtn);
-                return buttonGroup;
-            };
-
-            const createNewTaskElement = (displayName, taskId, taskType) => {
-                if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
-                const taskElement = document.createElement('div');
-                taskElement.className = 'task-item';
-                taskElement.innerHTML = `<span class="task-filename" title="${displayName}">${displayName} (${taskType})</span><span class="task-status">已建立</span>`;
-                ongoingTasksContainer.appendChild(taskElement);
-                taskElements.set(taskId, taskElement);
-                return taskElement;
-            };
-
-            const updateFileDisplay = () => {
-                fileListDisplay.innerHTML = '';
-                if (uploadedFiles.length === 0) {
-                    fileListDisplay.innerHTML = '<p style="color: #666; text-align: center;">尚未選擇任何檔案</p>';
-                } else {
-                    uploadedFiles.forEach((file, index) => {
-                        const fileElement = document.createElement('div');
-                        fileElement.className = 'task-item';
-                        fileElement.innerHTML = `<span class="task-filename">${file.name}</span><button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>`;
-                        fileListDisplay.appendChild(fileElement);
-                    });
+                if (payload.message === "僅下載音訊完成。") {
+                    const sendBtn = document.createElement('button');
+                    sendBtn.className = 'btn-send-to-whisper';
+                    sendBtn.textContent = '轉錄';
+                    sendBtn.onclick = () => initiateWhisperTranscription(payload.result.output_path, payload.result.video_title);
+                    buttonGroup.appendChild(sendBtn);
                 }
-                document.querySelectorAll('.remove-file-btn').forEach(button => {
-                    button.addEventListener('click', (e) => {
-                        const indexToRemove = parseInt(e.target.dataset.index, 10);
-                        uploadedFiles.splice(indexToRemove, 1);
-                        updateFileDisplay();
-                    });
+                statusSpan.appendChild(buttonGroup);
+                elements.completedTasks.appendChild(taskElement);
+                elements.noCompletedTaskMsg.classList.add('hidden');
+            } else if (payload.status === 'failed') {
+                statusSpan.textContent = `❌ 失敗: ${payload.error}`;
+            }
+        }
+
+        // --- Core Feature Logic ---
+        async function validateApiKey() {
+            const apiKey = elements.apiKeyInput.value.trim();
+            if (!apiKey) {
+                elements.apiKeyStatus.innerHTML = `<div class="api-key-status-box invalid">請輸入 API 金鑰。</div>`;
+                return;
+            }
+            elements.apiKeyStatus.innerHTML = `<div class="api-key-status-box validating">正在驗證金鑰...</div>`;
+            elements.validateApiKeyBtn.disabled = true;
+            try {
+                const response = await fetch('/api/youtube/set_api_key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey })
                 });
-                startBtn.disabled = uploadedFiles.length === 0;
-                startBtn.textContent = uploadedFiles.length > 0 ? `✨ 開始處理 ${uploadedFiles.length} 個檔案` : '✨ 請先選擇檔案';
-            };
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || '驗證失敗');
+                elements.apiKeyStatus.innerHTML = `<div class="api-key-status-box valid">✅ ${result.message}</div>`;
+                elements.youtubeControlsFieldset.disabled = false;
+                elements.startProcessingBtn.disabled = false;
+                await loadGeminiModels();
+            } catch (error) {
+                elements.apiKeyStatus.innerHTML = `<div class="api-key-status-box invalid">❌ ${error.message}</div>`;
+                elements.youtubeControlsFieldset.disabled = true;
+                elements.startProcessingBtn.disabled = true;
+            } finally {
+                elements.validateApiKeyBtn.disabled = false;
+            }
+        }
 
-            fileInput.addEventListener('change', () => {
-                const newFiles = Array.from(fileInput.files);
-                newFiles.forEach(newFile => {
-                    if (!uploadedFiles.some(existingFile => existingFile.name === newFile.name)) {
-                        uploadedFiles.push(newFile);
+        async function loadGeminiModels() {
+            try {
+                const response = await fetch('/api/youtube/models');
+                if (!response.ok) throw new Error('無法載入模型');
+                const data = await response.json();
+                elements.geminiModelSelect.innerHTML = '';
+                data.models.forEach(model => {
+                    elements.geminiModelSelect.innerHTML += `<option value="${model.id}">${model.name}</option>`;
+                });
+            } catch (error) {
+                elements.geminiModelSelect.innerHTML = `<option>${error.message}</option>`;
+            }
+        }
+
+        async function startYoutubeJob(downloadOnly) {
+            const urls = elements.youtubeUrlsInput.value.split('\\n').filter(url => url.trim());
+            if (urls.length === 0) return alert('請輸入至少一個 YouTube 網址。');
+            const payload = { urls, download_only };
+            if (!downloadOnly) payload.model = elements.geminiModelSelect.value;
+            elements.startDownloadOnlyBtn.disabled = true;
+            elements.startProcessingBtn.disabled = true;
+            try {
+                const response = await fetch('/api/youtube/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
+                const result = await response.json();
+                result.tasks.forEach(task => {
+                    const taskType = task.type === 'youtube_audio_only' ? '僅下載音訊' : 'AI 分析';
+                    const taskElement = createNewTaskElement(task.url, task.download_task_id, taskType);
+                    if(task.process_task_id) taskElement.dataset.dependentTaskId = task.process_task_id;
+                    sendWebSocketMessage('START_YOUTUBE_PROCESSING', { task_id: task.download_task_id, task_type: task.type });
+                });
+                elements.youtubeUrlsInput.value = '';
+            } catch (error) {
+                alert(`處理 YouTube 任務時發生錯誤: ${error.message}`);
+            } finally {
+                elements.startDownloadOnlyBtn.disabled = false;
+                if (!elements.youtubeControlsFieldset.disabled) elements.startProcessingBtn.disabled = false;
+            }
+        }
+
+        async function initiateWhisperTranscription(filePath, fileName) {
+            // Switch to the local file tab
+            const localTabButton = document.querySelector('.tab-button[data-tab="local-file-tab"]');
+            if (localTabButton) localTabButton.click();
+
+            const payload = {
+                file_path: filePath,
+                model_size: elements.modelSelect.value,
+                language: elements.languageSelect.value,
+                beam_size: parseInt(elements.beamSizeInput.value, 10)
+            };
+            try {
+                const response = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error((await response.json()).detail || '建立轉錄任務失敗');
+                const result = await response.json();
+                result.tasks.forEach(task => {
+                    const taskElement = createNewTaskElement(fileName || task.filename, task.task_id, '轉錄');
+                    if (task.type === 'transcribe') {
+                        sendWebSocketMessage('START_TRANSCRIPTION', { task_id: task.task_id });
                     }
                 });
-                updateFileDisplay();
-                fileInput.value = '';
+            } catch (error) {
+                alert(`從 YouTube 音訊建立轉錄任務時發生錯誤: ${error.message}`);
+            }
+        }
+
+        // --- Event Listeners ---
+        elements.validateApiKeyBtn.addEventListener('click', validateApiKey);
+        elements.startDownloadOnlyBtn.addEventListener('click', () => startYoutubeJob(true));
+        elements.startProcessingBtn.addEventListener('click', () => startYoutubeJob(false));
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                getElement(e.currentTarget.dataset.tab).classList.add('active');
             });
-
-            confirmBtn.addEventListener('click', () => {
-                modelDisplay.textContent = modelSelect.value;
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
-                } else {
-                    alert('WebSocket 未連線，無法下載模型。');
-                }
-            });
-
-            startBtn.addEventListener('click', async () => {
-                if (uploadedFiles.length === 0) return;
-                startBtn.disabled = true;
-                startBtn.textContent = '正在建立任務...';
-                for (const file of uploadedFiles) {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    formData.append('model_size', modelSelect.value);
-                    formData.append('language', languageSelect.value);
-                    formData.append('beam_size', beamSizeInput.value);
-                    try {
-                        const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
-                        if (!response.ok) throw new Error((await response.json()).detail || '上傳失敗');
-                        const result = await response.json();
-                        const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
-                        tasks.forEach(task => {
-                            createNewTaskElement(file.name, task.task_id, task.type);
-                            if (socket && task.type === 'transcribe') {
-                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
-                            }
-                        });
-                    } catch (error) {
-                        alert(`處理檔案 ${file.name} 時發生錯誤: ${error.message}`);
-                    }
-                }
-                uploadedFiles = [];
-                updateFileDisplay();
-            });
-
-            // --- YouTube Tab Logic ---
-            const initializeYouTubeTab = async () => {
-                try {
-                    const statusRes = await fetch('/api/youtube/status');
-                    const status = await statusRes.json();
-                    if (status.enabled) {
-                        apiKeySuccess.classList.remove('hidden');
-                        apiKeyPrompt.classList.add('hidden');
-                        youtubeControlsFieldset.disabled = false;
-                        startYoutubeBtn.disabled = false;
-                        startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
-
-                        const modelsRes = await fetch('/api/youtube/models');
-                        const modelsData = await modelsRes.json();
-                        geminiModelSelect.innerHTML = '';
-                        modelsData.models.forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = model.id;
-                            option.textContent = model.name;
-                            geminiModelSelect.appendChild(option);
-                        });
-                    } else {
-                        // --- JULES 於 2025-08-10 的修改 ---
-                        apiKeyPrompt.classList.remove('hidden');
-                        apiKeySuccess.classList.add('hidden');
-                        // 從 API 回應中動態顯示原因
-                        if (status.reason) {
-                            apiKeyPrompt.innerHTML = `
-                                <p style="margin-top: 0; font-weight: bold;">功能異常：API 金鑰設定</p>
-                                <p style="margin-bottom: 0;">${status.reason}</p>
-                            `;
-                        } else {
-                            // 為舊版 API 或非預期錯誤提供備用訊息
-                             apiKeyPrompt.innerHTML = `
-                                <p style="margin-top: 0; font-weight: bold;">後端尚未設定 Google API 金鑰</p>
-                                <p style="margin-bottom: 0;">請設定 <code>GOOGLE_API_KEY</code> 環境變數，然後重新啟動伺服器以啟用此功能。</p>
-                            `;
-                        }
-                        // --- 修改結束 ---
-                    }
-                } catch (error) {
-                    console.error("初始化 YouTube 分頁時出錯:", error);
-                    apiKeyPrompt.classList.remove('hidden');
-                    apiKeyPrompt.innerHTML = `<p>無法連接後端或解析 API 狀態: ${error.message}</p>`;
-                }
-            };
-
-            startYoutubeBtn.addEventListener('click', async () => {
-                const urls = youtubeUrlsInput.value.split('\\n').filter(url => url.trim() !== '');
-                if (urls.length === 0) {
-                    alert('請輸入至少一個 YouTube 網址。');
-                    return;
-                }
-                startYoutubeBtn.disabled = true;
-                startYoutubeBtn.textContent = '正在建立任務...';
-
-                try {
-                    const response = await fetch('/api/youtube/process', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            urls: urls,
-                            model: geminiModelSelect.value
-                        })
-                    });
-                    if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
-
-                    const result = await response.json();
-                    result.tasks.forEach(task => {
-                        createNewTaskElement(task.url, task.download_task_id, 'YouTube');
-                        taskElements.set(task.process_task_id, taskElements.get(task.download_task_id)); // 讓處理任務也指向同一個 DOM 元素
-
-                        if (socket && socket.readyState === WebSocket.OPEN) {
-                            socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.download_task_id }}));
-                        }
-                    });
-                    youtubeUrlsInput.value = '';
-                } catch (error) {
-                    alert(`處理 YouTube 任務時發生錯誤: ${error.message}`);
-                } finally {
-                    startYoutubeBtn.disabled = false;
-                    startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
-                }
-            });
-
-            closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
-
-            // --- Tab Switching Logic ---
-            document.querySelectorAll('.tab-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-                    button.classList.add('active');
-                    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-                    document.getElementById(button.dataset.tab).classList.add('active');
-                });
-            });
-
-            // --- Init ---
-            setupWebSocket();
-            updateFileDisplay();
-
-            // --- JULES'S ADDITION: Log Viewer Logic ---
-            const fetchLogsBtn = document.getElementById('fetch-logs-btn');
-            const logOutput = document.getElementById('log-output');
-            const copyLogsBtn = document.getElementById('copy-logs-btn');
-
-            fetchLogsBtn.addEventListener('click', async () => {
-                logOutput.textContent = '載入中...';
-                try {
-                    const levels = Array.from(document.querySelectorAll('input[name="log-level"]:checked')).map(el => el.value);
-                    const sources = Array.from(document.querySelectorAll('input[name="log-source"]:checked')).map(el => el.value);
-                    const params = new URLSearchParams();
-                    levels.forEach(level => params.append('level', level));
-                    sources.forEach(source => params.append('source', source));
-
-                    const response = await fetch(`/api/logs?${params.toString()}`);
-                    if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
-
-                    const logs = await response.json();
-                    if (logs.length === 0) {
-                        logOutput.textContent = '找不到符合條件的日誌。';
-                    } else {
-                        logOutput.textContent = logs.map(log => `[${new Date(log.timestamp).toLocaleString()}] [${log.source}] [${log.level}] ${log.message}`).join('\n');
-                    }
-                } catch (error) {
-                    logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
-                }
-            });
-
-            copyLogsBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(logOutput.textContent)
-                    .then(() => alert('日誌已複製到剪貼簿！'))
-                    .catch(err => alert('複製失敗: ' + err));
-            });
-            // --- END LOG VIEWER LOGIC ---
-
-            // --- JULES's ADDITION: System Stats Polling ---
-            const cpuLabel = document.getElementById('cpu-label');
-            const ramLabel = document.getElementById('ram-label');
-            const gpuLabel = document.getElementById('gpu-label');
-            const gpuDisplay = document.getElementById('gpu-display'); // The one in the top dashboard
-
-            const updateSystemStats = async () => {
-                try {
-                    const response = await fetch('/api/system_stats');
-                    if (!response.ok) return; // Fail silently
-                    const stats = await response.json();
-
-                    cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
-                    ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
-
-                    if (stats.gpu_detected) {
-                        gpuLabel.textContent = `${stats.gpu_usage !== null ? stats.gpu_usage.toFixed(1) + '%' : 'N/A'}`;
-                        gpuDisplay.textContent = '已偵測到';
-                    } else {
-                        gpuLabel.textContent = '--%';
-                        gpuDisplay.textContent = '未偵測到';
-                    }
-
-                } catch (error) {
-                    // console.error('Error fetching system stats:', error);
-                    // Do not log to avoid spamming console on connection drops
-                }
-            };
-
-            // Call it once immediately, then set an interval
-            updateSystemStats();
-            setInterval(updateSystemStats, 2000); // Update every 2 seconds
-            // --- END ADDITION ---
         });
+    });
     </script>
 </body>
 </html>

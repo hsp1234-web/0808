@@ -1,83 +1,55 @@
-import json
-import time
+# tools/mock_gemini_processor.py
 import argparse
+import json
 import sys
+import time
 from pathlib import Path
-from weasyprint import HTML
 
 def main():
-    """
-    一個模擬的 Gemini 處理器。
-    它接收一個假的音訊檔案，模擬 AI 處理過程，並產出一個假的 PDF 報告。
-    """
-    parser = argparse.ArgumentParser(description="模擬 Gemini AI 處理與報告生成 (PDF)。")
-    parser.add_argument("--audio-file", required=True, help="輸入的音訊檔案路徑。")
-    parser.add_argument("--model", required=True, help="要使用的 Gemini 模型。")
-    parser.add_argument("--video-title", required=True, help="原始影片標題。")
-    parser.add_argument("--output-dir", required=True, help="儲存報告的目錄。")
+    parser = argparse.ArgumentParser(description="Mock Gemini AI 處理工具。")
+    parser.add_argument("--command", type=str, required=True, choices=['process', 'list_models', 'validate_key'])
+    parser.add_argument("--api-key", type=str)
+    parser.add_argument("--audio-file", type=str)
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--video-title", type=str)
+    parser.add_argument("--output-dir", type=str)
     args = parser.parse_args()
 
-    try:
-        time.sleep(1) # 模擬處理時間
+    if args.command == 'validate_key':
+        # Always succeed
+        print(json.dumps({"status": "success", "message": "API 金鑰有效 (模擬)。"}), flush=True)
+        sys.exit(0)
 
+    elif args.command == 'list_models':
+        # Return a mock list of models
+        mock_models = [
+            {"id": "models/gemini-1.5-flash-latest", "name": "Gemini 1.5 Flash (模擬)"},
+            {"id": "models/gemini-pro", "name": "Gemini Pro (模擬)"}
+        ]
+        print(json.dumps(mock_models), flush=True)
+        sys.exit(0)
+
+    elif args.command == 'process':
+        # Simulate processing and return a mock result
+        time.sleep(1) # Simulate work
         output_dir = Path(args.output_dir)
         output_dir.mkdir(exist_ok=True)
-        filename_stem = Path(args.audio_file).stem
 
-        # 1. 定義 HTML 內容
-        html_content = f"""
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <title>AI 分析報告 - {args.video_title}</title>
-    <style>
-        @font-face {{
-            font-family: 'Noto Sans TC';
-            src: url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
-        }}
-        body {{ font-family: 'Noto Sans TC', sans-serif; line-height: 1.6; padding: 2em; background-color: #f9f9f9; }}
-        h1, h2 {{ color: #333; }}
-        .card {{ background-color: white; border: 1px solid #ddd; padding: 1em; border-radius: 8px; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>AI 分析報告</h1>
-        <h2>影片標題：{args.video_title}</h2>
-        <p>這是一份由 <strong>mock_gemini_processor.py</strong> 產生的模擬 PDF 報告。</p>
-        <ul>
-            <li>使用的模擬模型: <strong>{args.model}</strong></li>
-            <li>處理的模擬音訊檔: <strong>{args.audio_file}</strong></li>
-        </ul>
-        <p>此報告確認了 PDF 產生流程可以被正確觸發。</p>
-    </div>
-</body>
-</html>
-"""
+        sanitized_title = args.video_title.replace(" ", "_")[:20] if args.video_title else "mock_video"
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-        # 2. 將 HTML 轉換為 PDF
-        pdf_report_path = output_dir / f"{filename_stem}_AI_report.pdf"
-        HTML(string=html_content, base_url=str(output_dir)).write_pdf(pdf_report_path)
+        # Create a dummy HTML report file
+        html_report_path = output_dir / f"{sanitized_title}_{timestamp}_AI_Report.html"
+        html_report_path.write_text(f"<h1>Mock AI Report for {args.video_title}</h1><p>This is a mock report.</p>", encoding='utf-8')
 
-        # 3. 產出最終的成功結果 JSON
         result = {
             "type": "result",
             "status": "completed",
-            "pdf_report_path": str(pdf_report_path) # 回傳 PDF 路徑
+            "html_report_path": str(html_report_path), # The frontend looks for html_report_path
+            "video_title": args.video_title
         }
         print(json.dumps(result), flush=True)
         sys.exit(0)
-
-    except Exception as e:
-        # 產出錯誤結果 JSON
-        error_result = {
-            "type": "result",
-            "status": "failed",
-            "error": f"模擬 Gemini PDF 處理器發生錯誤: {e}"
-        }
-        print(json.dumps(error_result), flush=True)
-        sys.exit(1)
 
 if __name__ == "__main__":
     main()
