@@ -250,7 +250,8 @@ class ServerManager:
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
             # ** 適配新架構: 監聽新的握手信號，並從中解析埠號 **
-            port_pattern = re.compile(r"API_PORT:\s*(\d+)")
+            # JULES' FIX (2025-08-10): 更新 정규표현식 以匹配 'PROXY_URL:' 格式
+            port_pattern = re.compile(r"PROXY_URL: http://127.0.0.1:(\d+)")
             uvicorn_ready_pattern = re.compile(r"Uvicorn running on")
             server_ready = False
 
