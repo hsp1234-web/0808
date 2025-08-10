@@ -71,6 +71,7 @@ def main():
     parser.add_argument("--audio_file", type=str, help="[transcribe] 需要轉錄的音訊檔案路徑。")
     parser.add_argument("--output_file", type=str, help="[transcribe] 儲存轉錄結果的檔案路徑。")
     parser.add_argument("--language", type=str, default=None, help="[transcribe] 音訊的語言 (被忽略)。")
+    parser.add_argument("--beam_size", type=int, default=5, help="[transcribe] 解碼時使用的光束大小 (被忽略)。")
     # 通用參數
     parser.add_argument("--model_size", type=str, default="tiny", help="要使用/檢查/下載的模型大小 (被忽略)。")
 
