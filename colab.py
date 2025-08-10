@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "1.2.3" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.8.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -46,7 +46,7 @@ SHOW_LOG_LEVEL_INFO = True #@param {type:"boolean"}
 SHOW_LOG_LEVEL_WARN = True #@param {type:"boolean"}
 SHOW_LOG_LEVEL_ERROR = True #@param {type:"boolean"}
 SHOW_LOG_LEVEL_CRITICAL = True #@param {type:"boolean"}
-SHOW_LOG_LEVEL_DEBUG = False #@param {type:"boolean"}
+SHOW_LOG_LEVEL_DEBUG = True #@param {type:"boolean"}
 
 #@markdown ---
 #@markdown ### **Part 4: 報告與歸檔設定**
