@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>鳳凰音訊轉錄儀 v3 (完整靜態佈局版)</title>
+    <title>音訊轉錄儀</title>
     <!-- 移除了所有外部 CDN 依賴，使用內聯樣式 -->
     <style>
         /* --- 變數與基本設定 --- */
@@ -139,18 +139,27 @@
         .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
 
         /* --- 任務列表中的按鈕 --- */
-        .task-list a {
+        .task-list .task-actions a {
             text-decoration: none;
-            padding: 5px 10px;
-            border-radius: 5px;
-            background-color: #6c757d; /* A more neutral secondary color */
+            padding: 5px 12px;
+            border-radius: 6px;
             color: white;
             font-size: 0.9em;
-            transition: background-color 0.2s;
-            border: 1px solid #5a6268;
+            transition: all 0.2s;
+            display: inline-block;
+            border: none;
+            font-weight: 500;
+            text-align: center;
         }
-        .task-list a:hover {
-            background-color: #5a6268;
+        .task-list .task-actions a:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+        .task-list .btn-preview {
+             background-color: var(--button-bg-color); /* Blue */
+        }
+        .task-list .btn-download {
+             background-color: var(--success-color); /* Green */
         }
 
         /* --- 即時輸出 --- */
@@ -162,6 +171,10 @@
             white-space: pre-wrap;
             font-family: monospace;
             color: #495057;
+        }
+        .transcript-output p {
+            margin: 0 0 0.5em 0; /* 為每個段落增加一些底邊距，增加可讀性 */
+            line-height: 1.6; /* 增加行高 */
         }
         .log-controls {
             display: flex;
@@ -175,7 +188,7 @@
     <div id="app" class="container">
         <!-- 標題與控制項 -->
         <header class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-            <h1>鳳凰音訊轉錄儀 v3 (簡化版)</h1>
+            <h1>音訊轉錄儀</h1>
             <div>
                 <span>字體:</span>
                 <button id="zoom-out-btn" style="padding: 5px 10px;">-</button>
@@ -213,7 +226,8 @@
                         <option value="base">Base</option>
                         <option value="small">Small</option>
                         <option value="medium" selected>Medium (建議)</option>
-                        <option value="large">Large (最準確)</option>
+                        <option value="large-v2">Large-v2 (準確)</option>
+                        <option value="large-v3">Large-v3 (最準確)</option>
                     </select>
                 </div>
                 <div>
@@ -223,7 +237,17 @@
                         <option value="en">英文</option>
                     </select>
                 </div>
+                <div>
+                    <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
+                    <input type="number" id="beam-size-input" value="5" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                    <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
+                </div>
                 <button id="confirm-settings-btn">✓ 確認設定</button>
+                <!-- 模型下載進度條 -->
+                <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
+                    <div id="model-progress-bar" class="progress-bar"></div>
+                    <span id="model-progress-text" class="progress-text"></span>
+                </div>
             </div>
             <div class="card flex-col">
                 <h2>📤 步驟 2: 上傳檔案</h2>
@@ -369,9 +393,14 @@
                 const { type, payload } = message;
 
                 if (type === 'DOWNLOAD_STATUS') {
-                    const { model, status, progress, error } = payload;
+                    const { model, status, error, type: dataType, percent, description } = payload;
                     modelStatus[model] = status;
-                    modelProgressContainer.classList.remove('hidden');
+
+                    // 只要是關於下載的訊息，就顯示進度條
+                    if (status === 'starting' || status === 'downloading') {
+                        modelProgressContainer.classList.remove('hidden');
+                    }
+
                     let progressText = `模型 '${model}': ${status}`;
 
                     if (status === 'starting') {
@@ -379,10 +408,16 @@
                         modelProgressBar.style.width = '0%';
                         modelProgressBar.style.backgroundColor = 'var(--button-bg-color)';
                     } else if (status === 'downloading') {
-                        // 在 JULES_LOG.md 中有提到，transcriber.py 會回傳包含 "progress" 的 JSON
-                        // 但我們在此先假設一個簡單的進度回報
-                        progressText = `正在下載模型 '${model}'...`;
-                        modelProgressBar.style.width = `50%`; // 示意進度
+                        // 根據來自後端的詳細資料類型更新 UI
+                        if (dataType === 'file_download_start') {
+                            progressText = `開始下載: ${description}`;
+                            modelProgressBar.style.width = '0%';
+                        } else if (dataType === 'progress') {
+                            progressText = `正在下載 '${model}'... ${percent}%`;
+                            modelProgressBar.style.width = `${percent}%`;
+                        } else {
+                            progressText = `正在處理模型 '${model}'...`;
+                        }
                     } else if (status === 'completed') {
                         progressText = `✅ 模型 '${model}' 下載完成！`;
                         modelProgressBar.style.width = '100%';
@@ -416,14 +451,17 @@
                             statusSpan.innerHTML = ''; // 清空 '完成' 狀態文字
 
                             const buttonGroup = document.createElement('div');
+                            buttonGroup.className = 'task-actions'; // 使用 class 以便 CSS 定位
                             buttonGroup.style.display = 'flex';
                             buttonGroup.style.gap = '8px';
+                            buttonGroup.style.flexShrink = '0'; // 防止按鈕組在空間不足時被壓縮
 
                             const previewArea = document.getElementById('preview-area');
                             const previewContent = document.getElementById('preview-content');
 
                             const previewBtn = document.createElement('a');
                             previewBtn.href = `#preview-area`;
+                            previewBtn.className = 'btn-preview'; // 為按鈕新增 class
                             previewBtn.textContent = '預覽';
                             previewBtn.title = '在下方預覽轉錄結果';
                             previewBtn.addEventListener('click', async (e) => {
@@ -445,6 +483,7 @@
 
                             const downloadBtn = document.createElement('a');
                             downloadBtn.href = `/api/download/${payload.task_id}`;
+                            downloadBtn.className = 'btn-download'; // 為按鈕新增 class
                             downloadBtn.textContent = '下載';
                             const originalFilename = taskElement.querySelector('.task-filename').textContent;
                             const baseName = originalFilename.substring(0, originalFilename.lastIndexOf('.')) || originalFilename;
@@ -475,8 +514,10 @@
                         if (payload.type === 'segment') {
                             const p = document.createElement('p');
                             p.textContent = payload.text;
-                            transcriptOutput.appendChild(p);
-                            transcriptOutput.scrollTop = transcriptOutput.scrollHeight;
+                            // 將新片段插入到最頂端，而不是附加在尾端
+                            transcriptOutput.prepend(p);
+                            // 保持捲軸在最頂端
+                            transcriptOutput.scrollTop = 0;
                         }
                         break;
                 }
@@ -531,6 +572,7 @@
                 formData.append('file', file);
                 formData.append('model_size', modelSelect.value);
                 formData.append('language', languageSelect.value);
+                formData.append('beam_size', document.getElementById('beam-size-input').value);
 
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {
@@ -620,7 +662,42 @@
             };
 
             const updateFileList = () => {
-                fileListDisplay.innerHTML = uploadedFiles.map(file => `<div>- ${file.name}</div>`).join('');
+                fileListDisplay.innerHTML = ''; // 每次更新前先清空列表
+                if (uploadedFiles.length > 0) {
+                    const list = document.createElement('div');
+                    list.style.maxHeight = '150px';
+                    list.style.overflowY = 'auto';
+
+                    uploadedFiles.forEach((file, index) => {
+                        const fileItem = document.createElement('div');
+                        //  BUGFIX: 確保項目有 'task-item' class，以便測試腳本可以找到它
+                        fileItem.className = 'task-item';
+                        fileItem.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee;';
+
+                        const fileName = document.createElement('span');
+                        fileName.textContent = file.name;
+                        fileName.style.whiteSpace = 'nowrap';
+                        fileName.style.overflow = 'hidden';
+                        fileName.style.textOverflow = 'ellipsis';
+                        fileName.title = file.name;
+                        fileItem.appendChild(fileName);
+
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.textContent = '移除';
+                        deleteBtn.style.cssText = 'padding: 2px 8px; font-size: 0.8em; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; flex-shrink: 0;';
+
+                        deleteBtn.onclick = () => {
+                            logAction('移除待上傳檔案', { filename: file.name });
+                            uploadedFiles.splice(index, 1); // 從陣列中移除檔案
+                            updateFileList(); // 重新渲染列表
+                        };
+
+                        fileItem.appendChild(deleteBtn);
+                        list.appendChild(fileItem);
+                    });
+                    fileListDisplay.appendChild(list);
+                }
+
                 startBtn.disabled = uploadedFiles.length === 0;
                 startBtn.textContent = uploadedFiles.length > 0 ? `✨ 開始處理 ${uploadedFiles.length} 個檔案` : '✨ 請先選擇檔案';
             };

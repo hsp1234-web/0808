@@ -167,7 +167,8 @@ def check_model_exists(model_size: str) -> bool:
 async def create_transcription_task(
     file: UploadFile = File(...),
     model_size: str = Form("tiny"),
-    language: Optional[str] = Form(None)
+    language: Optional[str] = Form(None),
+    beam_size: int = Form(5)
 ):
     """
     接收音訊檔案，根據模型是否存在，決定是直接建立轉錄任務，
@@ -195,7 +196,8 @@ async def create_transcription_task(
         "input_file": str(saved_file_path),
         "output_dir": "transcripts",
         "model_size": model_size,
-        "language": language
+        "language": language,
+        "beam_size": beam_size
     }
 
     if model_is_present:
@@ -388,6 +390,7 @@ async def download_transcript(task_id: str):
 def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     """
     在一個單獨的執行緒中執行模型下載，並透過 WebSocket 回報結果。
+    這個版本會逐行讀取 stdout 來獲取即時的 JSON 進度更新。
     """
     def _download_in_thread():
         log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
@@ -395,9 +398,39 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
             tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
             cmd = [sys.executable, tool_script, "--command=download", f"--model_size={model_size}"]
 
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
-            stdout, stderr = process.communicate()
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                bufsize=1 # Line-buffered
+            )
 
+            # 逐行讀取 stdout 以獲取進度更新
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        # 建立 WebSocket 訊息
+                        message = {
+                            "type": "DOWNLOAD_STATUS",
+                            "payload": {
+                                "model": model_size,
+                                "status": "downloading",
+                                **data  # 這會包含 'type', 'percent', 'description' 等
+                            }
+                        }
+                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                    except json.JSONDecodeError:
+                        log.warning(f"[執行緒] 無法解析來自 transcriber 的下載進度 JSON: {line}")
+
+            process.wait() # 等待程序結束
+
+            # 根據程序的返回碼決定最終狀態
             if process.returncode == 0:
                 log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
                 message = {
@@ -405,17 +438,17 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                     "payload": {"model": model_size, "status": "completed", "progress": 100}
                 }
             else:
-                log.error(f"❌ [執行緒] 模型 '{model_size}' 下載失敗。 Stderr: {stderr}")
+                stderr_output = process.stderr.read() if process.stderr else "N/A"
+                log.error(f"❌ [執行緒] 模型 '{model_size}' 下載失敗。 Stderr: {stderr_output}")
                 message = {
                     "type": "DOWNLOAD_STATUS",
-                    "payload": {"model": model_size, "status": "failed", "error": stderr}
+                    "payload": {"model": model_size, "status": "failed", "error": stderr_output}
                 }
 
-            # 使用 run_coroutine_threadsafe 在主事件迴圈中安全地廣播訊息
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
 
         except Exception as e:
-            log.error(f"❌ [執行緒] 下載執行緒中發生錯誤: {e}", exc_info=True)
+            log.error(f"❌ [執行緒] 下載執行緒中發生嚴重錯誤: {e}", exc_info=True)
             message = {
                 "type": "DOWNLOAD_STATUS",
                 "payload": {"model": model_size, "status": "failed", "error": str(e)}
@@ -427,7 +460,7 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     thread.start()
 
 
-def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], loop: asyncio.AbstractEventLoop):
+def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop):
     """
     在一個單獨的執行緒中執行轉錄，並透過 WebSocket 即時串流結果。
     """
@@ -451,6 +484,8 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
             ]
             if language:
                 cmd.append(f"--language={language}")
+            # 新增 beam_size 參數
+            cmd.append(f"--beam_size={beam_size}")
 
             log.info(f"執行轉錄指令: {' '.join(map(str, cmd))}")
 
@@ -568,6 +603,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         file_path = task_payload.get("input_file")
                         model_size = task_payload.get("model_size", "tiny")
                         language = task_payload.get("language")
+                        beam_size = task_payload.get("beam_size", 5) # 讀取 beam_size
                     except (json.JSONDecodeError, KeyError) as e:
                         await manager.broadcast_json({"type": "ERROR", "payload": f"解析任務 {task_id} 的 payload 失敗: {e}"})
                         continue
@@ -577,7 +613,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         log.info(f"收到開始轉錄 '{file_path}' 的請求 (來自任務 {task_id})。")
                         loop = asyncio.get_running_loop()
-                        trigger_transcription(task_id, file_path, model_size, language, loop)
+                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop)
 
                 else:
                     await manager.broadcast_json({
