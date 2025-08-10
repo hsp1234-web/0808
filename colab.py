@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "2.3.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "2.8.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -83,7 +83,7 @@ import threading
 from collections import deque
 import re
 from IPython.display import clear_output
-from google.colab import output as colab_output
+from google.colab import output as colab_output, userdata
 
 # ==============================================================================
 # SECTION 0.5: 輔助函式 is omitted for brevity
@@ -240,6 +240,23 @@ class ServerManager:
             # 在 Colab 環境中，我們總是希望以真實模式運行
             launch_command = [sys.executable, "orchestrator.py", "--no-mock"]
 
+            # --- JULES 於 2025-08-10 的修復：傳遞 Colab Secret 中的 API 金鑰 ---
+            # 1. 準備一個繼承自當前環境的變數字典
+            process_env = os.environ.copy()
+            # 2. 從 Colab Secrets 讀取金鑰
+            try:
+                google_api_key = userdata.get('GOOGLE_API_KEY')
+                if google_api_key:
+                    # 3. 如果金鑰存在，將其加入到子程序的環境變數中
+                    process_env['GOOGLE_API_KEY'] = google_api_key
+                    self._log_manager.log("SUCCESS", "✅ 成功讀取 Colab Secret (GOOGLE_API_KEY) 並設定為環境變數。")
+                else:
+                    self._log_manager.log("WARN", "⚠️ 在 Colab Secrets 中未找到 GOOGLE_API_KEY。YouTube 功能將無法使用。")
+            except Exception as e:
+                self._log_manager.log("ERROR", f"讀取 Colab Secret 時發生錯誤: {e}")
+            # --- 修復結束 ---
+
+
             self.server_process = subprocess.Popen(
                 launch_command,
                 cwd=str(project_path), # 在下載的專案目錄中執行
@@ -247,7 +264,8 @@ class ServerManager:
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding='utf-8',
-                preexec_fn=os.setsid
+                preexec_fn=os.setsid,
+                env=process_env # 將包含 API 金鑰的環境變數傳遞給子程序
             )
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
