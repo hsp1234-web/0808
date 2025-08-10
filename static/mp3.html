@@ -107,11 +107,13 @@
         }
         button:hover:not(:disabled) { background-color: var(--button-hover-bg-color); transform: translateY(-1px); }
         button:disabled { background-color: var(--disabled-bg-color); cursor: not-allowed; transform: none; }
-        select {
+        select, textarea {
             width: 100%;
             padding: 10px;
             border-radius: 6px;
             border: 1px solid #ccc;
+            box-sizing: border-box;
+            font-family: inherit;
         }
         .file-drop-zone {
             border: 2px dashed #ccc;
@@ -313,7 +315,7 @@
 
         <div id="youtube-tab" class="tab-content">
             <div class="card">
-                <!-- 新增：API 金鑰狀態與設定區域 -->
+                <!-- API 金鑰狀態與設定區域 -->
                 <div id="api-key-area">
                     <h2>🔑 API 金鑰設定</h2>
                     <div id="api-key-prompt" class="hidden" style="padding: 15px; border: 1px solid var(--status-yellow); border-radius: 8px; background-color: #fffbe6; margin-bottom: 20px;">
@@ -330,7 +332,7 @@
                     <div class="flex-col">
                         <div>
                             <label for="youtube-urls-input">YouTube 影片網址 (可輸入多個，每行一個)</label>
-                            <textarea id="youtube-urls-input" rows="4" placeholder="例如：&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=another_video_id" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
+                            <textarea id="youtube-urls-input" rows="4" placeholder="例如：&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=another_video_id"></textarea>
                         </div>
                         <div>
                             <label for="gemini-model-select">選擇 Gemini AI 模型</label>
@@ -405,8 +407,10 @@
     </div>
 
     <script>
+        // JULES: 全面重構並加入 YouTube 功能的前端邏輯 (2025-08-10)
         document.addEventListener('DOMContentLoaded', () => {
             // --- DOM 元素 ---
+            // #region DOM 元素宣告
             const fileInput = document.getElementById('file-input');
             const fileListDisplay = document.getElementById('file-list');
             const startBtn = document.getElementById('start-processing-btn');
@@ -433,13 +437,28 @@
             const previewContentText = document.getElementById('preview-content-text');
             const closePreviewBtn = document.getElementById('close-preview-btn');
 
+            // YouTube 功能相關 DOM
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            const apiKeyPrompt = document.getElementById('api-key-prompt');
+            const apiKeySuccess = document.getElementById('api-key-success');
+            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
+            const youtubeUrlsInput = document.getElementById('youtube-urls-input');
+            const geminiModelSelect = document.getElementById('gemini-model-select');
+            const startYoutubeBtn = document.getElementById('start-youtube-processing-btn');
+            // #endregion
+
             // --- 狀態變數 ---
             let uploadedFiles = [];
             let socket;
             const taskElements = new Map();
             const modelStatus = {};
 
-            // --- 核心邏輯 ---
+            // --- 核心功能函式 ---
+
+            /**
+             * @description 設定並初始化與後端的 WebSocket 連線。
+             */
             const setupWebSocket = () => {
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
@@ -470,9 +489,14 @@
                 };
             };
 
+            /**
+             * @description 處理從 WebSocket 收到的各類訊息。
+             * @param {object} message - 從後端收到的訊息物件。
+             */
             const handleWebSocketMessage = (message) => {
                 const { type, payload } = message;
 
+                // JULES: 修正 - 將遺失的 DOWNLOAD_STATUS 處理邏輯加回來
                 if (type === 'DOWNLOAD_STATUS') {
                     if (!modelStatus[payload.model]) {
                         modelStatus[payload.model] = {};
@@ -491,6 +515,23 @@
                         modelProgressBar.style.width = '100%';
                         modelProgressBar.style.backgroundColor = '#dc3545';
                         modelProgressText.textContent = `下載失敗: ${payload.error}`;
+                    }
+                    return;
+                }
+
+                // 新增：處理 YouTube 任務狀態
+                if (type === 'YOUTUBE_STATUS') {
+                    const taskElement = taskElements.get(payload.task_id);
+                    if (!taskElement) return;
+                    const statusSpan = taskElement.querySelector('.task-status');
+                    statusSpan.textContent = payload.status; // 例如: "下載中...", "AI 分析中..."
+
+                    if (payload.status === 'completed') {
+                        // 處理完成狀態，與轉錄任務類似
+                        statusSpan.textContent = `✅ 完成`;
+                        // TODO: 新增預覽報告的按鈕
+                    } else if (payload.status === 'failed') {
+                        statusSpan.textContent = `❌ 失敗: ${payload.error}`;
                     }
                     return;
                 }
@@ -560,6 +601,122 @@
                 }
             };
 
+            // --- YouTube 功能相關函式 ---
+
+            /**
+             * @description 檢查後端 Google API 金鑰的設定狀態，並據此更新 UI。
+             */
+            const checkApiKeyStatus = async () => {
+                try {
+                    const response = await fetch('/api/youtube/status');
+                    if (!response.ok) throw new Error('無法獲取 API 金鑰狀態');
+                    const data = await response.json();
+
+                    if (data.api_key_configured) {
+                        apiKeySuccess.classList.remove('hidden');
+                        apiKeyPrompt.classList.add('hidden');
+                        youtubeControlsFieldset.disabled = false;
+                        startYoutubeBtn.disabled = false;
+                        startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
+                    } else {
+                        apiKeySuccess.classList.add('hidden');
+                        apiKeyPrompt.classList.remove('hidden');
+                        youtubeControlsFieldset.disabled = true;
+                        startYoutubeBtn.disabled = true;
+                        startYoutubeBtn.textContent = '🚀 請先設定 API 金鑰';
+                    }
+                } catch (error) {
+                    console.error('檢查 API 金鑰狀態失敗:', error);
+                    apiKeyPrompt.classList.remove('hidden');
+                    apiKeyPrompt.querySelector('p').textContent = `檢查後端狀態失敗: ${error.message}`;
+                }
+            };
+
+            /**
+             * @description 從後端載入可用的 Gemini 模型列表並填入下拉選單。
+             */
+            const loadGeminiModels = async () => {
+                try {
+                    const response = await fetch('/api/youtube/models');
+                    if (!response.ok) throw new Error('無法載入 Gemini 模型列表');
+                    const data = await response.json();
+
+                    geminiModelSelect.innerHTML = ''; // 清空現有選項
+                    if (data.models && data.models.length > 0) {
+                        data.models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model;
+                            option.textContent = model;
+                            geminiModelSelect.appendChild(option);
+                        });
+                    } else {
+                        geminiModelSelect.innerHTML = '<option>無可用模型</option>';
+                    }
+                } catch (error) {
+                    console.error('載入 Gemini 模型失敗:', error);
+                    geminiModelSelect.innerHTML = `<option>載入失敗: ${error.message}</option>`;
+                }
+            };
+
+            /**
+             * @description 處理 YouTube 任務的提交。
+             */
+            const handleYoutubeSubmit = async () => {
+                const urls = youtubeUrlsInput.value.split('\n').map(url => url.trim()).filter(url => url);
+                if (urls.length === 0) {
+                    alert('請至少輸入一個有效的 YouTube 網址。');
+                    return;
+                }
+                const model = geminiModelSelect.value;
+
+                startYoutubeBtn.disabled = true;
+                startYoutubeBtn.textContent = '正在建立任務...';
+
+                try {
+                    const response = await fetch('/api/youtube/submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ urls, model })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || '提交 YouTube 任務失敗');
+                    }
+
+                    const result = await response.json();
+
+                    // 為每個建立的任務在 UI 上新增一個項目
+                    result.tasks.forEach(task => {
+                        if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
+
+                        const taskElement = document.createElement('div');
+                        taskElement.className = 'task-item';
+                        const friendlyName = `YouTube: ${task.url.substring(0, 50)}...`;
+                        taskElement.innerHTML = `<span class="task-filename">${friendlyName}</span><span class="task-status">已建立</span>`;
+                        ongoingTasksContainer.appendChild(taskElement);
+                        taskElements.set(task.task_id, taskElement);
+
+                        // 透過 WebSocket 發送 START_YOUTUBE_PROCESSING 來啟動任務
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                           socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id } }));
+                        }
+                    });
+
+                    youtubeUrlsInput.value = ''; // 清空輸入框
+
+                } catch (error) {
+                    alert(`處理 YouTube 任務時發生錯誤: ${error.message}`);
+                } finally {
+                    startYoutubeBtn.disabled = false;
+                    startYoutubeBtn.textContent = '🚀 開始處理 YouTube 影片';
+                }
+            };
+
+
+            // --- 事件監聽器與初始化 ---
+
+            // #region 舊的事件監聽器 (本地檔案)
             const updateFileDisplay = () => {
                 fileListDisplay.innerHTML = '';
                 if (uploadedFiles.length === 0) {
@@ -605,7 +762,6 @@
             });
 
             confirmBtn.addEventListener('click', () => {
-                // logAction('確認設定', { model: modelSelect.value });
                 modelDisplay.textContent = modelSelect.value;
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({
@@ -645,22 +801,20 @@
                         }
 
                         const result = await response.json();
-
                         const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
 
                         tasks.forEach(task => {
                             if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
                             const taskElement = document.createElement('div');
                             taskElement.className = 'task-item';
-                            taskElement.innerHTML = `<span class="task-filename">${file.name} (${task.type})</span><span class="task-status">已建立</span>`;
+                            taskElement.innerHTML = `<span class="task-filename">${file.name} (${task.type || 'transcribe'})</span><span class="task-status">已建立</span>`;
                             ongoingTasksContainer.appendChild(taskElement);
                             taskElements.set(task.task_id, taskElement);
 
-                            // 修正：無論 result.tasks 是否存在，都應檢查 task.type
                             if (socket && task.type === 'transcribe') {
                                 socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
                             } else if (socket && !result.tasks) {
-                                // 如果 result.tasks 不存在，代表這就是唯一的轉錄任務
+                                // JULES: 恢復被誤刪的關鍵邏輯
                                 socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
                             }
                         });
@@ -675,10 +829,34 @@
             });
 
             closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
+            // #endregion
 
-            // --- Init ---
-            setupWebSocket();
-            updateFileDisplay();
+            // 新增：分頁切換邏輯
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    document.getElementById(button.dataset.tab).classList.add('active');
+                });
+            });
+
+            // 新增：YouTube 提交按鈕事件監聽器
+            startYoutubeBtn.addEventListener('click', handleYoutubeSubmit);
+
+            /**
+             * @description 應用程式初始化函式。
+             */
+            const init = () => {
+                setupWebSocket();
+                updateFileDisplay();
+                checkApiKeyStatus();
+                loadGeminiModels();
+            };
+
+            // --- 啟動應用程式 ---
+            init();
         });
     </script>
 </body>

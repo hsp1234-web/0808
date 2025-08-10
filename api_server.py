@@ -12,6 +12,7 @@ import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -314,6 +315,78 @@ async def get_system_stats():
     }
 
 
+@app.get("/api/youtube/status", status_code=200)
+async def youtube_status():
+    """
+    檢查 Google API 金鑰是否已在環境變數中設定。
+    這是前端啟用 YouTube 功能的依據。
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    is_configured = bool(api_key) # 檢查金鑰是否存在且不為空字串
+    log.info(f"檢查 GOOGLE_API_KEY 狀態: {'已設定' if is_configured else '未設定'}")
+    return {"api_key_configured": is_configured}
+
+
+@app.get("/api/youtube/models", status_code=200)
+async def youtube_models():
+    """
+    回傳可用於 YouTube 分析的 Gemini 模型列表。
+    註：目前為硬編碼列表，以加速開發。
+    """
+    # 根據 YouTube.md，此列表在初期開發時為硬編碼
+    models = [
+        "models/gemini-1.5-flash-latest",
+        "models/gemini-1.5-pro-latest",
+        "models/gemini-1.0-pro"
+    ]
+    log.info(f"回傳硬編碼的 Gemini 模型列表: {models}")
+    return {"models": models}
+
+
+# --- Pydantic 模型，用於驗證請求主體 ---
+class YouTubeProcessRequest(BaseModel):
+    urls: List[str]
+    model: str
+
+
+@app.post("/api/youtube/submit", status_code=202)
+async def submit_youtube_task(payload: YouTubeProcessRequest):
+    """
+    接收一或多個 YouTube URL，為每一個 URL 建立一個處理任務。
+    """
+    if not payload.urls:
+        raise HTTPException(status_code=400, detail="URL 列表不可為空。")
+
+    log.info(f"收到 {len(payload.urls)} 個 YouTube URL 的處理請求。模型: {payload.model}")
+
+    created_tasks = []
+    for url in payload.urls:
+        # 過濾掉空的 URL 字串
+        if not url.strip():
+            continue
+
+        task_id = str(uuid.uuid4())
+        task_payload = {
+            "youtube_url": url,
+            "gemini_model": payload.model,
+            "output_dir": "reports" # 指定報告的輸出目錄
+        }
+
+        db_client.add_task(
+            task_id=task_id,
+            payload=json.dumps(task_payload),
+            task_type='youtube_process'
+        )
+
+        log.info(f"已為 URL '{url}' 建立 'youtube_process' 任務，ID: {task_id}")
+        created_tasks.append({"task_id": task_id, "type": "youtube_process", "url": url})
+
+    if not created_tasks:
+        raise HTTPException(status_code=400, detail="未提供任何有效的 URL。")
+
+    return {"tasks": created_tasks}
+
+
 @app.get("/api/tasks")
 async def get_all_tasks_endpoint():
     """
@@ -560,6 +633,78 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
     thread.start()
 
 
+def trigger_youtube_processing(task_id: str, youtube_url: str, gemini_model: str, loop: asyncio.AbstractEventLoop):
+    """
+    在一個單獨的執行緒中執行 YouTube 處理，並透過 WebSocket 回報結果。
+    """
+    def _process_in_thread():
+        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務: {task_id}，URL: {youtube_url}")
+
+        # 透過 WebSocket 傳送狀態更新的輔助函式
+        async def send_status_update(status_text: str):
+            message = {"type": "YOUTUBE_STATUS", "payload": {"task_id": task_id, "status": status_text}}
+            await manager.broadcast_json(message)
+
+        try:
+            # 建立子程序來執行 youtube_processor.py
+            cmd = [
+                sys.executable,
+                "tools/youtube_processor.py",
+                f"--youtube_url={youtube_url}",
+                f"--gemini_model={gemini_model}",
+                "--output_dir=reports"
+            ]
+            log.info(f"執行 YouTube 處理指令: {' '.join(cmd)}")
+
+            # 發送一個初始狀態
+            asyncio.run_coroutine_threadsafe(send_status_update("處理中..."), loop)
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8'
+            )
+
+            final_json_output = None
+            # 讀取子程序的輸出，轉發日誌並找出最後的 JSON 結果
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # 假設最後一行是 JSON 結果
+                    if line.startswith('{') and line.endswith('}'):
+                        final_json_output = line
+                    else:
+                        log.info(f"[youtube_processor] {line}")
+
+            process.wait()
+
+            if process.returncode == 0 and final_json_output:
+                log.info(f"✅ [執行緒] YouTube 任務 '{task_id}' 的子程序成功完成。")
+                result_data = json.loads(final_json_output)
+                db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+                final_message = {"type": "YOUTUBE_STATUS", "payload": {"task_id": task_id, "status": "completed", "result": result_data}}
+            else:
+                stderr_output = process.stderr.read() if process.stderr else "未知錯誤"
+                log.error(f"❌ [執行緒] YouTube 任務 '{task_id}' 失敗。Stderr: {stderr_output}")
+                db_client.update_task_status(task_id, 'failed', json.dumps({"error": stderr_output}))
+                final_message = {"type": "YOUTUBE_STATUS", "payload": {"task_id": task_id, "status": "failed", "error": stderr_output}}
+
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
+
+        except Exception as e:
+            log.error(f"❌ [執行緒] YouTube 處理執行緒中發生嚴重錯誤: {e}", exc_info=True)
+            db_client.update_task_status(task_id, 'failed', json.dumps({"error": str(e)}))
+            error_message = {"type": "YOUTUBE_STATUS", "payload": {"task_id": task_id, "status": "failed", "error": str(e)}}
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(error_message), loop)
+
+    thread = threading.Thread(target=_process_in_thread)
+    thread.start()
+
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -585,6 +730,32 @@ async def websocket_endpoint(websocket: WebSocket):
                         trigger_model_download(model_size, loop)
                     else:
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
+
+                elif msg_type == "START_YOUTUBE_PROCESSING":
+                    task_id = payload.get("task_id")
+                    if not task_id:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
+                        continue
+
+                    task_info = db_client.get_task_status(task_id)
+                    if not task_info:
+                        await manager.broadcast_json({"type": "ERROR", "payload": f"找不到任務 {task_id}"})
+                        continue
+
+                    try:
+                        task_payload = json.loads(task_info['payload'])
+                        youtube_url = task_payload.get("youtube_url")
+                        gemini_model = task_payload.get("gemini_model")
+                    except (json.JSONDecodeError, KeyError) as e:
+                        await manager.broadcast_json({"type": "ERROR", "payload": f"解析 YouTube 任務 {task_id} 的 payload 失敗: {e}"})
+                        continue
+
+                    if not youtube_url or not gemini_model:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "任務 payload 中缺少 youtube_url 或 gemini_model"})
+                    else:
+                        log.info(f"收到開始處理 YouTube 任務 '{task_id}' 的請求。")
+                        loop = asyncio.get_running_loop()
+                        trigger_youtube_processing(task_id, youtube_url, gemini_model, loop)
 
                 elif msg_type == "START_TRANSCRIPTION":
                     task_id = payload.get("task_id")
