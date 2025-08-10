@@ -109,8 +109,8 @@ manager = ConnectionManager()
 
 
 # --- DB 客戶端 ---
-# 在模組加載時獲取客戶端單例
-# 客戶端內部有重試機制，會等待 DB 管理者服務就緒
+# We will now get a fresh client inside each endpoint
+# to ensure the correct port is used.
 db_client = get_client()
 
 # --- Pydantic 模型 ---
@@ -180,6 +180,7 @@ async def create_transcription_task(
     接收音訊檔案，根據模型是否存在，決定是直接建立轉錄任務，
     還是先建立一個下載任務和一個依賴於它的轉錄任務。
     """
+    db_client = get_client()
     # 1. 檢查模型是否存在
     model_is_present = check_model_exists(model_size)
 
@@ -234,6 +235,7 @@ async def process_youtube_url(request: YouTubeProcessRequest):
     接收一個或多個 YouTube URL，為每一個 URL 建立一個待處理的任務。
     此端點只負責建立任務，不觸發執行。執行由前端透過 WebSocket 發起。
     """
+    db_client = get_client()
     log.info(f"收到 YouTube 處理請求: {len(request.urls)} 個 URL，使用模型: {request.model}")
 
     tasks_created = []
@@ -262,6 +264,7 @@ async def get_task_status_endpoint(task_id: str):
     """
     根據任務 ID，從資料庫查詢任務狀態。
     """
+    db_client = get_client()
     log.debug(f"🔍 正在查詢任務狀態: {task_id}")
     status_info = db_client.get_task_status(task_id)
 
@@ -354,6 +357,7 @@ async def get_all_tasks_endpoint():
     """
     獲取所有任務的列表，用於前端展示。
     """
+    db_client = get_client()
     tasks = db_client.get_all_tasks()
     # 嘗試解析 payload 和 result 中的 JSON 字串
     for task in tasks:
@@ -380,6 +384,7 @@ async def get_system_logs_endpoint(
     """
     獲取系統日誌，可按等級和來源進行篩選。
     """
+    db_client = get_client()
     log.info(f"API: 正在查詢系統日誌 (Levels: {levels}, Sources: {sources})")
     try:
         logs = db_client.get_system_logs(levels=levels, sources=sources)
@@ -394,6 +399,7 @@ async def download_transcript(task_id: str):
     """
     根據任務 ID 下載轉錄結果檔案。
     """
+    db_client = get_client()
     task = db_client.get_task_status(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
@@ -605,10 +611,11 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
 
         try:
             # --- 步驟 1: 下載 YouTube 音訊 ---
-            log.info(f"   [1/2] 呼叫 youtube_downloader.py 工具...")
+            downloader_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
+            log.info(f"   [1/2] 呼叫 {Path(downloader_script).name} 工具...")
             downloader_cmd = [
                 sys.executable,
-                "tools/youtube_downloader.py",
+                downloader_script,
                 f"--url={url}",
                 f"--output-dir={str(UPLOADS_DIR)}"
             ]
@@ -647,14 +654,15 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
                 raise RuntimeError("Downloader finished but did not provide an output path.")
 
             # --- 步驟 2: 呼叫 Gemini 處理器 ---
-            log.info(f"   [2/2] 呼叫 gemini_processor.py 工具...")
+            processor_script = "tools/mock_gemini_processor.py" if IS_MOCK_MODE else "tools/gemini_processor.py"
+            log.info(f"   [2/2] 呼叫 {Path(processor_script).name} 工具...")
             processing_message = {"type": "YOUTUBE_PROCESS_STATUS", "payload": {"task_id": task_id, "status": "processing", "detail": "AI is processing the audio..."}}
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(processing_message), loop)
 
 
             processor_cmd = [
                 sys.executable,
-                "tools/gemini_processor.py",
+                processor_script,
                 f"--audio-file={downloaded_audio_path}",
                 f"--model={model}",
                 f"--video-title={video_title}",
@@ -692,9 +700,12 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
                 raise RuntimeError("Gemini processor finished but did not provide an output path.")
 
             # --- 步驟 3: 完成 ---
+            # 生成相對於網站根目錄的 URL
+            web_accessible_path = f"/uploads/{Path(html_report_path).name}"
+
             final_result_obj = {
                 "downloaded_audio_path": str(downloaded_audio_path),
-                "html_report_path": str(html_report_path),
+                "html_report_path": web_accessible_path,
                 "video_title": video_title
             }
             db_client.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
@@ -742,6 +753,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
 
                 elif msg_type == "START_TRANSCRIPTION":
+                    db_client = get_client()
                     task_id = payload.get("task_id")
                     if not task_id:
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
@@ -771,6 +783,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         trigger_transcription(task_id, file_path, model_size, language, beam_size, loop)
 
                 elif msg_type == "START_YOUTUBE_PROCESSING":
+                    db_client = get_client()
                     task_id = payload.get("task_id")
                     if not task_id:
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})

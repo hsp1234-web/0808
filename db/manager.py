@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 log = logging.getLogger('DBManagerServer')
 
 # --- 伺服器設定 ---
-HOST, PORT = "127.0.0.1", 0 # 0 表示讓作業系統自動選擇一個空閒的埠號
+HOST, PORT = "127.0.0.1", 49999 # JULES: Hardcoded port to fix race condition
 
 # --- 指令分派 ---
 # 建立一個函式名稱與指令 action 的對應字典
@@ -102,6 +102,16 @@ def run_server():
     """
     啟動資料庫管理者伺服器。
     """
+    # 在伺服器啟動前，先主動清理任何可能存在的舊 port 檔案，確保一致性
+    port_file = Path(__file__).parent / "db_manager.port"
+    if port_file.exists():
+        try:
+            port_file.unlink()
+            log.info(f"已成功移除舊的埠號檔案: {port_file}")
+        except OSError as e:
+            # 即便移除失敗，也只記錄錯誤，不中斷啟動流程
+            log.error(f"無法移除舊的埠號檔案: {e}", exc_info=True)
+
     # 這是整個系統中，唯一應該呼叫 `initialize_database` 的地方
     try:
         log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
@@ -120,19 +130,11 @@ def run_server():
         actual_port = server.server_address[1]
         log.info(f"🚀 資料庫管理者伺服器已在 {HOST}:{actual_port} 上啟動...")
 
-        # 將埠號寫入一個檔案，以便其他程序可以找到它
-        port_file = Path(__file__).parent / "db_manager.port"
-        port_file.write_text(str(actual_port))
-        log.info(f"埠號已寫入: {port_file}")
-
         try:
             # 啟動伺服器，它將一直運行直到被中斷 (例如 Ctrl+C)
             server.serve_forever()
         finally:
-            # 清理埠號檔案
-            if port_file.exists():
-                port_file.unlink()
-            log.info("伺服器已關閉，埠號檔案已清理。")
+            log.info("伺服器已關閉。")
 
 
 if __name__ == "__main__":
