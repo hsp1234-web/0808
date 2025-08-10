@@ -58,6 +58,53 @@ def find_free_port() -> int:
         s.bind(("", 0))
         return s.getsockname()[1]
 
+def wait_for_service(port: int, timeout: int = 15) -> bool:
+    """
+    在指定的超時時間內，等待特定埠號上的網路服務啟動。
+
+    :param port: 要檢查的 TCP 埠號。
+    :param timeout: 等待的總秒數。
+    :return: 如果服務在超時內就緒，則返回 True，否則返回 False。
+    """
+    log.info(f"正在等待 127.0.0.1:{port} 的服務就緒 (超時: {timeout}秒)...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            # 使用 create_connection 嘗試建立連線，並設定短暫的內部超時
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                log.info(f"✅ 服務 127.0.0.1:{port} 已成功連線。")
+                return True
+        except (ConnectionRefusedError, socket.timeout):
+            # 服務尚未就緒，短暫等待後重試
+            time.sleep(0.25)
+            continue
+    log.error(f"❌ 等待服務 127.0.0.1:{port} 超時 ({timeout}秒)。")
+    return False
+
+def get_db_manager_port(timeout: int = 10) -> int | None:
+    """
+    等待並讀取由 DB Manager 寫入的埠號檔案。
+
+    :param timeout: 等待的總秒數。
+    :return: 如果成功讀取，返回埠號 (int)，否則返回 None。
+    """
+    port_file = ROOT_DIR / "db" / "db_manager.port"
+    log.info(f"正在等待 DB Manager 建立埠號檔案: {port_file} (超時: {timeout}秒)...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if port_file.exists():
+            try:
+                port_str = port_file.read_text().strip()
+                if port_str:
+                    log.info(f"✅ 成功讀取到 DB Manager 埠號: {port_str}")
+                    return int(port_str)
+            except Exception as e:
+                log.warning(f"讀取埠號檔案 '{port_file}' 時出錯: {e}, 稍後重試...")
+        time.sleep(0.5)
+
+    log.error(f"❌ 在 {timeout} 秒內未能找到或讀取 DB Manager 的埠號檔案。")
+    return None
+
 def main():
     """
     系統的「大腦」，負責啟動、監控所有服務，並發送心跳。
@@ -98,17 +145,31 @@ def main():
     threads = []
     db_manager_proc = None
     try:
-        # 1. 啟動資料庫管理者服務
+        # 1. 啟動資料庫管理者服務並等待其就緒
         log.info("🔧 正在啟動資料庫管理者服務...")
         db_manager_cmd = [sys.executable, "db/manager.py"]
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
-        log.info(f"✅ 資料庫管理者服務已啟動，PID: {db_manager_proc.pid}")
+        log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
         # 將 DB Manager 的日誌也流式輸出
-        threads.append(threading.Thread(target=stream_reader, args=(db_manager_proc.stdout, 'db_manager')))
+        db_manager_log_thread = threading.Thread(target=stream_reader, args=(db_manager_proc.stdout, 'db_manager'))
+        db_manager_log_thread.daemon = True
+        db_manager_log_thread.start()
+        threads.append(db_manager_log_thread)
+
+        # 1a. 等待並獲取 DB Manager 的埠號
+        db_manager_port = get_db_manager_port()
+        if not db_manager_port:
+            raise RuntimeError("無法獲取 DB Manager 的埠號，啟動中止。")
+
+        # 1b. 確認 DB Manager 服務已在監聽埠號
+        if not wait_for_service(db_manager_port):
+            raise RuntimeError(f"DB Manager 服務在埠號 {db_manager_port} 上未能及時就緒，啟動中止。")
+
+        log.info("✅ 資料庫管理者服務已完全就緒。")
 
         # 2. 獲取資料庫客戶端
-        # get_client() 有內建的重試機制，會等待 .port 檔案被建立
+        # 此時，我們已確認服務就緒，get_client() 應能立即成功
         db_client = get_client()
 
         # 3. 尋找可用埠號並啟動 API 伺服器
@@ -138,14 +199,17 @@ def main():
         worker_proc = None
         # (Worker launch code remains commented out)
 
-        # 5. 啟動日誌流式讀取執行緒
-        # 為每個子程序的 stdout 和 stderr 建立一個執行緒
-        threads.append(threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server')))
-        threads.append(threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr')))
+        # 5. 啟動剩餘的日誌流式讀取執行緒
+        # 為 api_server 子程序的 stdout 和 stderr 建立執行緒
+        api_stdout_thread = threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server'))
+        api_stderr_thread = threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr'))
+        threads.extend([api_stdout_thread, api_stderr_thread])
 
+        # 啟動所有尚未啟動的執行緒
         for t in threads:
-            t.daemon = True # 設置為守護執行緒，以便主程序退出時它們也會退出
-            t.start()
+            if not t.is_alive():
+                t.daemon = True
+                t.start()
 
         # 6. 進入主監控與心跳迴圈
         log.info("--- [協調器進入監控模式] ---")
@@ -184,7 +248,8 @@ def main():
 
         # 等待日誌執行緒結束
         for t in threads:
-            t.join(timeout=2)
+            if t.is_alive():
+                t.join(timeout=2)
 
         log.info("👋 協調器已關閉。")
 
