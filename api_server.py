@@ -9,11 +9,11 @@ import threading
 import asyncio
 import os
 import time
-from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 # 匯入新的資料庫客戶端
 # from db import database # REMOVED: No longer used directly
@@ -52,17 +52,17 @@ logging.basicConfig(
 )
 log = logging.getLogger('api_server')
 
-# def setup_database_logging():
-#     """設定資料庫日誌處理器。"""
-#     # NOTE: This is temporarily disabled as it requires direct DB access.
-#     try:
-#         from db.log_handler import DatabaseLogHandler
-#         root_logger = logging.getLogger()
-#         if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
-#             root_logger.addHandler(DatabaseLogHandler(source='api_server'))
-#             log.info("資料庫日誌處理器設定完成 (source: api_server)。")
-#     except Exception as e:
-#         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+def setup_database_logging():
+    """設定資料庫日誌處理器。"""
+    try:
+        from db.log_handler import DatabaseLogHandler
+        root_logger = logging.getLogger()
+        # 檢查是否已經有同類型的 handler，避免重複加入
+        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+            root_logger.addHandler(DatabaseLogHandler(source='api_server'))
+            log.info("資料庫日誌處理器設定完成 (source: api_server)。")
+    except Exception as e:
+        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
 # 建立一個專門用來記錄前端操作的日誌器
 run_log_file = ROOT_DIR / "run_log.txt"
@@ -333,6 +333,23 @@ async def get_all_tasks_endpoint():
             log.warning(f"任務 {task.get('task_id')} 的 result 不是有效的 JSON。")
             pass # 保持原樣
     return JSONResponse(content=tasks)
+
+
+@app.get("/api/logs")
+async def get_system_logs_endpoint(
+    levels: List[str] = Query(None, alias="level"),
+    sources: List[str] = Query(None, alias="source")
+):
+    """
+    獲取系統日誌，可按等級和來源進行篩選。
+    """
+    log.info(f"API: 正在查詢系統日誌 (Levels: {levels}, Sources: {sources})")
+    try:
+        logs = db_client.get_system_logs(levels=levels, sources=sources)
+        return JSONResponse(content=logs)
+    except Exception as e:
+        log.error(f"❌ 查詢系統日誌時 API 出錯: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="查詢系統日誌時發生內部錯誤")
 
 
 @app.get("/api/download/{task_id}")
@@ -635,8 +652,8 @@ if __name__ == "__main__":
     # JULES: 移除此處的資料庫初始化呼叫。
     # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
 
-    # NOTE: DB logging is disabled in the new architecture
-    # setup_database_logging()
+    # 設定資料庫日誌
+    setup_database_logging()
 
     log.info("🚀 啟動 API 伺服器 (v3)...")
     log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")

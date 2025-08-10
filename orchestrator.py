@@ -33,18 +33,16 @@ logging.basicConfig(
 )
 log = logging.getLogger('orchestrator')
 
-# def setup_database_logging():
-#     """設定資料庫日誌處理器。"""
-#     # NOTE: This is temporarily disabled as it requires direct DB access.
-#     # A new log handler that sends logs to the DB manager would be needed.
-#     try:
-#         from db.log_handler import DatabaseLogHandler
-#         root_logger = logging.getLogger()
-#         if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
-#             root_logger.addHandler(DatabaseLogHandler(source='orchestrator'))
-#             log.info("資料庫日誌處理器設定完成 (source: orchestrator)。")
-#     except Exception as e:
-#         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
+def setup_database_logging():
+    """設定資料庫日誌處理器。"""
+    try:
+        from db.log_handler import DatabaseLogHandler
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
+            root_logger.addHandler(DatabaseLogHandler(source='orchestrator'))
+            log.info("資料庫日誌處理器設定完成 (source: orchestrator)。")
+    except Exception as e:
+        log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
 def stream_reader(stream, prefix):
     """一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。"""
@@ -135,9 +133,9 @@ def main():
     )
     args = parser.parse_args()
 
-    # NOTE: The following calls are removed as DB initialization is now handled by the DB Manager
+    # DB Manager 會處理初始化，所以這裡不需要再呼叫
     # database.initialize_database()
-    # setup_database_logging()
+    # setup_database_logging() # 將在 DB Manager 就緒後呼叫
 
     log.info(f"🚀 協調器啟動。模式: {'模擬 (Mock)' if args.mock else '真實 (Real)'}")
 
@@ -147,6 +145,18 @@ def main():
     try:
         # 1. 啟動資料庫管理者服務並等待其就緒
         log.info("🔧 正在啟動資料庫管理者服務...")
+
+        # --- JULES' FIX START ---
+        # 修復：在啟動前，先清理上一次執行可能遺留的 port 檔案
+        port_file_path = ROOT_DIR / "db" / "db_manager.port"
+        if port_file_path.exists():
+            log.warning(f"偵測到舊的埠號檔案，正在清理: {port_file_path}")
+            try:
+                port_file_path.unlink()
+            except OSError as e:
+                log.error(f"清理舊的埠號檔案時發生錯誤: {e}")
+        # --- JULES' FIX END ---
+
         db_manager_cmd = [sys.executable, "db/manager.py"]
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
@@ -167,6 +177,12 @@ def main():
             raise RuntimeError(f"DB Manager 服務在埠號 {db_manager_port} 上未能及時就緒，啟動中止。")
 
         log.info("✅ 資料庫管理者服務已完全就緒。")
+
+        # --- JULES' FIX START ---
+        # 修復：在 DB Manager 就緒後，再設定資料庫日誌，以避免 race condition
+        setup_database_logging()
+        log.info("Orchestrator's database logging is now configured.")
+        # --- JULES' FIX END ---
 
         # 2. 獲取資料庫客戶端
         # 此時，我們已確認服務就緒，get_client() 應能立即成功

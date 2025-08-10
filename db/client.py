@@ -66,7 +66,19 @@ class DBClient:
                     raise ConnectionError("與伺服器的連線已中斷，未能收到回應標頭。")
 
                 response_len = int.from_bytes(response_header, 'big')
-                response_bytes = sock.recv(response_len)
+
+                # --- JULES' FIX: Loop to receive all data ---
+                response_chunks = []
+                bytes_received = 0
+                while bytes_received < response_len:
+                    chunk = sock.recv(min(response_len - bytes_received, 4096))
+                    if not chunk:
+                        raise ConnectionError("與伺服器的連線已中斷，資料接收不完整。")
+                    response_chunks.append(chunk)
+                    bytes_received += len(chunk)
+
+                response_bytes = b"".join(response_chunks)
+                # --- END FIX ---
 
                 response = json.loads(response_bytes.decode('utf-8'))
 
@@ -123,6 +135,15 @@ class DBClient:
 
     def get_all_tasks(self) -> list[dict]:
         return self._send_request("get_all_tasks")
+
+    def get_system_logs(self, levels: list[str] = None, sources: list[str] = None) -> list[dict]:
+        """
+        從資料庫獲取系統日誌，可選擇性地按等級和來源篩選。
+        """
+        return self._send_request("get_system_logs", {
+            "levels": levels or [],
+            "sources": sources or []
+        })
 
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
