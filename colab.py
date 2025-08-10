@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "2.3.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "2.8.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -83,7 +83,7 @@ import threading
 from collections import deque
 import re
 from IPython.display import clear_output
-from google.colab import output as colab_output
+from google.colab import output as colab_output, userdata
 
 # ==============================================================================
 # SECTION 0.5: 輔助函式 is omitted for brevity

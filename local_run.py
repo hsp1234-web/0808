@@ -175,7 +175,7 @@ def main():
             test_model = "models/gemini-1.5-flash-latest"
 
             # Part A: Submit task via HTTP POST
-            submit_url = f"{api_url}/api/process_youtube"
+            submit_url = f"{api_url}/api/youtube/process"
             log.info(f"準備提交 YouTube 任務至: {submit_url}")
 
             payload = {
@@ -186,7 +186,7 @@ def main():
             response.raise_for_status()
 
             response_data = response.json()
-            task_id = response_data["tasks"][0]["task_id"]
+            task_id = response_data["tasks"][0]["download_task_id"]
             log.info(f"✅ 已成功提交 YouTube 任務，將追蹤任務 ID: {task_id}")
 
             # Part B: Start task via WebSocket
