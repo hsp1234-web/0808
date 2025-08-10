@@ -246,6 +246,28 @@ def get_task_status(task_id: str) -> dict | None:
         if conn:
             conn.close()
 
+def find_dependent_task(parent_task_id: str) -> str | None:
+    """
+    尋找依賴於某個父任務的任務。
+
+    :param parent_task_id: 依賴的父任務 ID。
+    :return: 依賴任務的 task_id，如果找不到則回傳 None。
+    """
+    sql = "SELECT task_id FROM tasks WHERE depends_on = ?"
+    conn = get_db_connection()
+    if not conn: return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (parent_task_id,))
+        task = cursor.fetchone()
+        return task['task_id'] if task else None
+    except sqlite3.Error as e:
+        log.error(f"❌ 尋找依賴於 {parent_task_id} 的任務時出錯: {e}", exc_info=True)
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 def are_tasks_active() -> bool:
     """
     檢查是否有任何正在處理中 (processing) 或待處理 (pending) 的任務。

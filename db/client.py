@@ -136,6 +136,12 @@ class DBClient:
             "sources": sources or []
         })
 
+    def find_dependent_task(self, parent_task_id: str) -> str | None:
+        """
+        尋找依賴於某個父任務的任務。
+        """
+        return self._send_request("find_dependent_task", {"parent_task_id": parent_task_id})
+
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
 
