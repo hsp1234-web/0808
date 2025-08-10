@@ -164,10 +164,6 @@ def main():
 
         log.info("✅ 資料庫管理者服務已完全就緒。")
 
-        # 新增：給予 DB Manager 一點時間來完成內部初始化 (例如建立資料庫檔案)
-        log.info("給予 DB Manager 2 秒進行初始化...")
-        time.sleep(2)
-
         # --- JULES' FIX START ---
         # 修復：在 DB Manager 就緒後，再設定資料庫日誌，以避免 race condition
         setup_database_logging()

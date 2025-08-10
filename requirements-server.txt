@@ -1,0 +1,5 @@
+# Server Core Dependencies
+fastapi
+uvicorn[standard]
+python-multipart
+psutil

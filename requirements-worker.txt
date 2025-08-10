@@ -1,5 +1,19 @@
+# --- Worker & Tooling Dependencies ---
+
 # Transcription Engine
 faster-whisper
 
 # For Chinese Traditional/Simplified conversion
 opencc-python-reimplemented
+
+# For YouTube downloading and Gemini AI processing
+pytubefix
+google-generativeai
+pydub
+
+# For HTML to PDF conversion
+WeasyPrint
+
+# For local testing and e2e scripts
+requests
+websocket-client

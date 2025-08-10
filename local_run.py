@@ -44,18 +44,44 @@ def cleanup_stale_processes():
         log.info("✅ 未發現殘留程序，環境很乾淨。")
 
 def install_dependencies():
-    """安裝所有必要的依賴套件。"""
-    log.info("--- 步驟 0/6: 檢查並安裝依賴 ---")
-    requirements_files = ["requirements.txt", "requirements-worker.txt"]
-    for req_file in requirements_files:
-        log.info(f"正在安裝 {req_file}...")
+    """使用 uv 加速器安裝所有必要的依賴套件。"""
+    log.info("--- 步驟 0/6: 檢查並安裝依賴 (uv 優化流程) ---")
+    try:
+        # 1. 檢查 uv 是否存在
+        subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log.info("✅ uv 加速器已安裝。")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # 2. 如果不存在，則安裝 uv
+        log.info("未偵測到 uv，正在安裝...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", req_file])
-            log.info(f"✅ {req_file} 中的依賴已成功安裝。")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
+            log.info("✅ uv 安裝成功。")
         except subprocess.CalledProcessError as e:
-            log.error(f"❌ 安裝 {req_file} 失敗: {e}")
+            log.error(f"❌ 安裝 uv 失敗: {e}")
             sys.exit(1)
-    log.info("✅ 所有依賴都已安裝。")
+
+    # 3. 使用 uv 一次性安裝所有依賴
+    requirements_files = ["requirements-server.txt", "requirements-worker.txt"]
+    log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
+    try:
+        # 為每個檔案建立 -r 參數
+        uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
+        for req_file in requirements_files:
+            if Path(req_file).is_file():
+                uv_command.extend(["-r", req_file])
+            else:
+                log.warning(f"依賴檔案 {req_file} 不存在，已跳過。")
+
+        # 確保至少有一個有效的依賴檔案
+        if len(uv_command) > 5:
+             subprocess.check_call(uv_command)
+             log.info("✅ 所有依賴都已成功安裝。")
+        else:
+             log.warning("找不到任何有效的依賴檔案，未執行安裝。")
+
+    except subprocess.CalledProcessError as e:
+        log.error(f"❌ 使用 uv 安裝依賴時失敗: {e}")
+        sys.exit(1)
 
 def main():
     """
