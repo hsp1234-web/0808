@@ -403,8 +403,8 @@ def main():
             if not server_manager.port:
                 log_manager.log("CRITICAL", "伺服器已就緒，但未能解析出 API 埠號。無法建立代理連結。")
             else:
-                # V65.5: 增強重試邏輯
-                max_retries, retry_delay = 10, 3
+                # V65.5: 增強重試邏輯 (根據使用者回饋調整)
+                max_retries, retry_delay = 20, 2
                 for attempt in range(max_retries):
                     try:
                         log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
