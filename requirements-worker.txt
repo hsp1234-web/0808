@@ -3,3 +3,12 @@ faster-whisper
 
 # For Chinese Traditional/Simplified conversion
 opencc-python-reimplemented
+
+# For YouTube downloading and Gemini AI processing
+pytubefix
+google-generativeai
+pydub
+
+# For e2e test script (needed by local_run.py which uses these heavy deps)
+requests
+websocket-client

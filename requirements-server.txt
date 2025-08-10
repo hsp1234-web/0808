@@ -1,0 +1,7 @@
+# Server Core
+fastapi
+uvicorn[standard]
+python-multipart
+
+# System Monitoring for UI
+psutil
