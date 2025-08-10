@@ -129,6 +129,12 @@ async def create_transcription_task(request: Request, file: Optional[UploadFile]
     tasks_to_return.append({"task_id": final_transcribe_task_id, "type": "transcribe", "filename": display_filename})
     return JSONResponse(content={"tasks": tasks_to_return})
 
+@app.get("/api/health")
+async def health_check():
+    """提供一個簡單的健康檢查端點。"""
+    log.info("健康檢查端點被呼叫，回傳狀態 'ok'。")
+    return JSONResponse(content={"status": "ok"})
+
 @app.post("/api/youtube/set_api_key")
 async def set_youtube_api_key(request: Request):
     global GEMINI_API_KEY
@@ -276,4 +282,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8001)
     args, _ = parser.parse_known_args()
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    # JULES' FIX: 改用字串匯入模式以提高在子程序中的穩定性，這可能解決 WebSocket 的 404 問題。
+    uvicorn.run("api_server:app", host="0.0.0.0", port=args.port, reload=False)
