@@ -31,6 +31,7 @@ ACTION_MAP = {
     "get_task_status": database.get_task_status,
     "are_tasks_active": database.are_tasks_active,
     "get_all_tasks": database.get_all_tasks,
+    "get_system_logs": database.get_system_logs_by_filter,
 }
 
 

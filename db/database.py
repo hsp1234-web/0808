@@ -292,6 +292,67 @@ def get_all_tasks() -> list[dict]:
             conn.close()
 
 
+def add_system_log(source: str, level: str, message: str) -> bool:
+    """
+    一個簡單的函式，用於從外部腳本（如 colab.py）直接寫入系統日誌。
+    """
+    sql = "INSERT INTO system_logs (source, level, message) VALUES (?, ?, ?)"
+    conn = get_db_connection()
+    if not conn: return False
+    try:
+        with conn:
+            conn.execute(sql, (source, level.upper(), message))
+        return True
+    except sqlite3.Error as e:
+        # 在這種情況下，我們只在控制台打印錯誤，因為我們不能觸發日誌處理器
+        print(f"CRITICAL: Failed to write system log to DB from source {source}. Error: {e}", file=sys.stderr)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_system_logs_by_filter(levels: list[str] = None, sources: list[str] = None) -> list[dict]:
+    """
+    根據等級和來源篩選，從資料庫獲取系統日誌。
+    """
+    conn = get_db_connection()
+    if not conn: return []
+
+    try:
+        sql = "SELECT timestamp, source, level, message FROM system_logs"
+        conditions = []
+        params = []
+
+        # 確保傳入的是列表
+        levels = levels or []
+        sources = sources or []
+
+        if levels:
+            conditions.append(f"level IN ({','.join(['?'] * len(levels))})")
+            params.extend(level.upper() for level in levels)
+
+        if sources:
+            conditions.append(f"source IN ({','.join(['?'] * len(sources))})")
+            params.extend(sources)
+
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+
+        sql += " ORDER BY timestamp ASC"
+
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        logs = cursor.fetchall()
+        return [dict(log) for log in logs]
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取系統日誌時發生錯誤: {e}", exc_info=True)
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     # 直接執行此檔案時，會進行初始化
     initialize_database()

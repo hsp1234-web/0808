@@ -163,6 +163,12 @@
             font-family: monospace;
             color: #495057;
         }
+        .log-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 20px;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -259,6 +265,37 @@
         <div id="transcript-container" class="card">
             <h2>📝 即時轉錄輸出</h2>
             <div id="transcript-output" class="transcript-output">等待任務開始...</div>
+        </div>
+
+        <!-- 系統日誌查看器 -->
+        <div id="log-viewer-card" class="card">
+            <h2>📜 系統日誌查看器</h2>
+            <div class="log-controls">
+                <strong>等級:</strong>
+                <label><input type="checkbox" name="log-level" value="INFO" checked> INFO</label>
+                <label><input type="checkbox" name="log-level" value="SUCCESS" checked> SUCCESS</label>
+                <label><input type="checkbox" name="log-level" value="WARN" checked> WARN</label>
+                <label><input type="checkbox" name="log-level" value="ERROR" checked> ERROR</label>
+                <label><input type="checkbox" name="log-level" value="CRITICAL" checked> CRITICAL</label>
+            </div>
+            <div class="log-controls" style="margin-top: 10px;">
+                <strong>來源:</strong>
+                <label><input type="checkbox" name="log-source" value="colab_setup" checked> Setup</label>
+                <label><input type="checkbox" name="log-source" value="orchestrator" checked> Orchestrator</label>
+                <label><input type="checkbox" name="log-source" value="api_server" checked> API Server</label>
+                <label><input type="checkbox" name="log-source" value="worker" checked> Worker</label>
+            </div>
+            <div style="margin-top: 16px; display: flex; gap: 10px;">
+                <button id="fetch-logs-btn">🔄 更新日誌</button>
+                <button id="copy-logs-btn">📋 複製日誌</button>
+            </div>
+            <pre id="log-output" class="transcript-output" style="margin-top: 16px; min-height: 200px; max-height: 500px; overflow-y: auto;">點擊「更新日誌」以載入...</pre>
+        </div>
+
+        <!-- 檔案預覽區 -->
+        <div id="preview-area" class="card hidden">
+            <h2>📄 檔案預覽</h2>
+            <pre id="preview-content" class="transcript-output" style="min-height: 200px; max-height: 60vh; overflow-y: auto;"></pre>
         </div>
     </div>
 
@@ -382,11 +419,29 @@
                             buttonGroup.style.display = 'flex';
                             buttonGroup.style.gap = '8px';
 
+                            const previewArea = document.getElementById('preview-area');
+                            const previewContent = document.getElementById('preview-content');
+
                             const previewBtn = document.createElement('a');
-                            previewBtn.href = `/api/download/${payload.task_id}`;
+                            previewBtn.href = `#preview-area`;
                             previewBtn.textContent = '預覽';
-                            previewBtn.target = '_blank';
-                            previewBtn.title = '在新分頁中預覽轉錄結果';
+                            previewBtn.title = '在下方預覽轉錄結果';
+                            previewBtn.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                logAction('點擊預覽按鈕', { task_id: payload.task_id });
+                                previewContent.textContent = '正在載入預覽...';
+                                previewArea.classList.remove('hidden');
+                                previewArea.scrollIntoView({ behavior: 'smooth' });
+
+                                try {
+                                    const response = await fetch(`/api/download/${payload.task_id}`);
+                                    if (!response.ok) throw new Error('無法獲取檔案內容');
+                                    const text = await response.text();
+                                    previewContent.textContent = text;
+                                } catch (error) {
+                                    previewContent.textContent = `預覽載入失敗: ${error.message}`;
+                                }
+                            });
 
                             const downloadBtn = document.createElement('a');
                             downloadBtn.href = `/api/download/${payload.task_id}`;
@@ -395,6 +450,13 @@
                             const baseName = originalFilename.substring(0, originalFilename.lastIndexOf('.')) || originalFilename;
                             downloadBtn.download = `${baseName}_transcript.txt`;
                             downloadBtn.title = '下載轉錄文字檔';
+                            downloadBtn.addEventListener('click', () => {
+                                logAction('點擊下載按鈕', { task_id: payload.task_id });
+                                // 當下載時也滾動到預覽區，統一體驗
+                                setTimeout(() => {
+                                    previewArea.scrollIntoView({ behavior: 'smooth' });
+                                }, 100);
+                            });
 
                             buttonGroup.appendChild(previewBtn);
                             buttonGroup.appendChild(downloadBtn);
@@ -594,6 +656,54 @@
             zoomInBtn.addEventListener('click', () => changeFontSize(25));
             zoomOutBtn.addEventListener('click', () => changeFontSize(-25));
 
+            // --- Log Viewer Logic ---
+            const fetchLogsBtn = document.getElementById('fetch-logs-btn');
+            const copyLogsBtn = document.getElementById('copy-logs-btn');
+            const logOutput = document.getElementById('log-output');
+
+            const fetchAndDisplayLogs = async () => {
+                logAction('更新日誌按鈕點擊');
+                logOutput.textContent = '正在載入...';
+                const levelCheckboxes = document.querySelectorAll('input[name="log-level"]:checked');
+                const sourceCheckboxes = document.querySelectorAll('input[name="log-source"]:checked');
+
+                const levels = Array.from(levelCheckboxes).map(cb => cb.value);
+                const sources = Array.from(sourceCheckboxes).map(cb => cb.value);
+
+                const params = new URLSearchParams();
+                levels.forEach(level => params.append('level', level));
+                sources.forEach(source => params.append('source', source));
+
+                try {
+                    const response = await fetch(`/api/logs?${params.toString()}`);
+                    if (!response.ok) {
+                        throw new Error(`伺服器錯誤: ${response.statusText}`);
+                    }
+                    const logs = await response.json();
+                    if (logs.length === 0) {
+                        logOutput.textContent = '在此篩選條件下找不到日誌。';
+                    } else {
+                        logOutput.textContent = logs.map(log => `[${log.timestamp}] [${log.source}] [${log.level}] ${log.message}`).join('\\n');
+                    }
+                } catch (error) {
+                    logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
+                    console.error('Fetch logs error:', error);
+                }
+            };
+
+            const copyLogsToClipboard = () => {
+                logAction('複製日誌按鈕點擊');
+                navigator.clipboard.writeText(logOutput.textContent).then(() => {
+                    alert('日誌已複製到剪貼簿！');
+                }, () => {
+                    alert('複製失敗！');
+                });
+            };
+
+            fetchLogsBtn.addEventListener('click', fetchAndDisplayLogs);
+            copyLogsBtn.addEventListener('click', copyLogsToClipboard);
+
+            // --- Init ---
             setupWebSocket();
             updateSystemStats();
             setInterval(updateSystemStats, 300); // 依照使用者要求，更新頻率設為 0.3 秒
