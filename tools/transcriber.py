@@ -73,11 +73,11 @@ class Transcriber:
             log.critical(f"❌ 載入 '{self.model_size}' 模型時發生未預期錯誤: {e}", exc_info=True)
             raise e
 
-    def transcribe(self, audio_path: str, language: str) -> str:
+    def transcribe(self, audio_path: str, language: str, beam_size: int = 5) -> str:
         """
         執行音訊轉錄的核心方法。
         """
-        log.info(f"🎤 開始處理轉錄任務: {audio_path}")
+        log.info(f"🎤 開始處理轉錄任務: {audio_path} (Beam Size: {beam_size})")
         if not self.model:
             log.error("❌ 模型未被載入，無法進行轉錄。")
             raise RuntimeError("模型未被載入，無法進行轉錄。")
@@ -86,7 +86,7 @@ class Transcriber:
             start_time = time.time()
             log.info("模型載入完成，開始轉錄...")
 
-            segments, info = self.model.transcribe(audio_path, beam_size=5, language=language, word_timestamps=True)
+            segments, info = self.model.transcribe(audio_path, beam_size=beam_size, language=language, word_timestamps=True)
 
             detected_lang_msg = f"'{info.language}' (機率: {info.language_probability:.2f})"
             if language:
@@ -177,6 +177,7 @@ def main():
     parser.add_argument("--audio_file", type=str, help="[transcribe] 需要轉錄的音訊檔案路徑。")
     parser.add_argument("--output_file", type=str, help="[transcribe] 儲存轉錄結果的檔案路徑。")
     parser.add_argument("--language", type=str, default=None, help="[transcribe] 音訊的語言。")
+    parser.add_argument("--beam_size", type=int, default=5, help="[transcribe] 解碼時使用的光束大小。")
     # 通用參數
     parser.add_argument("--model_size", type=str, default="tiny", help="要使用/檢查/下載的模型大小。")
 
@@ -197,7 +198,7 @@ def main():
     log.info(f"🚀 工具啟動 (轉錄模式)，參數: {args}")
     try:
         transcriber = Transcriber(model_size=args.model_size)
-        result_text = transcriber.transcribe(args.audio_file, args.language)
+        result_text = transcriber.transcribe(args.audio_file, args.language, args.beam_size)
         output_path = Path(args.output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(result_text, encoding='utf-8')
