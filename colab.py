@@ -205,6 +205,18 @@ class ServerManager:
 
             # ** 適配新架構: 不再傳遞 --mock，因為這是生產環境 **
             self._log_manager.log("INFO", "將啟動後端服務...")
+
+            # --- JULES 於 2025-08-10 的修復 ---
+            # 在啟動前，先清理上一次執行可能遺留的 port 檔案，避免讀取到過期的埠號
+            port_file_path = project_path / "db" / "db_manager.port"
+            if port_file_path.exists():
+                self._log_manager.log("WARN", f"偵測到舊的埠號檔案，正在清理: {port_file_path}")
+                try:
+                    port_file_path.unlink()
+                except Exception as e:
+                    self._log_manager.log("ERROR", f"清理舊的埠號檔案時發生錯誤: {e}")
+            # --- 修復結束 ---
+
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
             # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
             # 在 Colab 環境中，我們總是希望以真實模式運行
