@@ -224,13 +224,14 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
 
 def process_audio_file(audio_path: Path, model: str, video_title: str, output_dir: Path):
     """
-    完整的處理流程：上傳、分析、生成報告、儲存、清理。
+    完整的處理流程：上傳、分析、生成報告、轉換為 PDF、儲存、清理。
     """
-    # 延遲導入 google.generativeai，使其只在需要時才導入
+    #延遲導入，使其只在需要時才導入
     try:
         import google.generativeai as genai
+        from weasyprint import HTML
     except ImportError:
-        log.critical("🔴 Google Generative AI SDK not installed. Please run 'pip install google-generativeai'.")
+        log.critical("🔴 Necessary libraries (google-generativeai, WeasyPrint) not installed.")
         raise
 
     # 1. 設定 API 金鑰
@@ -247,23 +248,25 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         # 3. 取得摘要與逐字稿
         summary, transcript = get_summary_and_transcript(genai, gemini_file_resource, model, video_title, audio_path.name)
 
-        # 4. 生成 HTML 報告
+        # 4. 生成 HTML 報告內容 (仍在記憶體中)
         html_content = generate_html_report(genai, summary, transcript, model, video_title)
 
-        # 5. 儲存 HTML 報告
+        # 5. 將 HTML 轉換並儲存為 PDF
         sanitized_title = sanitize_filename(video_title)
-        # 確保檔名獨一無二，避免覆寫
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        html_filename = f"{sanitized_title}_{timestamp}_AI_Report.html"
-        html_path = output_dir / html_filename
-        html_path.write_text(html_content, encoding='utf-8')
-        log.info(f"✅ HTML report saved to: {html_path}")
+        pdf_filename = f"{sanitized_title}_{timestamp}_AI_Report.pdf"
+        pdf_path = output_dir / pdf_filename
+
+        log.info(f"📄 Converting HTML to PDF and saving to: {pdf_path}")
+        print_progress("generating_pdf", "正在將報告轉換為 PDF...")
+        HTML(string=html_content, base_url=str(output_dir)).write_pdf(pdf_path)
+        log.info(f"✅ PDF report saved successfully.")
 
         # 6. 輸出最終結果
         final_result = {
             "type": "result",
             "status": "completed",
-            "html_report_path": str(html_path),
+            "pdf_report_path": str(pdf_path), # 回傳 PDF 路徑
             "video_title": video_title
         }
         print(json.dumps(final_result), flush=True)

@@ -121,17 +121,24 @@ def test_youtube_feature(page: Page):
     preview_button = task_item.locator('a:has-text("預覽")')
     expect(preview_button).to_be_visible()
 
-    with page.context.expect_page() as new_page_info:
-        preview_button.click()
+    print("▶️ 驗證 YouTube 報告的「預覽」功能 (PDF)...")
 
-    new_page = new_page_info.value
-    new_page.wait_for_load_state()
-    # 假設報告標題為 "AI 分析報告"，內容包含特定文字
-    # JULES: In mock mode, the gemini_processor.py returns a mock report.
-    expect(new_page).to_have_title("AI 分析報告")
-    expect(new_page.locator("body")).to_contain_text("模擬的 Gemini AI 分析報告", timeout=5000)
-    print("✅ 已成功在新分頁中開啟並驗證 AI 分析報告。")
-    new_page.close()
+    # JULES: 為避免瀏覽器在自動化測試中攔截彈出視窗，
+    # 我們不直接點擊，而是獲取其 href 屬性並直接用 requests 驗證。
+    pdf_url_path = preview_button.get_attribute("href")
+    assert pdf_url_path, "預覽按鈕應有 href 屬性"
+
+    full_pdf_url = f"{SERVER_URL}{pdf_url_path}"
+    print(f"✅ 預覽按鈕指向正確的 URL: {full_pdf_url}")
+
+    # 直接請求該 URL 並驗證內容
+    print("✅ 正在直接請求 URL 以驗證 PDF 內容...")
+    pdf_response = requests.get(full_pdf_url)
+    assert pdf_response.status_code == 200, f"請求 PDF 應回傳 200 OK，但得到 {pdf_response.status_code}"
+    assert 'application/pdf' in pdf_response.headers.get('Content-Type', ''), "回應的 Content-Type 應為 application/pdf"
+    assert pdf_response.content.startswith(b'%PDF-'), "回應內容應為 PDF 檔案"
+
+    print("✅ 已成功驗證後端回傳了正確的 PDF 檔案。")
 
     print("🎉 --- YouTube 功能驗證成功 ---")
 

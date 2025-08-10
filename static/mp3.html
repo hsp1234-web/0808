@@ -547,8 +547,8 @@
 
                 if (payload.status === 'completed') {
                     statusSpan.innerHTML = '';
-                    // YouTube 報告是 HTML 格式
-                    const buttonGroup = createActionButtons(payload.task_id, 'text/html', '.html');
+                    // JULES: YouTube 報告現在是 PDF 格式
+                    const buttonGroup = createActionButtons(payload.task_id, 'application/pdf', '.pdf');
                     statusSpan.appendChild(buttonGroup);
                     completedTasksContainer.appendChild(taskElement);
                     if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
@@ -561,32 +561,36 @@
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'task-actions';
                 const previewBtn = document.createElement('a');
-                previewBtn.href = `#preview-area`;
                 previewBtn.className = 'btn-preview';
                 previewBtn.textContent = '預覽';
-                previewBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    previewArea.classList.remove('hidden');
-                    previewArea.scrollIntoView();
 
-                    const isHtml = previewType === 'text/html';
-                    previewContentText.classList.toggle('hidden', isHtml);
-                    previewContentHtml.classList.toggle('hidden', !isHtml);
+                const isPdf = previewType === 'application/pdf';
 
-                    const contentElement = isHtml ? previewContentHtml : previewContentText;
-                    if(isHtml) {
-                        contentElement.src = `/api/download/${taskId}`;
-                    } else {
-                        contentElement.textContent = '正在載入預覽...';
+                if (isPdf) {
+                    // 對於 PDF 報告 (YouTube)，直接連結到新分頁開啟
+                    previewBtn.href = `/api/download/${taskId}`;
+                    previewBtn.target = '_blank';
+                } else {
+                    // 對於文字轉錄 (本地檔案)，維持頁內預覽
+                    previewBtn.href = `#preview-area`;
+                    previewBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        previewArea.classList.remove('hidden');
+                        previewArea.scrollIntoView();
+
+                        previewContentText.classList.remove('hidden');
+                        previewContentHtml.classList.add('hidden');
+
+                        previewContentText.textContent = '正在載入預覽...';
                         try {
                             const response = await fetch(`/api/download/${taskId}`);
                             if (!response.ok) throw new Error('無法獲取檔案內容');
-                            contentElement.textContent = await response.text();
+                            previewContentText.textContent = await response.text();
                         } catch (error) {
-                            contentElement.textContent = `預覽載入失敗: ${error.message}`;
+                            previewContentText.textContent = `預覽載入失敗: ${error.message}`;
                         }
-                    }
-                });
+                    });
+                }
 
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `/api/download/${taskId}`;

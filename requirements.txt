@@ -25,3 +25,5 @@ opencc-python-reimplemented
 pytubefix
 google-generativeai
 pydub
+# For HTML to PDF conversion
+WeasyPrint

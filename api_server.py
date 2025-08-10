@@ -370,12 +370,16 @@ async def download_transcript(task_id: str):
     try:
         # 從 result 欄位解析出檔名
         result_data = json.loads(task['result'])
-        output_filename = result_data.get("transcript_path")
+        # 依序檢查可能的路徑鍵名，以支援所有任務類型
+        output_filename = (
+            result_data.get("transcript_path") or
+            result_data.get("output_path") or
+            result_data.get("html_report_path") or
+            result_data.get("pdf_report_path")
+        )
+
         if not output_filename:
-            # JULES: 為了向下相容舊的轉錄任務，也檢查 'output_path'
-            output_filename = result_data.get("output_path")
-            if not output_filename:
-                 raise HTTPException(status_code=500, detail="任務結果中未包含有效的檔案路徑。")
+            raise HTTPException(status_code=500, detail="任務結果中未包含有效的檔案路徑。")
 
         file_path = Path(output_filename)
         if not file_path.is_file():
@@ -384,7 +388,13 @@ async def download_transcript(task_id: str):
 
         # 提供檔案下載
         from fastapi.responses import FileResponse
-        media_type = 'text/html' if file_path.suffix.lower() == '.html' else 'text/plain'
+        ext = file_path.suffix.lower()
+        if ext == '.pdf':
+            media_type = 'application/pdf'
+        elif ext == '.html':
+            media_type = 'text/html'
+        else:
+            media_type = 'text/plain'
         return FileResponse(path=file_path, filename=file_path.name, media_type=media_type)
 
     except (json.JSONDecodeError, KeyError) as e:
@@ -681,6 +691,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             download_result = json.loads(last_line)
             # JULES: 修正此處的鍵名，根據 downloader 工具的實際輸出，應為 'output_path'
             audio_file_path = download_result['output_path']
+            video_title = download_result.get('video_title', '無標題影片') # 從下載結果中獲取標題
 
             db_client.update_task_status(download_task_id, 'completed', json.dumps(download_result))
             log.info(f"✅ [執行緒] YouTube 音訊下載完成: {audio_file_path}")
@@ -701,18 +712,26 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析..."}
             }), loop)
 
-            tool_script = "tools/gemini_processor.py"
+            tool_script = "tools/mock_gemini_processor.py" if IS_MOCK_MODE else "tools/gemini_processor.py"
             # JULES: 確保傳遞給工具的 output_dir 是相對於專案根目錄的
             report_output_dir = ROOT_DIR / "transcripts"
             report_output_dir.mkdir(exist_ok=True)
 
-            cmd = [sys.executable, tool_script, "--audio-file", audio_file_path, "--model", model, "--output-dir", str(report_output_dir)]
+            cmd = [
+                sys.executable,
+                tool_script,
+                "--audio-file", audio_file_path,
+                "--model", model,
+                "--output-dir", str(report_output_dir),
+                "--video-title", video_title  # 將標題傳遞給處理器
+            ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
             process_result = json.loads(result.stdout)
 
             db_client.update_task_status(dependent_task_id, 'completed', json.dumps(process_result))
-            log.info(f"✅ [執行緒] Gemini AI 處理完成。報告位於: {process_result.get('report_path')}")
+            report_path = process_result.get("pdf_report_path") or process_result.get("html_report_path")
+            log.info(f"✅ [執行緒] Gemini AI 處理完成。報告位於: {report_path}")
 
             # 發送最終完成訊息
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
