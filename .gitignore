@@ -47,3 +47,6 @@ fake_audio.txt
 
 # Agent-specific
 /jules-scratch/
+
+# Secrets
+secrets.json
