@@ -1,4 +1,5 @@
 # api_server.py
+import argparse
 import uuid
 import shutil
 import logging
@@ -30,11 +31,13 @@ os.environ['TZ'] = 'Asia/Taipei'
 if sys.platform != 'win32':
     time.tzset()
 
-# --- 模式設定 ---
+# --- 模式與埠號設定 ---
 cli_parser = argparse.ArgumentParser()
 cli_parser.add_argument("--mock", action="store_true", help="啟用模擬模式")
+cli_parser.add_argument("--port", type=int, default=8001, help="指定伺服器監聽的埠號")
 cli_args, _ = cli_parser.parse_known_args()
 IS_MOCK_MODE = cli_args.mock
+PORT = cli_args.port
 
 ROOT_DIR = Path(__file__).resolve().parent
 
@@ -137,10 +140,21 @@ async def process_youtube_url(request: YouTubeProcessRequest):
 def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio.AbstractEventLoop):
     def _process_in_thread():
         log.info(f"🧵 [執行緒] 開始處理 YouTube 任務: {task_id}，URL: {url}")
+
+        def log_stderr(pipe, pipe_name):
+            """在單獨的執行緒中讀取並記錄子程序的 stderr。"""
+            for line in iter(pipe.readline, ''):
+                log.info(f"[{pipe_name} stderr] {line.strip()}")
+            pipe.close()
+
         try:
             downloader_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
             downloader_cmd = [sys.executable, downloader_script, f"--url={url}", f"--output-dir={str(UPLOADS_DIR)}"]
             process = subprocess.Popen(downloader_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+            # 啟動一個執行緒來非同步讀取下載器的 stderr
+            stderr_thread = threading.Thread(target=log_stderr, args=(process.stderr, "Downloader"))
+            stderr_thread.start()
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({"type": "YOUTUBE_PROCESS_STATUS", "payload": {"task_id": task_id, "status": "downloading", "detail": "Starting download..."}}), loop)
 
@@ -155,6 +169,9 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
                         downloaded_audio_path = data.get("output_path")
                         video_title = data.get("video_title", video_title)
                     else:
+                        # 等待 stderr 執行緒結束，以確保所有日誌都已擷取
+                        process.wait()
+                        stderr_thread.join()
                         raise RuntimeError(f"Downloader failed: {data.get('error', 'Unknown error')}")
 
             if not downloaded_audio_path:
@@ -171,6 +188,10 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
             proc_env["GOOGLE_API_KEY"] = api_key
 
             proc_gemini = subprocess.Popen(processor_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
+
+            # 啟動一個執行緒來非同步讀取 Gemini 處理器的 stderr
+            gemini_stderr_thread = threading.Thread(target=log_stderr, args=(proc_gemini.stderr, "GeminiProcessor"))
+            gemini_stderr_thread.start()
 
             html_report_path = None
             for line in iter(proc_gemini.stdout.readline, ''):
@@ -189,8 +210,21 @@ def trigger_youtube_processing(task_id: str, url: str, model: str, loop: asyncio
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({"type": "YOUTUBE_PROCESS_STATUS", "payload": {"task_id": task_id, "status": "completed", "result": final_result_obj}}), loop)
         except Exception as e:
-            log.error(f"❌ [執行緒] YouTube 處理任務 '{task_id}' 失敗: {e}", exc_info=True)
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({"type": "YOUTUBE_PROCESS_STATUS", "payload": {"task_id": task_id, "status": "failed", "error": str(e)}}), loop)
+            error_message = f"任務執行緒發生未預期錯誤: {e}"
+            log.error(f"❌ [執行緒] YouTube 處理任務 '{task_id}' 失敗: {error_message}", exc_info=True)
+
+            # 將錯誤資訊記錄到資料庫，這是讓系統返回 IDLE 狀態的關鍵
+            error_payload = {"error": error_message}
+            db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
+
+            # 透過 WebSocket 通知前端失敗
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast_json({
+                    "type": "YOUTUBE_PROCESS_STATUS",
+                    "payload": {"task_id": task_id, "status": "failed", "error": error_message}
+                }),
+                loop
+            )
 
     thread = threading.Thread(target=_process_in_thread)
     thread.start()
@@ -221,5 +255,5 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     setup_database_logging()
-    log.info("🚀 啟動 API 伺服器 (v3)...")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    log.info(f"🚀 啟動 API 伺服器 (v3)於埠號 {PORT}...")
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
