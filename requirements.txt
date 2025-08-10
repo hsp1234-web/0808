@@ -20,3 +20,8 @@ faster-whisper
 
 # For Chinese Traditional/Simplified conversion
 opencc-python-reimplemented
+
+# For YouTube downloading and Gemini AI processing
+pytubefix
+google-generativeai
+pydub
