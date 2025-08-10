@@ -79,29 +79,15 @@ def wait_for_service(port: int, timeout: int = 15) -> bool:
     log.error(f"❌ 等待服務 127.0.0.1:{port} 超時 ({timeout}秒)。")
     return False
 
-def get_db_manager_port(timeout: int = 10) -> int | None:
+def get_db_manager_port() -> int:
     """
-    等待並讀取由 DB Manager 寫入的埠號檔案。
-
-    :param timeout: 等待的總秒數。
-    :return: 如果成功讀取，返回埠號 (int)，否則返回 None。
+    返回資料庫管理者伺服器的硬編碼埠號。
+    這個改動是為了消除因讀取 .port 檔案而引起的競爭條件。
     """
-    port_file = ROOT_DIR / "db" / "db_manager.port"
-    log.info(f"正在等待 DB Manager 建立埠號檔案: {port_file} (超時: {timeout}秒)...")
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        if port_file.exists():
-            try:
-                port_str = port_file.read_text().strip()
-                if port_str:
-                    log.info(f"✅ 成功讀取到 DB Manager 埠號: {port_str}")
-                    return int(port_str)
-            except Exception as e:
-                log.warning(f"讀取埠號檔案 '{port_file}' 時出錯: {e}, 稍後重試...")
-        time.sleep(0.5)
-
-    log.error(f"❌ 在 {timeout} 秒內未能找到或讀取 DB Manager 的埠號檔案。")
-    return None
+    # JULES' FIX: 直接返回硬編碼的埠號，以匹配 db/manager.py 的設定
+    hardcoded_port = 49999
+    log.info(f"使用硬編碼的 DB Manager 埠號: {hardcoded_port}")
+    return hardcoded_port
 
 def main():
     """
@@ -167,10 +153,10 @@ def main():
         db_manager_log_thread.start()
         threads.append(db_manager_log_thread)
 
-        # 1a. 等待並獲取 DB Manager 的埠號
+        # 1a. 獲取 DB Manager 的硬編碼埠號
         db_manager_port = get_db_manager_port()
-        if not db_manager_port:
-            raise RuntimeError("無法獲取 DB Manager 的埠號，啟動中止。")
+        # Note: The check for a null port is no longer needed as the function
+        # now always returns a hardcoded port or fails internally.
 
         # 1b. 確認 DB Manager 服務已在監聽埠號
         if not wait_for_service(db_manager_port):
