@@ -496,6 +496,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- DOM 元素 ---
             const fileInput = document.getElementById('file-input');
+            const fileDropZone = document.querySelector('.file-drop-zone'); // Get the drop zone label
             const fileListDisplay = document.getElementById('file-list');
             const startBtn = document.getElementById('start-processing-btn');
             const confirmBtn = document.getElementById('confirm-settings-btn');
@@ -517,14 +518,21 @@
             const previewContentText = document.getElementById('preview-content-text');
             const previewContentHtml = document.getElementById('preview-content-html');
             const closePreviewBtn = document.getElementById('close-preview-btn');
+            const zoomInBtn = document.getElementById('zoom-in-btn');
+            const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const timestampToggle = document.getElementById('timestamp-toggle');
+
 
             // YouTube Tab Elements
-            const apiKeyPrompt = document.getElementById('api-key-prompt');
-            const apiKeySuccess = document.getElementById('api-key-success');
-            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
+            const apiKeyInput = document.getElementById('api-key-input');
+            const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+            const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
+            const apiKeyStatus = document.getElementById('api-key-status');
+            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
+            const downloadAudioOnlyBtn = document.getElementById('download-audio-only-btn');
             const geminiModelSelect = document.getElementById('gemini-model-select');
             const youtubeUrlsInput = document.getElementById('youtube-urls-input');
-            const startYoutubeBtn = document.getElementById('start-youtube-processing-btn');
+
 
             // JULES: 新增的媒體下載器 UI 元素
             const downloaderUrlsInput = document.getElementById('downloader-urls-input');
@@ -533,6 +541,19 @@
             const audioOptions = document.getElementById('audio-options');
             const videoOptions = document.getElementById('video-options');
             const removeSilenceCheckbox = document.getElementById('remove-silence-checkbox');
+            const renameFileCheckbox = document.getElementById('rename-file-checkbox');
+            const audioFormatSelect = document.getElementById('audio-format-select');
+            const videoQualitySelect = document.getElementById('video-quality-select');
+            const zipDownloadBtn = document.getElementById('zip-download-btn');
+
+
+            // Log Viewer Elements
+            const fetchLogsBtn = document.getElementById('fetch-logs-btn');
+            const logOutput = document.getElementById('log-output');
+            const copyLogsBtn = document.getElementById('copy-logs-btn');
+            const logLevelCheckboxes = document.querySelectorAll('input[name="log-level"]');
+            const logSourceCheckboxes = document.querySelectorAll('input[name="log-source"]');
+
 
             // --- 狀態變數 ---
             let uploadedFiles = [];
@@ -541,11 +562,13 @@
             const modelStatus = {};
 
             // --- 核心邏輯 ---
-            const logAction = (action) => {
+            const logAction = (action, value = null) => {
+                const message = value !== null ? `${action}: ${value}` : action;
+                console.log(`Logging action: ${message}`);
                 fetch('/api/log/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action })
+                    body: JSON.stringify({ action: message })
                 }).catch(err => console.error('logAction failed:', err));
             };
 
@@ -556,6 +579,7 @@
 
                 socket.onopen = () => {
                     console.log('WebSocket 連線成功');
+                    logAction('websocket-connect-success');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
                     initializeYouTubeTab(); // 初始化 YouTube 分頁
@@ -564,12 +588,14 @@
                 socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
                 socket.onclose = () => {
                     console.log('WebSocket 連線已關閉');
+                    logAction('websocket-connect-close');
                     statusText.textContent = '已離線';
                     statusLight.className = 'status-light status-yellow';
                     setTimeout(setupWebSocket, 3000);
                 };
                 socket.onerror = (error) => {
                     console.error('WebSocket 發生錯誤:', error);
+                    logAction('websocket-connect-error');
                     statusText.textContent = '連線錯誤';
                 };
             };
@@ -631,6 +657,7 @@
                         checkbox.className = 'task-checkbox';
                         checkbox.value = payload.task_id;
                         checkbox.style.marginRight = '15px';
+                        checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
                         taskElement.prepend(checkbox);
 
                     } else if (payload.status === 'failed') {
@@ -638,7 +665,6 @@
                     }
                 } else if (type === 'TRANSCRIPTION_UPDATE') {
                     if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
-                        const timestampToggle = document.getElementById('timestamp-toggle');
                         const p = document.createElement('p');
                         p.dataset.start = payload.start;
 
@@ -695,6 +721,7 @@
                     checkbox.className = 'task-checkbox';
                     checkbox.value = payload.task_id;
                     checkbox.style.marginRight = '15px';
+                    checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
                     taskElement.prepend(checkbox);
 
                     // Enable the zip button if it's a downloader task
@@ -722,6 +749,10 @@
                 const cleanFilename = originalFilename.split('(')[0].trim();
                 const baseName = cleanFilename.substring(0, cleanFilename.lastIndexOf('.')) || cleanFilename;
                 downloadBtn.download = `${baseName}_result${extension}`;
+                downloadBtn.addEventListener('click', (e) => {
+                    logAction('click-download-task', taskId);
+                });
+
 
                 if (taskType === 'download_only') {
                     // --- 「僅下載音訊」完成的專屬按鈕 ---
@@ -731,6 +762,7 @@
                     sendToWhisperBtn.textContent = '送至轉錄區';
                     sendToWhisperBtn.addEventListener('click', async (e) => {
                         e.preventDefault();
+                        logAction('click-send-to-whisper', taskId);
                         sendToWhisperBtn.textContent = '處理中...';
                         try {
                             // 1. 從後端獲取 Blob
@@ -773,10 +805,14 @@
                     if (isPdf) {
                         previewBtn.href = `/api/download/${taskId}`;
                         previewBtn.target = '_blank';
+                         previewBtn.addEventListener('click', (e) => {
+                            logAction('click-preview-pdf-task', taskId);
+                        });
                     } else {
                         previewBtn.href = `#preview-area`;
                         previewBtn.addEventListener('click', async (e) => {
                             e.preventDefault();
+                            logAction('click-preview-text-task', taskId);
                             previewArea.classList.remove('hidden');
                             previewArea.scrollIntoView({ behavior: 'smooth' });
                             previewContentText.classList.remove('hidden');
@@ -826,6 +862,7 @@
                 document.querySelectorAll('.remove-file-btn').forEach(button => {
                     button.addEventListener('click', (e) => {
                         const indexToRemove = parseInt(e.target.dataset.index, 10);
+                        logAction('click-remove-file', uploadedFiles[indexToRemove].name);
                         uploadedFiles.splice(indexToRemove, 1);
                         updateFileDisplay();
                     });
@@ -835,6 +872,7 @@
             };
 
             fileInput.addEventListener('change', () => {
+                logAction('change-file-input');
                 const newFiles = Array.from(fileInput.files);
                 newFiles.forEach(newFile => {
                     if (!uploadedFiles.some(existingFile => existingFile.name === newFile.name)) {
@@ -844,18 +882,26 @@
                 updateFileDisplay();
                 fileInput.value = '';
             });
+             fileDropZone.addEventListener('click', () => {
+                logAction('click-file-drop-zone');
+                fileInput.click();
+            });
+
 
             confirmBtn.addEventListener('click', () => {
+                logAction('click-confirm-settings', modelSelect.value);
                 modelDisplay.textContent = modelSelect.value;
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
                 } else {
+                    logAction('alert-websocket-not-connected');
                     alert('WebSocket 未連線，無法下載模型。');
                 }
             });
 
             startBtn.addEventListener('click', async () => {
                 if (uploadedFiles.length === 0) return;
+                logAction('click-start-processing', `files_count: ${uploadedFiles.length}`);
                 startBtn.disabled = true;
                 startBtn.textContent = '正在建立任務...';
                 for (const file of uploadedFiles) {
@@ -884,14 +930,8 @@
             });
 
             // --- YouTube Tab Logic ---
-
-            /**
-             * 更新 API 金鑰相關的 UI 介面
-             * @param {'valid' | 'invalid' | 'validating' | 'not_provided'} state - 金鑰狀態
-             * @param {string} [message] - 要顯示的訊息
-             */
             const updateApiKeyUI = (state, message) => {
-                logAction(`updateApiKeyUI called with state: ${state}`);
+                // This function is already logging via logAction
                 const statusSpan = apiKeyStatus.querySelector('span');
                 statusSpan.style.color = 'inherit'; // 重設顏色
                 statusSpan.style.fontStyle = 'normal';
@@ -923,11 +963,6 @@
                         break;
                 }
             };
-
-            /**
-             * 呼叫後端 API 來驗證金鑰的有效性
-             * @param {string} apiKey - 要驗證的 Google API 金鑰
-             */
             const validateApiKey = async (apiKey) => {
                 if (!apiKey) {
                     updateApiKeyUI('not_provided');
@@ -943,7 +978,6 @@
                     const result = await response.json();
                     if (response.ok && result.valid) {
                         updateApiKeyUI('valid', '金鑰有效，Gemini 功能已啟用');
-                        // 驗證成功後，載入 Gemini 模型列表
                         loadGeminiModels();
                     } else {
                         updateApiKeyUI('invalid', result.detail || '金鑰無效或發生未知錯誤');
@@ -953,10 +987,6 @@
                     updateApiKeyUI('invalid', '無法連線至後端進行驗證');
                 }
             };
-
-            /**
-             * 從後端載入可用的 Gemini 模型列表
-             */
             const loadGeminiModels = async () => {
                 try {
                     const modelsRes = await fetch('/api/youtube/models');
@@ -969,17 +999,18 @@
                         option.textContent = model.name;
                         geminiModelSelect.appendChild(option);
                     });
+                     logAction('load-gemini-models-success');
                 } catch (error) {
                     console.error("載入 Gemini 模型時出錯:", error);
+                    logAction('load-gemini-models-failed');
                     geminiModelSelect.innerHTML = `<option>${error.message}</option>`;
                 }
             };
-
             const initializeYouTubeTab = () => {
-                logAction('Initializing YouTube Tab');
-                // 1. 設定按鈕事件監聽
+                logAction('initialize-youtube-tab');
                 saveApiKeyBtn.addEventListener('click', () => {
                     const apiKey = apiKeyInput.value.trim();
+                     logAction('click-save-api-key');
                     if (apiKey) {
                         localStorage.setItem('googleApiKey', apiKey);
                         validateApiKey(apiKey);
@@ -987,15 +1018,13 @@
                         alert('API 金鑰不能為空');
                     }
                 });
-
                 clearApiKeyBtn.addEventListener('click', () => {
+                    logAction('click-clear-api-key');
                     localStorage.removeItem('googleApiKey');
                     apiKeyInput.value = '';
                     updateApiKeyUI('not_provided');
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
                 });
-
-                // 2. 頁面載入時，檢查 localStorage 中是否已有金鑰
                 const storedApiKey = localStorage.getItem('googleApiKey');
                 if (storedApiKey) {
                     apiKeyInput.value = storedApiKey;
@@ -1005,43 +1034,34 @@
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
                 }
             };
-
-            /**
-             * 處理 YouTube 相關的任務（下載或完整處理）
-             * @param {boolean} downloadOnly - 是否僅下載音訊
-             */
             const processYoutubeRequest = async (downloadOnly = false) => {
+                const action = downloadOnly ? 'click-download-audio-only' : 'click-start-youtube-processing';
+                logAction(action);
                 const urls = youtubeUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
                 if (urls.length === 0) {
                     alert('請輸入至少一個 YouTube 網址。');
                     return;
                 }
-
                 const button = downloadOnly ? downloadAudioOnlyBtn : startYoutubeProcessingBtn;
                 const originalText = button.textContent;
                 button.disabled = true;
                 button.textContent = '正在建立任務...';
-
                 try {
                     const payload = {
                         urls: urls,
                         model: geminiModelSelect.value,
                         download_only: downloadOnly
                     };
-
                     const response = await fetch('/api/youtube/process', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     });
                     if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
-
                     const result = await response.json();
                     result.tasks.forEach(task => {
-                        // 根據任務類型設定顯示名稱
                         const taskType = downloadOnly ? '僅下載音訊' : 'YouTube 分析';
                         createNewTaskElement(task.url, task.task_id, taskType);
-
                         if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
                         }
@@ -1054,17 +1074,17 @@
                     button.textContent = originalText;
                 }
             };
-
-            // 為兩個主要按鈕新增事件監聽
             downloadAudioOnlyBtn.addEventListener('click', () => processYoutubeRequest(true));
             startYoutubeProcessingBtn.addEventListener('click', () => processYoutubeRequest(false));
-
-            closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
+            closePreviewBtn.addEventListener('click', () => {
+                 logAction('click-close-preview');
+                 previewArea.classList.add('hidden');
+            });
 
             // --- JULES: 新增的媒體下載器邏輯 ---
-            // 根據選擇的下載類型（音訊/影片）顯示或隱藏對應的選項
             downloadTypeRadios.forEach(radio => {
-                radio.addEventListener('change', () => {
+                radio.addEventListener('change', (e) => {
+                    logAction('change-download-type', e.target.value);
                     if (radio.value === 'audio') {
                         audioOptions.classList.remove('hidden');
                         videoOptions.classList.add('hidden');
@@ -1073,71 +1093,48 @@
                         audioOptions.classList.add('hidden');
                         videoOptions.classList.remove('hidden');
                         removeSilenceCheckbox.disabled = true;
-                        removeSilenceCheckbox.checked = false; // Uncheck it as it's not applicable
+                        removeSilenceCheckbox.checked = false;
                     }
                 });
             });
-
-            // 處理「開始下載」按鈕的點擊事件
             const processDownloaderRequest = async () => {
+                logAction('click-start-download');
                 const urls = downloaderUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
                 if (urls.length === 0) {
                     alert('請輸入至少一個網址。');
                     return;
                 }
-
                 const downloadType = document.querySelector('input[name="download-type"]:checked').value;
-
                 let options = {
                     download_type: downloadType,
                     remove_silence: removeSilenceCheckbox.checked,
-                    rename_file: document.getElementById('rename-file-checkbox').checked,
+                    rename_file: renameFileCheckbox.checked,
                 };
-
                 if (downloadType === 'audio') {
-                    options.audio_format = document.getElementById('audio-format-select').value;
+                    options.audio_format = audioFormatSelect.value;
                 } else {
-                    options.video_quality = document.getElementById('video-quality-select').value;
+                    options.video_quality = videoQualitySelect.value;
                 }
-
-                const payload = {
-                    urls: urls,
-                    options: options,
-                    // Differentiate this from the AI processing task
-                    task_kind: 'download'
-                };
-
+                const payload = { urls: urls, options: options, task_kind: 'download' };
                 startDownloadBtn.disabled = true;
                 startDownloadBtn.textContent = '正在建立任務...';
-
                 try {
-                    // We'll reuse the same endpoint but the backend will need to differentiate
-                    // based on the payload structure (e.g., presence of 'task_kind').
                     const response = await fetch('/api/youtube/process', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     });
                     if (!response.ok) throw new Error((await response.json()).detail || '建立下載任務失敗');
-
                     const result = await response.json();
-                    // This part assumes the backend response format is similar to existing tasks
                     result.tasks.forEach(task => {
-                        // We need a way to display these new tasks. We can adapt createNewTaskElement
-                        // or create a new display function. For now, let's adapt.
-                        // The taskType display name should be more descriptive.
                         const taskType = `下載 ${downloadType === 'audio' ? '音訊' : '影片'}`;
                         const downloaderTaskContainer = document.getElementById('downloader-tasks');
                         createNewTaskElement(task.url, task.task_id, taskType, downloaderTaskContainer);
-
                         if (socket && socket.readyState === WebSocket.OPEN) {
-                            // The backend should recognize this task and send updates via WebSocket.
-                            // We might need a new START_DOWNLOAD_TASK message type.
                             socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
                         }
                     });
                     downloaderUrlsInput.value = '';
-
                 } catch (error) {
                     alert(`處理下載任務時發生錯誤: ${error.message}`);
                 } finally {
@@ -1145,44 +1142,36 @@
                     startDownloadBtn.textContent = '開始下載';
                 }
             };
-
             startDownloadBtn.addEventListener('click', processDownloaderRequest);
-
-            // 處理「打包下載選定項目」按鈕的點擊事件
-            document.getElementById('zip-download-btn').addEventListener('click', (e) => {
-                const checkedBoxes = document.querySelectorAll('.task-checkbox:checked');
+            zipDownloadBtn.addEventListener('click', (e) => {
+                logAction('click-zip-download');
+                const checkedBoxes = document.querySelectorAll('#downloader-tasks .task-checkbox:checked');
                 if (checkedBoxes.length === 0) {
                     alert('請至少選擇一個要打包下載的項目。');
                     return;
                 }
-
                 const taskIds = Array.from(checkedBoxes).map(cb => cb.value);
                 const url = `/api/zip_download?task_ids=${taskIds.join(',')}`;
-
-                // Trigger download by navigating to the URL
                 window.location.href = url;
-
-                // Provide feedback
                 const btn = e.target;
                 btn.disabled = true;
                 btn.textContent = '正在打包...';
                 setTimeout(() => {
                     btn.disabled = false;
                     btn.textContent = '打包下載選定項目 (.zip)';
-                }, 5000); // Reset button after 5 seconds
+                }, 5000);
             });
 
             // --- Tab Switching Logic ---
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const tabId = button.dataset.tab;
-                    logAction(`Tab button clicked for: ${tabId}`);
+                    logAction(`click-tab`, tabId); // Modified this line
                     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                     button.classList.add('active');
                     document.querySelectorAll('.tab-content').forEach(content => {
                         if (content.id === tabId) {
                             content.classList.add('active');
-                            logAction(`Tab content ${tabId} is now active.`);
                         } else {
                             content.classList.remove('active');
                         }
@@ -1190,16 +1179,13 @@
                 });
             });
 
-            // --- Init ---
+            // --- Init & Other Listeners ---
             setupWebSocket();
             updateFileDisplay();
 
             // --- JULES'S ADDITION: Log Viewer Logic ---
-            const fetchLogsBtn = document.getElementById('fetch-logs-btn');
-            const logOutput = document.getElementById('log-output');
-            const copyLogsBtn = document.getElementById('copy-logs-btn');
-
             fetchLogsBtn.addEventListener('click', async () => {
+                logAction('click-fetch-logs');
                 logOutput.textContent = '載入中...';
                 try {
                     const levels = Array.from(document.querySelectorAll('input[name="log-level"]:checked')).map(el => el.value);
@@ -1207,10 +1193,8 @@
                     const params = new URLSearchParams();
                     levels.forEach(level => params.append('level', level));
                     sources.forEach(source => params.append('source', source));
-
                     const response = await fetch(`/api/logs?${params.toString()}`);
                     if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
-
                     const logs = await response.json();
                     if (logs.length === 0) {
                         logOutput.textContent = '找不到符合條件的日誌。';
@@ -1221,29 +1205,28 @@
                     logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
                 }
             });
-
             copyLogsBtn.addEventListener('click', () => {
+                logAction('click-copy-logs');
                 navigator.clipboard.writeText(logOutput.textContent)
                     .then(() => alert('日誌已複製到剪貼簿！'))
                     .catch(err => alert('複製失敗: ' + err));
             });
-            // --- END LOG VIEWER LOGIC ---
+            logLevelCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-level-filter', cb.value)));
+            logSourceCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-source-filter', cb.value)));
+
 
             // --- JULES's ADDITION: System Stats Polling ---
             const cpuLabel = document.getElementById('cpu-label');
             const ramLabel = document.getElementById('ram-label');
             const gpuLabel = document.getElementById('gpu-label');
-            const gpuDisplay = document.getElementById('gpu-display'); // The one in the top dashboard
-
+            const gpuDisplay = document.getElementById('gpu-display');
             const updateSystemStats = async () => {
                 try {
                     const response = await fetch('/api/system_stats');
-                    if (!response.ok) return; // Fail silently
+                    if (!response.ok) return;
                     const stats = await response.json();
-
                     cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
                     ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
-
                     if (stats.gpu_detected) {
                         gpuLabel.textContent = `${stats.gpu_usage !== null ? stats.gpu_usage.toFixed(1) + '%' : 'N/A'}`;
                         gpuDisplay.textContent = '已偵測到';
@@ -1251,17 +1234,25 @@
                         gpuLabel.textContent = '--%';
                         gpuDisplay.textContent = '未偵測到';
                     }
-
                 } catch (error) {
-                    // console.error('Error fetching system stats:', error);
-                    // Do not log to avoid spamming console on connection drops
+                    // silent fail
                 }
             };
-
-            // Call it once immediately, then set an interval
             updateSystemStats();
-            setInterval(updateSystemStats, 2000); // Update every 2 seconds
-            // --- END ADDITION ---
+            setInterval(updateSystemStats, 2000);
+
+            // --- Final UI Listeners for Logging ---
+            zoomInBtn.addEventListener('click', () => logAction('click-zoom-in'));
+            zoomOutBtn.addEventListener('click', () => logAction('click-zoom-out'));
+            timestampToggle.addEventListener('change', (e) => logAction('toggle-timestamp', e.target.checked));
+            modelSelect.addEventListener('change', (e) => logAction('change-model-select', e.target.value));
+            languageSelect.addEventListener('change', (e) => logAction('change-language-select', e.target.value));
+            beamSizeInput.addEventListener('change', (e) => logAction('change-beam-size', e.target.value));
+            geminiModelSelect.addEventListener('change', (e) => logAction('change-gemini-model', e.target.value));
+            audioFormatSelect.addEventListener('change', (e) => logAction('change-audio-format', e.target.value));
+            videoQualitySelect.addEventListener('change', (e) => logAction('change-video-quality', e.target.value));
+            removeSilenceCheckbox.addEventListener('change', (e) => logAction('toggle-remove-silence', e.target.checked));
+            renameFileCheckbox.addEventListener('change', (e) => logAction('toggle-rename-file', e.target.checked));
         });
     </script>
 </body>

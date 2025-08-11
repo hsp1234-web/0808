@@ -12,6 +12,7 @@ import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -28,22 +29,15 @@ if sys.platform != 'win32':
 # --- 時區設定結束 ---
 
 # --- 模式設定 ---
-# 透過命令列旗標決定是否啟用模擬模式
-import argparse
-cli_parser = argparse.ArgumentParser()
-cli_parser.add_argument(
-    "--mock",
-    action="store_true",
-    help="啟用模擬模式，將使用 mock_transcriber.py。"
-)
-cli_args, _ = cli_parser.parse_known_args()
-IS_MOCK_MODE = cli_args.mock
+# JULES: 改為透過環境變數來決定模擬模式，以便與 Circus 整合
+# 預設為非模擬模式 (真實模式)
+IS_MOCK_MODE = os.environ.get("API_MODE", "real") == "mock"
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
 ROOT_DIR = Path(__file__).resolve().parent
 
-# --- 日誌設定 ---
+# --- 主日誌設定 ---
 # 主日誌器
 logging.basicConfig(
     level=logging.INFO,
@@ -64,20 +58,31 @@ def setup_database_logging():
     except Exception as e:
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
-# 建立一個專門用來記錄前端操作的日誌器
-run_log_file = ROOT_DIR / "run_log.txt"
-action_log = logging.getLogger('frontend_action')
-action_log.setLevel(logging.INFO)
 
-# 為了確保每次執行都是乾淨的，先清空日誌檔案
-if run_log_file.exists():
-    run_log_file.unlink()
+# --- JULES'S FIX: 穩健的前端日誌記錄函式 ---
+def log_frontend_action_to_file(message: str):
+    """
+    一個穩健的函式，用於將前端操作日誌寫入 run_log.txt。
+    它會延遲建立 logger 和 handler，確保在 uvicorn 的多 worker 環境下也能正常運作。
+    """
+    logger_name = 'frontend_action_logger'
+    action_log = logging.getLogger(logger_name)
 
-# 為 action_log 新增一個 FileHandler
-file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-action_log.addHandler(file_handler)
-action_log.propagate = False # 防止日誌傳播到 root logger，避免在控制台重複輸出
+    # 只有在 logger 尚未被設定時才進行設定，避免重複加入 handler
+    if not action_log.handlers:
+        action_log.setLevel(logging.INFO)
+
+        run_log_file = ROOT_DIR / "run_log.txt"
+
+        file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
+        formatter = logging.Formatter('%(asctime)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        action_log.addHandler(file_handler)
+        action_log.propagate = False # 防止日誌傳播到 root logger
+
+    action_log.info(f"[FRONTEND ACTION] {message}")
+
 
 # --- WebSocket 連線管理器 ---
 class ConnectionManager:
@@ -114,6 +119,16 @@ db_client = get_client()
 
 # --- FastAPI 應用實例 ---
 app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
+
+# --- 中介軟體 (Middleware) ---
+# JULES: 新增 CORS 中介軟體以允許來自瀏覽器腳本的跨來源請求
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允許所有來源
+    allow_credentials=True,
+    allow_methods=["*"],  # 允許所有方法
+    allow_headers=["*"],  # 允許所有標頭
+)
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
@@ -252,14 +267,13 @@ async def get_task_status_endpoint(task_id: str):
 
 
 @app.post("/api/log/action", status_code=200)
-async def log_frontend_action(payload: Dict):
+async def log_action_endpoint(payload: Dict):
     """
     接收前端發送的操作日誌，並使用專門的日誌器記錄到檔案。
     """
     action = payload.get("action", "unknown_action")
-    # 為了讓日誌檔案更具可讀性，我們只記錄 action 本身
-    action_log.info(f"[FRONTEND ACTION] {action}")
-    log.info(f"📝 記錄前端操作: {action}") # 在控制台也顯示日誌
+    log_frontend_action_to_file(action)
+    log.info(f"📝 記錄前端操作: {action}") # 在主控台也顯示日誌
     return {"status": "logged"}
 
 
