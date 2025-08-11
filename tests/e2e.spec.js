@@ -123,7 +123,8 @@ test.describe('YouTube 處理功能 E2E 測試', () => {
     // 每次測試前，重新載入頁面並切換到 YouTube 分頁
     test.beforeEach(async ({ page }) => {
         await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
-        await page.locator('button[data-tab="youtube-tab"]').click();
+        // JULES: Updated to point to the new "YouTube Report" tab
+        await page.locator('button[data-tab="youtube-report-tab"]').click();
     });
 
     test('API 金鑰處理與驗證流程', async ({ page }) => {
@@ -145,7 +146,8 @@ test.describe('YouTube 處理功能 E2E 測試', () => {
 
         // 3. 重新載入頁面，應能從 localStorage 恢復狀態
         await page.reload();
-        await page.locator('button[data-tab="youtube-tab"]').click();
+        // JULES: Updated to point to the new "YouTube Report" tab
+        await page.locator('button[data-tab="youtube-report-tab"]').click();
         await expect(page.locator('#api-key-input')).toHaveValue('DUMMY-API-KEY-FOR-TESTING');
         await expect(statusText).toContainText('金鑰有效，Gemini 功能已啟用');
         await expect(geminiBtn).toBeEnabled();

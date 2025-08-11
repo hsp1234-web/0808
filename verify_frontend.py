@@ -93,10 +93,11 @@ def test_youtube_feature(page: Page):
     print("\n▶️ --- 開始 YouTube 功能驗證 ---")
 
     page.goto(APP_URL)
-    page.locator('button[data-tab="youtube-tab"]').click()
-    youtube_tab = page.locator("#youtube-tab")
+    # JULES: Updated to point to the new "YouTube Report" tab
+    page.locator('button[data-tab="youtube-report-tab"]').click()
+    youtube_tab = page.locator("#youtube-report-tab")
     expect(youtube_tab).to_be_visible()
-    print("✅ 已成功切換到 YouTube 功能分頁。")
+    print("✅ 已成功切換到 YouTube 轉報告功能分頁。")
 
     expect(page.locator("#api-key-success")).to_be_visible(timeout=10000)
     expect(page.locator("#youtube-controls-fieldset")).to_be_enabled(timeout=10000)

@@ -252,8 +252,12 @@
         <!-- 功能分頁導覽 -->
         <div class="card">
             <div class="tab-container">
+                <!-- 既有功能 -->
                 <button class="tab-button active" data-tab="local-file-tab">📁 本機檔案轉錄</button>
-                <button class="tab-button" data-tab="youtube-tab">▶️ YouTube 影片處理</button>
+                <!-- JULES: 新增的媒體下載器分頁按鈕 -->
+                <button class="tab-button" data-tab="downloader-tab">📥 媒體下載器</button>
+                <!-- JULES: 將舊有 YouTube 功能移至此處並更名 -->
+                <button class="tab-button" data-tab="youtube-report-tab">▶️ YouTube 轉報告</button>
             </div>
         </div>
 
@@ -311,7 +315,78 @@
             </div>
         </div>
 
-        <div id="youtube-tab" class="tab-content">
+        <!-- JULES: 新增的媒體下載器完整介面 -->
+        <div id="downloader-tab" class="tab-content">
+            <div class="card">
+                <h2>📥 媒體下載器</h2>
+                <div class="grid-2-col">
+                    <!-- 左側：輸入與主要控制 -->
+                    <div class="flex-col">
+                        <div>
+                            <label for="downloader-urls-input"><strong>網址或播放清單</strong> (可輸入多個，每行一個)</label>
+                            <textarea id="downloader-urls-input" rows="5" placeholder="支援 YouTube, Facebook, Bilibili 等多數影音網站..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
+                        </div>
+                        <div style="text-align: center; margin-top: 16px;">
+                            <button id="start-download-btn" style="width: 100%; padding: 12px; font-size: 1.1em;">開始下載</button>
+                        </div>
+                    </div>
+                    <!-- 右側：詳細選項 -->
+                    <div class="flex-col">
+                        <div>
+                            <label><strong>下載類型</strong></label>
+                            <div style="display: flex; gap: 20px; margin-top: 8px;">
+                                <label><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
+                                <label><input type="radio" name="download-type" value="video"> 影片</label>
+                            </div>
+                        </div>
+
+                        <!-- 音訊選項 -->
+                        <div id="audio-options">
+                            <label for="audio-format-select"><strong>音訊格式</strong></label>
+                            <select id="audio-format-select">
+                                <option value="m4a">M4A (原生格式, 速度最快)</option>
+                                <option value="mp3">MP3 (需轉檔, 相容性高)</option>
+                                <option value="wav">WAV (需轉檔, 無損)</option>
+                                <option value="flac">FLAC (需轉檔, 無損壓縮)</option>
+                            </select>
+                        </div>
+
+                        <!-- 影片選項 (預設隱藏) -->
+                        <div id="video-options" class="hidden">
+                            <label for="video-quality-select"><strong>影片畫質</strong></label>
+                            <select id="video-quality-select">
+                                <option value="best">最佳畫質</option>
+                                <option value="1080p">1080p</option>
+                                <option value="720p">720p (HD)</option>
+                                <option value="480p">480p (SD)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label><strong>進階功能</strong></label>
+                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                <label><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
+                                <label><input type="checkbox" id="rename-file-checkbox"> 下載前手動命名檔案</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下載列表 -->
+            <div class="card" style="margin-top: 24px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <h2>📋 下載佇列與歷史紀錄</h2>
+                    <button id="zip-download-btn" disabled style="background-color: #28a745;">打包下載選定項目 (.zip)</button>
+                </div>
+                <div id="downloader-tasks" class="task-list" style="margin-top: 16px;">
+                    <p id="no-downloader-task-msg">暫無下載任務</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- YouTube 轉報告分頁 (從舊的 YouTube 分頁移動而來) -->
+        <div id="youtube-report-tab" class="tab-content">
             <div class="card">
                 <!-- 區域 1: API 金鑰管理 -->
                 <h2>🔑 Google API 金鑰管理</h2>
@@ -451,6 +526,14 @@
             const youtubeUrlsInput = document.getElementById('youtube-urls-input');
             const startYoutubeBtn = document.getElementById('start-youtube-processing-btn');
 
+            // JULES: 新增的媒體下載器 UI 元素
+            const downloaderUrlsInput = document.getElementById('downloader-urls-input');
+            const startDownloadBtn = document.getElementById('start-download-btn');
+            const downloadTypeRadios = document.querySelectorAll('input[name="download-type"]');
+            const audioOptions = document.getElementById('audio-options');
+            const videoOptions = document.getElementById('video-options');
+            const removeSilenceCheckbox = document.getElementById('remove-silence-checkbox');
+
             // --- 狀態變數 ---
             let uploadedFiles = [];
             let socket;
@@ -541,6 +624,15 @@
                         statusSpan.appendChild(buttonGroup);
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
+
+                        // Also add a checkbox for transcription tasks
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'task-checkbox';
+                        checkbox.value = payload.task_id;
+                        checkbox.style.marginRight = '15px';
+                        taskElement.prepend(checkbox);
+
                     } else if (payload.status === 'failed') {
                         statusSpan.textContent = `❌ 失敗: ${payload.error}`;
                     }
@@ -589,8 +681,26 @@
                     }
 
                     statusSpan.appendChild(buttonGroup);
-                    completedTasksContainer.appendChild(taskElement);
-                    if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
+
+                    // For downloader tasks, don't move the element
+                    const isDownloaderTask = taskElement.parentElement.id === 'downloader-tasks';
+                    if (!isDownloaderTask) {
+                        completedTasksContainer.appendChild(taskElement);
+                        if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
+                    }
+
+                    // Add a checkbox to ALL completed youtube tasks (downloader and report)
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'task-checkbox';
+                    checkbox.value = payload.task_id;
+                    checkbox.style.marginRight = '15px';
+                    taskElement.prepend(checkbox);
+
+                    // Enable the zip button if it's a downloader task
+                    if(isDownloaderTask) {
+                        document.getElementById('zip-download-btn').disabled = false;
+                    }
 
                 } else if (payload.status === 'failed') {
                     statusSpan.textContent = `❌ 失敗: ${payload.error}`;
@@ -688,12 +798,15 @@
                 return buttonGroup;
             };
 
-            const createNewTaskElement = (displayName, taskId, taskType) => {
-                if (noOngoingTaskMsg.style.display !== 'none') noOngoingTaskMsg.style.display = 'none';
+            const createNewTaskElement = (displayName, taskId, taskType, container = ongoingTasksContainer) => {
+                // Also hide the "no task" message in the specified container
+                const noTaskMsg = container.querySelector('p');
+                if (noTaskMsg && noTaskMsg.style.display !== 'none') noTaskMsg.style.display = 'none';
+
                 const taskElement = document.createElement('div');
                 taskElement.className = 'task-item';
                 taskElement.innerHTML = `<span class="task-filename" title="${displayName}">${displayName} (${taskType})</span><span class="task-status">已建立</span>`;
-                ongoingTasksContainer.appendChild(taskElement);
+                container.appendChild(taskElement);
                 taskElements.set(taskId, taskElement);
                 return taskElement;
             };
@@ -947,6 +1060,117 @@
             startYoutubeProcessingBtn.addEventListener('click', () => processYoutubeRequest(false));
 
             closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
+
+            // --- JULES: 新增的媒體下載器邏輯 ---
+            // 根據選擇的下載類型（音訊/影片）顯示或隱藏對應的選項
+            downloadTypeRadios.forEach(radio => {
+                radio.addEventListener('change', () => {
+                    if (radio.value === 'audio') {
+                        audioOptions.classList.remove('hidden');
+                        videoOptions.classList.add('hidden');
+                        removeSilenceCheckbox.disabled = false;
+                    } else {
+                        audioOptions.classList.add('hidden');
+                        videoOptions.classList.remove('hidden');
+                        removeSilenceCheckbox.disabled = true;
+                        removeSilenceCheckbox.checked = false; // Uncheck it as it's not applicable
+                    }
+                });
+            });
+
+            // 處理「開始下載」按鈕的點擊事件
+            const processDownloaderRequest = async () => {
+                const urls = downloaderUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
+                if (urls.length === 0) {
+                    alert('請輸入至少一個網址。');
+                    return;
+                }
+
+                const downloadType = document.querySelector('input[name="download-type"]:checked').value;
+
+                let options = {
+                    download_type: downloadType,
+                    remove_silence: removeSilenceCheckbox.checked,
+                    rename_file: document.getElementById('rename-file-checkbox').checked,
+                };
+
+                if (downloadType === 'audio') {
+                    options.audio_format = document.getElementById('audio-format-select').value;
+                } else {
+                    options.video_quality = document.getElementById('video-quality-select').value;
+                }
+
+                const payload = {
+                    urls: urls,
+                    options: options,
+                    // Differentiate this from the AI processing task
+                    task_kind: 'download'
+                };
+
+                startDownloadBtn.disabled = true;
+                startDownloadBtn.textContent = '正在建立任務...';
+
+                try {
+                    // We'll reuse the same endpoint but the backend will need to differentiate
+                    // based on the payload structure (e.g., presence of 'task_kind').
+                    const response = await fetch('/api/youtube/process', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error((await response.json()).detail || '建立下載任務失敗');
+
+                    const result = await response.json();
+                    // This part assumes the backend response format is similar to existing tasks
+                    result.tasks.forEach(task => {
+                        // We need a way to display these new tasks. We can adapt createNewTaskElement
+                        // or create a new display function. For now, let's adapt.
+                        // The taskType display name should be more descriptive.
+                        const taskType = `下載 ${downloadType === 'audio' ? '音訊' : '影片'}`;
+                        const downloaderTaskContainer = document.getElementById('downloader-tasks');
+                        createNewTaskElement(task.url, task.task_id, taskType, downloaderTaskContainer);
+
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            // The backend should recognize this task and send updates via WebSocket.
+                            // We might need a new START_DOWNLOAD_TASK message type.
+                            socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
+                        }
+                    });
+                    downloaderUrlsInput.value = '';
+
+                } catch (error) {
+                    alert(`處理下載任務時發生錯誤: ${error.message}`);
+                } finally {
+                    startDownloadBtn.disabled = false;
+                    startDownloadBtn.textContent = '開始下載';
+                }
+            };
+
+            startDownloadBtn.addEventListener('click', processDownloaderRequest);
+
+            // 處理「打包下載選定項目」按鈕的點擊事件
+            document.getElementById('zip-download-btn').addEventListener('click', (e) => {
+                const checkedBoxes = document.querySelectorAll('.task-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    alert('請至少選擇一個要打包下載的項目。');
+                    return;
+                }
+
+                const taskIds = Array.from(checkedBoxes).map(cb => cb.value);
+                const url = `/api/zip_download?task_ids=${taskIds.join(',')}`;
+
+                // Trigger download by navigating to the URL
+                window.location.href = url;
+
+                // Provide feedback
+                const btn = e.target;
+                btn.disabled = true;
+                btn.textContent = '正在打包...';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '打包下載選定項目 (.zip)';
+                }, 5000); // Reset button after 5 seconds
+            });
 
             // --- Tab Switching Logic ---
             document.querySelectorAll('.tab-button').forEach(button => {
