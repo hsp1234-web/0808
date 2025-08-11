@@ -212,7 +212,8 @@ def main():
             response.raise_for_status()
 
             response_data = response.json()
-            task_id = response_data["tasks"][0]["download_task_id"]
+            # JULES: 修正 API 回應中的鍵名不匹配問題
+            task_id = response_data["tasks"][0]["task_id"]
             log.info(f"✅ 已成功提交 YouTube 任務，將追蹤任務 ID: {task_id}")
 
             # Part B: Start task via WebSocket

@@ -1,5 +1,5 @@
 // playwright.config.js
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   // Timeout for each test, includes hooks. 3 minutes.
@@ -20,4 +20,22 @@ export default defineConfig({
     // Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer
     trace: 'on-first-retry',
   },
+
+  // JULES: Configure projects for major browsers with sandbox disabled
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Add arguments to make it work in sandboxed environments like Docker/CI
+        launchOptions: {
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
+        },
+      },
+    },
+  ],
 });
