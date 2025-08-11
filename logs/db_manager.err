@@ -1,5 +1,23 @@
-2025-08-11 11:34:38,352 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
-2025-08-11 11:34:38,352 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
-2025-08-11 11:34:38,353 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
-2025-08-11 11:34:38,357 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
-2025-08-11 11:34:38,357 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 12:03:01,352 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 12:03:01,352 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 12:03:01,353 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 12:03:01,356 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 12:03:01,356 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 12:03:19,034 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51482) 的新連線。
+2025-08-11 12:03:19,035 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,036 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51482) 已關閉。
+2025-08-11 12:03:19,170 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51492) 的新連線。
+2025-08-11 12:03:19,170 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,172 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51492) 已關閉。
+2025-08-11 12:03:19,336 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51506) 的新連線。
+2025-08-11 12:03:19,336 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,338 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51506) 已關閉。
+2025-08-11 12:03:19,643 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51522) 的新連線。
+2025-08-11 12:03:19,643 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,644 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51522) 已關閉。
+2025-08-11 12:03:19,745 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51528) 的新連線。
+2025-08-11 12:03:19,745 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,746 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51528) 已關閉。
+2025-08-11 12:03:19,912 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51534) 的新連線。
+2025-08-11 12:03:19,912 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-11 12:03:19,913 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51534) 已關閉。

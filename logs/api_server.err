@@ -1,9 +1,44 @@
-2025-08-11 19:34:38,916 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-11 19:34:38,916 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-11 19:34:38,989 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-11 19:34:38,992 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-11 19:34:38,995 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [16031]
+2025-08-11 20:03:01,844 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-11 20:03:01,844 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-11 20:03:01,914 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-11 20:03:01,914 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [6614]
 INFO:     Waiting for application startup.
+2025-08-11 20:03:01,951 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-11 20:03:01,955 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+INFO:     127.0.0.1:40740 - "WebSocket /api/ws" [accepted]
+2025-08-11 20:03:18,784 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     connection open
+2025-08-11 20:03:18,895 - frontend_action - INFO - websocket-connect-success
+2025-08-11 20:03:18,897 - api_server - INFO - 📝 已將前端操作記錄到資料庫: websocket-connect-success
+2025-08-11 20:03:18,900 - frontend_action - INFO - initialize-youtube-tab
+2025-08-11 20:03:18,902 - api_server - INFO - 📝 已將前端操作記錄到資料庫: initialize-youtube-tab
+2025-08-11 20:03:19,012 - frontend_action - INFO - click-confirm-settings: medium
+2025-08-11 20:03:19,014 - api_server - INFO - 📝 已將前端操作記錄到資料庫: click-confirm-settings: medium
+2025-08-11 20:03:19,016 - api_server - INFO - 從 WebSocket 收到訊息: {"type":"DOWNLOAD_MODEL","payload":{"model":"medium"}}
+2025-08-11 20:03:19,018 - api_server - INFO - 收到下載 'medium' 模型的請求。
+2025-08-11 20:03:19,021 - api_server - INFO - 🧵 [執行緒] 開始下載模型: medium
+2025-08-11 20:03:19,084 - api_server - ERROR - ❌ [執行緒] 模型 'medium' 下載失敗。 Stderr: Traceback (most recent call last):
+  File "/app/tools/transcriber.py", line 15, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+2025-08-11 20:03:19,124 - frontend_action - INFO - click-tab: downloader-tab
+2025-08-11 20:03:19,125 - api_server - INFO - 📝 已將前端操作記錄到資料庫: click-tab: downloader-tab
+2025-08-11 20:03:19,281 - frontend_action - INFO - click-tab: local-file-tab
+2025-08-11 20:03:19,285 - api_server - INFO - 📝 已將前端操作記錄到資料庫: click-tab: local-file-tab
+2025-08-11 20:03:19,325 - frontend_action - INFO - change-model-select: large-v3
+2025-08-11 20:03:19,326 - api_server - INFO - 📝 已將前端操作記錄到資料庫: change-model-select: large-v3
+2025-08-11 20:03:19,515 - frontend_action - INFO - click-tab: downloader-tab
+2025-08-11 20:03:19,518 - api_server - INFO - 📝 已將前端操作記錄到資料庫: click-tab: downloader-tab
+2025-08-11 20:03:19,632 - frontend_action - INFO - toggle-remove-silence: true
+2025-08-11 20:03:19,635 - api_server - INFO - 📝 已將前端操作記錄到資料庫: toggle-remove-silence: true
+2025-08-11 20:03:19,737 - frontend_action - INFO - toggle-remove-silence: false
+2025-08-11 20:03:19,738 - api_server - INFO - 📝 已將前端操作記錄到資料庫: toggle-remove-silence: false
+2025-08-11 20:03:19,904 - frontend_action - INFO - toggle-log-level-filter: ERROR
+2025-08-11 20:03:19,905 - api_server - INFO - 📝 已將前端操作記錄到資料庫: toggle-log-level-filter: ERROR
+2025-08-11 20:03:19,931 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-11 20:03:19,936 - api_server - INFO - WebSocket 用戶端已離線。
+INFO:     connection closed
