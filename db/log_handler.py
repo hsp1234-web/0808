@@ -58,10 +58,13 @@ class DatabaseLogHandler(logging.Handler):
 
         sql = "INSERT INTO system_logs (source, level, message) VALUES (?, ?, ?)"
 
+        # JULES'S FIX: The source of the log should be the logger's name, not the handler's name.
+        log_source = record.name
+
         retries = 5
         for i in range(retries):
             try:
-                conn.execute(sql, (self.source, record.levelname, message))
+                conn.execute(sql, (log_source, record.levelname, message))
                 return
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e):

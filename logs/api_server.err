@@ -1,9 +1,0 @@
-2025-08-11 19:34:38,916 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-11 19:34:38,916 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-11 19:34:38,989 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-11 19:34:38,992 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-11 19:34:38,995 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [16031]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)

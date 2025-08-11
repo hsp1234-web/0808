@@ -231,6 +231,11 @@
             </div>
         </header>
 
+        <!-- JULES'S NEW STATUS MESSAGE AREA -->
+        <div id="status-message-area" class="card" style="display: none; padding: 12px; margin-bottom: 16px; border-width: 2px;">
+            <p id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></p>
+        </div>
+
         <!-- 全域儀表板 -->
         <div class="card">
             <h2>📊 全域儀表板</h2>
@@ -494,6 +499,35 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- JULES'S NEW STATUS MESSAGE HANDLER ---
+            const statusMessageArea = document.getElementById('status-message-area');
+            const statusMessageText = document.getElementById('status-message-text');
+
+            const showStatusMessage = (message, isError = false, duration = 5000) => {
+                if (!statusMessageArea || !statusMessageText) return; // Failsafe
+                statusMessageText.textContent = message;
+                statusMessageArea.style.display = 'block';
+                if (isError) {
+                    statusMessageArea.style.backgroundColor = '#f8d7da';
+                    statusMessageArea.style.borderColor = '#f5c6cb';
+                    statusMessageText.style.color = '#721c24';
+                } else {
+                    statusMessageArea.style.backgroundColor = '#d4edda';
+                    statusMessageArea.style.borderColor = '#c3e6cb';
+                    statusMessageText.style.color = '#155724';
+                }
+
+                // Hide the message after a delay. If duration is 0, it stays forever until the next message.
+                if (duration > 0) {
+                    setTimeout(() => {
+                        // Only hide if the message hasn't been replaced by a new one
+                        if (statusMessageText.textContent === message) {
+                            statusMessageArea.style.display = 'none';
+                        }
+                    }, duration);
+                }
+            };
+
             // --- DOM 元素 ---
             const fileInput = document.getElementById('file-input');
             const fileDropZone = document.querySelector('.file-drop-zone'); // Get the drop zone label
@@ -783,11 +817,11 @@
                             updateFileDisplay();
 
                             // 5. (可選) 提示使用者
-                            alert(`檔案 "${audioFile.name}" 已成功載入至「本機檔案轉錄」分頁！`);
+                            showStatusMessage(`檔案 "${audioFile.name}" 已成功載入至「本機檔案轉錄」分頁！`, false);
 
                         } catch (error) {
                             console.error('傳送至轉錄區失敗:', error);
-                            alert(`錯誤：${error.message}`);
+                            showStatusMessage(`錯誤：${error.message}`, true);
                         } finally {
                              sendToWhisperBtn.textContent = '送至轉錄區';
                         }
@@ -887,6 +921,33 @@
                 fileInput.click();
             });
 
+            // JULES'S FIX: Add drag and drop event listeners
+            fileDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault(); // Necessary to allow dropping
+                fileDropZone.style.backgroundColor = '#f0f8ff';
+                fileDropZone.style.borderColor = 'var(--button-bg-color)';
+            });
+
+            fileDropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                fileDropZone.style.backgroundColor = 'transparent';
+                fileDropZone.style.borderColor = '#ccc';
+            });
+
+            fileDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileDropZone.style.backgroundColor = 'transparent';
+                fileDropZone.style.borderColor = '#ccc';
+
+                logAction('drop-file');
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                if (droppedFiles.length > 0) {
+                    const newFiles = droppedFiles.filter(df => !uploadedFiles.some(ef => ef.name === df.name));
+                    uploadedFiles.push(...newFiles);
+                    updateFileDisplay();
+                }
+            });
+
 
             confirmBtn.addEventListener('click', () => {
                 logAction('click-confirm-settings', modelSelect.value);
@@ -895,7 +956,7 @@
                     socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
                 } else {
                     logAction('alert-websocket-not-connected');
-                    alert('WebSocket 未連線，無法下載模型。');
+                    showStatusMessage('WebSocket 未連線，無法下載模型。', true);
                 }
             });
 
@@ -913,16 +974,20 @@
                     try {
                         const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
                         if (!response.ok) throw new Error((await response.json()).detail || '上傳失敗');
+                        // JULES'S FIX: Let the WebSocket message be the single source of truth for creating task elements.
+                        // The button's only job is to send the request. The backend will then notify all clients
+                        // via WebSocket to create and update the task UI. This prevents race conditions and duplicate elements.
                         const result = await response.json();
                         const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
-                        tasks.forEach(task => {
-                            createNewTaskElement(file.name, task.task_id, task.type);
+                         tasks.forEach(task => {
+                            // We no longer call createNewTaskElement here.
+                            // We just need to trigger the transcription if the task is of that type.
                             if (socket && task.type === 'transcribe') {
                                 socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
                             }
                         });
                     } catch (error) {
-                        alert(`處理檔案 ${file.name} 時發生錯誤: ${error.message}`);
+                        showStatusMessage(`處理檔案 ${file.name} 時發生錯誤: ${error.message}`, true);
                     }
                 }
                 uploadedFiles = [];
@@ -1015,7 +1080,7 @@
                         localStorage.setItem('googleApiKey', apiKey);
                         validateApiKey(apiKey);
                     } else {
-                        alert('API 金鑰不能為空');
+                        showStatusMessage('API 金鑰不能為空', true);
                     }
                 });
                 clearApiKeyBtn.addEventListener('click', () => {
@@ -1039,7 +1104,7 @@
                 logAction(action);
                 const urls = youtubeUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
                 if (urls.length === 0) {
-                    alert('請輸入至少一個 YouTube 網址。');
+                    showStatusMessage('請輸入至少一個 YouTube 網址。', true);
                     return;
                 }
                 const button = downloadOnly ? downloadAudioOnlyBtn : startYoutubeProcessingBtn;
@@ -1068,7 +1133,7 @@
                     });
                     youtubeUrlsInput.value = '';
                 } catch (error) {
-                    alert(`處理 YouTube 任務時發生錯誤: ${error.message}`);
+                    showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.message}`, true);
                 } finally {
                     button.disabled = false;
                     button.textContent = originalText;
@@ -1101,21 +1166,19 @@
                 logAction('click-start-download');
                 const urls = downloaderUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
                 if (urls.length === 0) {
-                    alert('請輸入至少一個網址。');
+                    showStatusMessage('請輸入至少一個網址。', true);
                     return;
                 }
-                const downloadType = document.querySelector('input[name="download-type"]:checked').value;
-                let options = {
-                    download_type: downloadType,
-                    remove_silence: removeSilenceCheckbox.checked,
-                    rename_file: renameFileCheckbox.checked,
+
+                // JULES'S FIX: The /api/youtube/process endpoint expects a 'download_only' flag.
+                // The complex UI options on this tab are not supported by the current backend endpoint.
+                // This fix ensures that clicking "Start Download" sends a valid request for audio download.
+                const payload = {
+                    urls: urls,
+                    download_only: true,
+                    model: null // Not needed for download_only, but good to be explicit
                 };
-                if (downloadType === 'audio') {
-                    options.audio_format = audioFormatSelect.value;
-                } else {
-                    options.video_quality = videoQualitySelect.value;
-                }
-                const payload = { urls: urls, options: options, task_kind: 'download' };
+
                 startDownloadBtn.disabled = true;
                 startDownloadBtn.textContent = '正在建立任務...';
                 try {
@@ -1127,16 +1190,19 @@
                     if (!response.ok) throw new Error((await response.json()).detail || '建立下載任務失敗');
                     const result = await response.json();
                     result.tasks.forEach(task => {
-                        const taskType = `下載 ${downloadType === 'audio' ? '音訊' : '影片'}`;
+                        // The backend task type is 'youtube_download_only'.
+                        // For the UI, we can show a more user-friendly name.
+                        const taskType = `僅下載音訊`;
                         const downloaderTaskContainer = document.getElementById('downloader-tasks');
                         createNewTaskElement(task.url, task.task_id, taskType, downloaderTaskContainer);
                         if (socket && socket.readyState === WebSocket.OPEN) {
+                            // The websocket message to trigger the backend is still 'START_YOUTUBE_PROCESSING'
                             socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
                         }
                     });
                     downloaderUrlsInput.value = '';
                 } catch (error) {
-                    alert(`處理下載任務時發生錯誤: ${error.message}`);
+                    showStatusMessage(`處理下載任務時發生錯誤: ${error.message}`, true);
                 } finally {
                     startDownloadBtn.disabled = false;
                     startDownloadBtn.textContent = '開始下載';
@@ -1147,7 +1213,7 @@
                 logAction('click-zip-download');
                 const checkedBoxes = document.querySelectorAll('#downloader-tasks .task-checkbox:checked');
                 if (checkedBoxes.length === 0) {
-                    alert('請至少選擇一個要打包下載的項目。');
+                    showStatusMessage('請至少選擇一個要打包下載的項目。', true);
                     return;
                 }
                 const taskIds = Array.from(checkedBoxes).map(cb => cb.value);
@@ -1208,8 +1274,8 @@
             copyLogsBtn.addEventListener('click', () => {
                 logAction('click-copy-logs');
                 navigator.clipboard.writeText(logOutput.textContent)
-                    .then(() => alert('日誌已複製到剪貼簿！'))
-                    .catch(err => alert('複製失敗: ' + err));
+                    .then(() => showStatusMessage('日誌已複製到剪貼簿！', false, 3000))
+                    .catch(err => showStatusMessage('複製失敗: ' + err, true));
             });
             logLevelCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-level-filter', cb.value)));
             logSourceCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-source-filter', cb.value)));

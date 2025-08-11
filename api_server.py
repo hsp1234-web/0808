@@ -59,29 +59,7 @@ def setup_database_logging():
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
 
-# --- JULES'S FIX: 穩健的前端日誌記錄函式 ---
-def log_frontend_action_to_file(message: str):
-    """
-    一個穩健的函式，用於將前端操作日誌寫入 run_log.txt。
-    它會延遲建立 logger 和 handler，確保在 uvicorn 的多 worker 環境下也能正常運作。
-    """
-    logger_name = 'frontend_action_logger'
-    action_log = logging.getLogger(logger_name)
-
-    # 只有在 logger 尚未被設定時才進行設定，避免重複加入 handler
-    if not action_log.handlers:
-        action_log.setLevel(logging.INFO)
-
-        run_log_file = ROOT_DIR / "run_log.txt"
-
-        file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
-        formatter = logging.Formatter('%(asctime)s - %(message)s')
-        file_handler.setFormatter(formatter)
-
-        action_log.addHandler(file_handler)
-        action_log.propagate = False # 防止日誌傳播到 root logger
-
-    action_log.info(f"[FRONTEND ACTION] {message}")
+# Frontend action logging is now handled by the centralized database logger.
 
 
 # --- WebSocket 連線管理器 ---
@@ -112,13 +90,24 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+from contextlib import asynccontextmanager
+
 # --- DB 客戶端 ---
 # 在模組加載時獲取客戶端單例
 # 客戶端內部有重試機制，會等待 DB 管理者服務就緒
 db_client = get_client()
 
+# --- FastAPI Lifespan Manager ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在應用程式啟動時執行的程式碼
+    setup_database_logging()
+    log.info("資料庫日誌處理器已透過 lifespan 事件設定。")
+    yield
+    # 可以在此處加入應用程式關閉時執行的程式碼
+
 # --- FastAPI 應用實例 ---
-app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
+app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0", lifespan=lifespan)
 
 # --- 中介軟體 (Middleware) ---
 # JULES: 新增 CORS 中介軟體以允許來自瀏覽器腳本的跨來源請求
@@ -209,6 +198,7 @@ async def create_transcription_task(
     # 3. 根據模型是否存在來建立任務
     transcription_payload = {
         "input_file": str(saved_file_path),
+        "original_filename": file.filename, # JULES'S FIX: Store the original filename
         "output_dir": "transcripts",
         "model_size": model_size,
         "language": language,
@@ -269,11 +259,15 @@ async def get_task_status_endpoint(task_id: str):
 @app.post("/api/log/action", status_code=200)
 async def log_action_endpoint(payload: Dict):
     """
-    接收前端發送的操作日誌，並使用專門的日誌器記錄到檔案。
+    接收前端發送的操作日誌，並透過資料庫日誌處理器記錄。
     """
     action = payload.get("action", "unknown_action")
-    log_frontend_action_to_file(action)
-    log.info(f"📝 記錄前端操作: {action}") # 在主控台也顯示日誌
+    # 獲取一個專門的 logger 來標識這些日誌的來源為 'frontend_action'
+    # DatabaseLogHandler 會擷取這個日誌，並將其與 logger 名稱一起存入資料庫
+    action_logger = logging.getLogger('frontend_action')
+    action_logger.info(action)
+
+    log.info(f"📝 已將前端操作記錄到資料庫: {action}") # 同時在主控台也顯示日誌
     return {"status": "logged"}
 
 
@@ -610,12 +604,13 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     thread.start()
 
 
-def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop):
+def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop, original_filename: Optional[str] = None):
     """
     在一個單獨的執行緒中執行轉錄，並透過 WebSocket 即時串流結果。
     """
     def _transcribe_in_thread():
-        log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {file_path}")
+        display_name = original_filename or file_path
+        log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {display_name}")
 
         # 準備一個假的輸出檔案路徑，因為 transcriber.py 需要它，但我們實際上是從 stdout 讀取
         output_dir = ROOT_DIR / "transcripts"
@@ -648,9 +643,11 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 bufsize=1 # Line-buffered
             )
 
+            # JULES'S FIX: Use the original filename for the UI if available.
+            start_message_filename = original_filename or Path(file_path).name
             start_message = {
                 "type": "TRANSCRIPTION_STATUS",
-                "payload": {"task_id": task_id, "status": "starting", "filename": Path(file_path).name}
+                "payload": {"task_id": task_id, "status": "starting", "filename": start_message_filename}
             }
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(start_message), loop)
 
@@ -820,6 +817,27 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
     thread.start()
 
 
+@app.get("/api/debug/latest_frontend_action_log")
+async def get_latest_frontend_action_log():
+    """
+    [僅供測試] 獲取最新的前端操作日誌。
+    用於 E2E 測試，以驗證日誌是否已成功寫入資料庫。
+    """
+    try:
+        # 我們只關心來自 'frontend_action' logger 的日誌
+        logs = db_client.get_system_logs(sources=['frontend_action'])
+        if not logs:
+            # 如果沒有日誌，返回一個清晰的空回應，而不是 404
+            return JSONResponse(content={"latest_log": None}, status_code=200)
+
+        # get_system_logs 按時間戳升序排序，所以最後一個就是最新的
+        latest_log = logs[-1]
+        return JSONResponse(content={"latest_log": latest_log})
+    except Exception as e:
+        log.error(f"❌ 查詢最新前端日誌時出錯: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="查詢最新前端日誌時發生內部錯誤")
+
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -863,6 +881,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         model_size = task_payload.get("model_size", "tiny")
                         language = task_payload.get("language")
                         beam_size = task_payload.get("beam_size", 5)
+                        original_filename = task_payload.get("original_filename") # JULES'S FIX
                     except (json.JSONDecodeError, KeyError) as e:
                         await manager.broadcast_json({"type": "ERROR", "payload": f"解析任務 {task_id} 的 payload 失敗: {e}"})
                         continue
@@ -870,9 +889,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     if not file_path:
                         await manager.broadcast_json({"type": "ERROR", "payload": "任務 payload 中缺少檔案路徑"})
                     else:
-                        log.info(f"收到開始轉錄 '{file_path}' 的請求 (來自任務 {task_id})。")
+                        display_name = original_filename or file_path
+                        log.info(f"收到開始轉錄 '{display_name}' 的請求 (來自任務 {task_id})。")
                         loop = asyncio.get_running_loop()
-                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop)
+                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop, original_filename=original_filename)
 
                 elif msg_type == "START_YOUTUBE_PROCESSING":
                     task_id = payload.get("task_id") # This is the download_task_id
@@ -957,8 +977,8 @@ if __name__ == "__main__":
     # JULES: 移除此處的資料庫初始化呼叫。
     # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
 
-    # 設定資料庫日誌
-    setup_database_logging()
+    # JULES'S FIX: The database logging is now set up via the app's lifespan event.
+    # setup_database_logging() is no longer needed here.
 
     log.info("🚀 啟動 API 伺服器 (v3)...")
     log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")

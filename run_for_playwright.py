@@ -4,7 +4,6 @@ import sys
 import time
 import logging
 import os
-import requests
 import signal
 from pathlib import Path
 
@@ -126,6 +125,10 @@ def main():
         log_dir.mkdir()
 
         install_dependencies()
+
+        # JULES'S FIX: Import requests after it has been installed.
+        import requests
+
         cleanup_stale_processes()
 
         log.info("--- 步驟 3/5: 動態產生 Circus 設定 ---")
