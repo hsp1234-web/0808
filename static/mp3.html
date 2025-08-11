@@ -216,6 +216,90 @@
             gap: 10px 20px;
             align-items: center;
         }
+
+        /* --- Modal 彈窗樣式 --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .modal-close-button {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            color: #888;
+            line-height: 1;
+            padding: 0;
+        }
+        .modal-close-button:hover {
+            color: #333;
+            background-color: transparent;
+            transform: none;
+        }
+        .modal-body {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            border-top: 1px solid #eee;
+            padding-top: 16px;
+        }
+        .modal-footer button, .modal-footer .button-like {
+            background-color: #6c757d;
+        }
+        .modal-footer a.button-like {
+             background-color: var(--success-color);
+        }
+        .button-like {
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: var(--button-bg-color);
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        .button-like:hover {
+            background-color: var(--button-hover-bg-color);
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
@@ -408,21 +492,25 @@
                     <div id="api-key-success" class="hidden" style="padding: 15px; border: 1px solid var(--status-green); border-radius: 8px; background-color: #e6ffed;"></div>
                 </div>
 
-                <!-- 區域 2: YouTube 影片處理 -->
-                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片資訊</h2>
+                <!-- 區域 2: YouTube 影片處理與自訂命名 -->
+                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片與自訂檔名</h2>
                 <!-- fieldset 現在預設啟用 -->
                 <fieldset id="youtube-controls-fieldset">
-                    <div class="flex-col">
-                        <div>
-                            <label for="youtube-urls-input">YouTube 影片網址 (可輸入多個，每行一個)</label>
-                            <textarea id="youtube-urls-input" rows="4" placeholder="例如：&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=another_video_id" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
+                    <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
+                        <!-- JS 動態新增的列將會插入到這裡 -->
+                        <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                            <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選，留空則自動命名)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
                         </div>
-                        <div>
-                            <label for="gemini-model-select">選擇 Gemini AI 模型 (僅供 AI 分析使用)</label>
-                            <select id="gemini-model-select">
-                                <option>等待從伺服器載入模型列表...</option>
-                            </select>
-                        </div>
+                    </div>
+                    <button id="add-youtube-row-btn" style="margin-top: 12px;">+ 新增一列</button>
+
+                    <div style="margin-top: 24px;">
+                        <label for="gemini-model-select">選擇 Gemini AI 模型 (僅供 AI 分析使用)</label>
+                        <select id="gemini-model-select">
+                            <option>等待從伺服器載入模型列表...</option>
+                        </select>
                     </div>
                 </fieldset>
             </div>
@@ -497,14 +585,37 @@
         </div>
     </div>
 
+    <!-- JULES: 新增的預覽 Modal -->
+    <div id="preview-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">報告預覽</h2>
+                <button id="modal-close-btn" class="modal-close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="modal-iframe" src="about:blank" style="width: 100%; height: 75vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a id="modal-download-btn" href="#" download class="button-like">下載檔案</a>
+                <button id="modal-copy-link-btn">複製連結</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- JULES'S NEW STATUS MESSAGE HANDLER ---
+            // --- 全域狀態訊息處理 ---
             const statusMessageArea = document.getElementById('status-message-area');
             const statusMessageText = document.getElementById('status-message-text');
 
+            /**
+             * 顯示一個帶有顏色和自動隱藏功能的狀態訊息。
+             * @param {string} message - 要顯示的訊息。
+             * @param {boolean} isError - 是否為錯誤訊息 (紅色)。預設為 false (綠色)。
+             * @param {number} duration - 訊息顯示的毫秒數。
+             */
             const showStatusMessage = (message, isError = false, duration = 5000) => {
-                if (!statusMessageArea || !statusMessageText) return; // Failsafe
+                if (!statusMessageArea || !statusMessageText) return;
                 statusMessageText.textContent = message;
                 statusMessageArea.style.display = 'block';
                 if (isError) {
@@ -516,11 +627,8 @@
                     statusMessageArea.style.borderColor = '#c3e6cb';
                     statusMessageText.style.color = '#155724';
                 }
-
-                // Hide the message after a delay. If duration is 0, it stays forever until the next message.
                 if (duration > 0) {
                     setTimeout(() => {
-                        // Only hide if the message hasn't been replaced by a new one
                         if (statusMessageText.textContent === message) {
                             statusMessageArea.style.display = 'none';
                         }
@@ -528,9 +636,9 @@
                 }
             };
 
-            // --- DOM 元素 ---
+            // --- DOM 元素宣告 ---
             const fileInput = document.getElementById('file-input');
-            const fileDropZone = document.querySelector('.file-drop-zone'); // Get the drop zone label
+            const fileDropZone = document.querySelector('.file-drop-zone');
             const fileListDisplay = document.getElementById('file-list');
             const startBtn = document.getElementById('start-processing-btn');
             const confirmBtn = document.getElementById('confirm-settings-btn');
@@ -556,8 +664,15 @@
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const timestampToggle = document.getElementById('timestamp-toggle');
 
+            // --- 預覽 Modal 彈窗元素 ---
+            const previewModal = document.getElementById('preview-modal');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const modalIframe = document.getElementById('modal-iframe');
+            const modalDownloadBtn = document.getElementById('modal-download-btn');
+            const modalCopyLinkBtn = document.getElementById('modal-copy-link-btn');
 
-            // YouTube Tab Elements
+            // --- YouTube 分頁元素 (含自訂命名) ---
             const apiKeyInput = document.getElementById('api-key-input');
             const saveApiKeyBtn = document.getElementById('save-api-key-btn');
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
@@ -565,10 +680,10 @@
             const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
             const downloadAudioOnlyBtn = document.getElementById('download-audio-only-btn');
             const geminiModelSelect = document.getElementById('gemini-model-select');
-            const youtubeUrlsInput = document.getElementById('youtube-urls-input');
+            const addYoutubeRowBtn = document.getElementById('add-youtube-row-btn');
+            const youtubeLinkList = document.getElementById('youtube-link-list');
 
-
-            // JULES: 新增的媒體下載器 UI 元素
+            // --- 媒體下載器元素 ---
             const downloaderUrlsInput = document.getElementById('downloader-urls-input');
             const startDownloadBtn = document.getElementById('start-download-btn');
             const downloadTypeRadios = document.querySelectorAll('input[name="download-type"]');
@@ -580,22 +695,82 @@
             const videoQualitySelect = document.getElementById('video-quality-select');
             const zipDownloadBtn = document.getElementById('zip-download-btn');
 
-
-            // Log Viewer Elements
+            // --- 日誌檢視器元素 ---
             const fetchLogsBtn = document.getElementById('fetch-logs-btn');
             const logOutput = document.getElementById('log-output');
             const copyLogsBtn = document.getElementById('copy-logs-btn');
             const logLevelCheckboxes = document.querySelectorAll('input[name="log-level"]');
             const logSourceCheckboxes = document.querySelectorAll('input[name="log-source"]');
 
-
-            // --- 狀態變數 ---
+            // --- 全域狀態變數 ---
             let uploadedFiles = [];
             let socket;
             const taskElements = new Map();
             const modelStatus = {};
 
-            // --- 核心邏輯 ---
+            // --- 預覽 Modal 彈窗邏輯 ---
+            /**
+             * 開啟預覽彈窗，並根據檔案類型顯示內容。
+             * @param {string} taskId - 任務 ID。
+             * @param {string} filename - 用於顯示的檔案名稱。
+             * @param {string} fileType - 檔案的 MIME 類型 (例如 'application/pdf', 'text/plain')。
+             */
+            const openPreviewModal = async (taskId, filename, fileType) => {
+                logAction('open-preview-modal', taskId);
+                const downloadUrl = `/api/download/${taskId}`;
+
+                modalTitle.textContent = `預覽: ${filename}`;
+                modalIframe.src = 'about:blank';
+                modalIframe.srcdoc = '<p style="text-align: center; margin-top: 20px;">正在載入預覽...</p>';
+
+                if (fileType === 'application/pdf' || fileType === 'text/html') {
+                    modalIframe.src = downloadUrl;
+                    modalIframe.srcdoc = '';
+                } else if (fileType === 'text/plain') {
+                    try {
+                        const response = await fetch(downloadUrl);
+                        if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
+                        const textContent = await response.text();
+                        const escapedText = textContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        modalIframe.srcdoc = `<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace; padding: 10px;">${escapedText}</pre>`;
+                    } catch (error) {
+                        modalIframe.srcdoc = `<p style="text-align: center; color: red;">預覽載入失敗: ${error.message}</p>`;
+                    }
+                } else {
+                    modalIframe.srcdoc = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
+                }
+
+                modalDownloadBtn.href = downloadUrl;
+                modalDownloadBtn.download = filename;
+
+                modalCopyLinkBtn.onclick = () => {
+                    const publicUrl = new URL(downloadUrl, window.location.origin).href;
+                    logAction('copy-modal-link', publicUrl);
+                    navigator.clipboard.writeText(publicUrl).then(() => {
+                        showStatusMessage('報告連結已複製！', false, 3000);
+                    }).catch(err => {
+                        showStatusMessage('複製連結失敗: ' + err, true);
+                    });
+                };
+
+                previewModal.style.display = 'flex';
+            };
+
+            const closePreviewModal = () => {
+                logAction('close-preview-modal');
+                previewModal.style.display = 'none';
+                modalIframe.src = 'about:blank';
+                modalIframe.srcdoc = '';
+            };
+
+            modalCloseBtn.addEventListener('click', closePreviewModal);
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) {
+                    closePreviewModal();
+                }
+            });
+
+            // --- 核心應用邏輯 ---
             const logAction = (action, value = null) => {
                 const message = value !== null ? `${action}: ${value}` : action;
                 console.log(`Logging action: ${message}`);
@@ -616,7 +791,7 @@
                     logAction('websocket-connect-success');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
-                    initializeYouTubeTab(); // 初始化 YouTube 分頁
+                    initializeYouTubeTab();
                 };
 
                 socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
@@ -636,7 +811,6 @@
 
             const handleWebSocketMessage = (message) => {
                 const { type, payload } = message;
-
                 if (type === 'DOWNLOAD_STATUS') {
                     handleDownloadStatus(payload);
                 } else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
@@ -654,18 +828,15 @@
                     const percent = payload.percent || 0;
                     modelProgressBar.style.width = `${percent}%`;
                     modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
-                    // --- 繁體中文註解：確保下載過程中按鈕保持禁用 ---
                     confirmBtn.disabled = true;
                 } else if (payload.status === 'completed') {
                     modelProgressBar.style.width = '100%';
                     modelProgressText.textContent = '下載完成';
-                    // --- 繁體中文註解：下載完成後，恢復按鈕功能 ---
                     confirmBtn.disabled = false;
                 } else if (payload.status === 'failed') {
                     modelProgressBar.style.width = '100%';
                     modelProgressBar.style.backgroundColor = '#dc3545';
                     modelProgressText.textContent = `下載失敗: ${payload.error}`;
-                    // --- 繁體中文註解：下載失敗後，恢復按鈕功能 ---
                     confirmBtn.disabled = false;
                 }
             };
@@ -674,24 +845,34 @@
                 if (!payload || !payload.task_id) return;
                 let taskElement = taskElements.get(payload.task_id);
                 if (!taskElement) {
-                     // 如果找不到，可能是因為這是個依賴任務，我們需要用它的 payload 中的檔名來建立 taskElement
                     const filename = payload.filename || payload.task_id;
                     taskElement = createNewTaskElement(filename, payload.task_id, '轉錄');
                 }
                 const statusSpan = taskElement.querySelector('.task-status');
+                const progressContainer = taskElement.querySelector('.task-progress-container');
+                const progressBar = taskElement.querySelector('.task-progress-bar');
+
+                if (type === 'TRANSCRIPTION_UPDATE' || (type === 'TRANSCRIPTION_STATUS' && payload.progress !== undefined)) {
+                    if (progressContainer) progressContainer.style.display = 'block';
+                    if (payload.progress !== undefined && progressBar) {
+                        progressBar.style.width = `${payload.progress}%`;
+                    }
+                    statusSpan.textContent = `${payload.message || '轉錄中'}...`;
+                }
 
                 if (type === 'TRANSCRIPTION_STATUS') {
                     if (payload.status === 'starting') {
                         statusSpan.textContent = '轉錄中...';
                         transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
+                        if (progressContainer) progressContainer.style.display = 'block';
                     } else if (payload.status === 'completed') {
+                        if (progressContainer) progressContainer.style.display = 'none';
                         statusSpan.innerHTML = '';
                         const buttonGroup = createActionButtons(payload.task_id, 'text/plain', '.txt');
                         statusSpan.appendChild(buttonGroup);
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
 
-                        // Also add a checkbox for transcription tasks
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
                         checkbox.className = 'task-checkbox';
@@ -699,24 +880,24 @@
                         checkbox.style.marginRight = '15px';
                         checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
                         taskElement.prepend(checkbox);
-
                     } else if (payload.status === 'failed') {
+                        if (progressContainer) progressContainer.style.display = 'none';
                         statusSpan.textContent = `❌ 失敗: ${payload.error}`;
                     }
-                } else if (type === 'TRANSCRIPTION_UPDATE') {
+                }
+
+                if (type === 'TRANSCRIPTION_UPDATE' && payload.text) {
                     if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
                         const p = document.createElement('p');
                         p.dataset.start = payload.start;
-
                         let lineContent = '';
                         if (timestampToggle.checked) {
                             lineContent += `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] `;
                         }
                         lineContent += payload.text;
-
                         p.textContent = lineContent;
-                        transcriptOutput.prepend(p); // JULES: Changed from appendChild to prepend for reverse chronological order
-                        transcriptOutput.scrollTop = 0; // Scroll to top to see the latest entry
+                        transcriptOutput.prepend(p);
+                        transcriptOutput.scrollTop = 0;
                     }
                 }
             };
@@ -724,53 +905,49 @@
             const handleYoutubeStatus = (payload) => {
                 if (!payload || !payload.task_id) return;
                 let taskElement = taskElements.get(payload.task_id);
-                 if (!taskElement) {
-                    // 這裡的 task_id 應該是唯一的，即使對於 download_only 任務
+                if (!taskElement) {
                     const url = payload.url || payload.message || payload.task_id;
                     const taskType = payload.task_type === 'download_only' ? '僅下載音訊' : 'YouTube 分析';
                     taskElement = createNewTaskElement(url, payload.task_id, taskType);
                 }
                 const statusSpan = taskElement.querySelector('.task-status');
-                statusSpan.textContent = payload.message || payload.status;
+                const progressContainer = taskElement.querySelector('.task-progress-container');
+                const progressBar = taskElement.querySelector('.task-progress-bar');
 
-                // --- 繁體中文註解：即時更新 YouTube 影片標題 ---
-                // 當後端完成影片資訊抓取後，會透過 WebSocket 傳來包含 `filename` 的訊息
-                // 此處檢查 payload 中是否有 filename，若有，則更新 UI 上的任務顯示名稱
+                if (payload.progress !== undefined && progressContainer) {
+                    progressContainer.style.display = 'block';
+                    progressBar.style.width = `${payload.progress}%`;
+                    statusSpan.textContent = `${payload.message || '處理中'}...`;
+                } else {
+                    statusSpan.textContent = payload.message || payload.status;
+                }
+
                 if (payload.filename) {
                     const filenameSpan = taskElement.querySelector('.task-filename');
                     if (filenameSpan) {
-                        // 保留括號中的任務類型，只更新前面的檔名
                         const originalText = filenameSpan.textContent;
                         const taskTypeMatch = originalText.match(/\s\(.*\)$/);
                         const taskTypeSuffix = taskTypeMatch ? taskTypeMatch[0] : '';
                         filenameSpan.textContent = `${payload.filename}${taskTypeSuffix}`;
-                        filenameSpan.title = payload.filename; // 更新滑鼠懸停時顯示的完整標題
+                        filenameSpan.title = payload.filename;
                     }
                 }
 
                 if (payload.status === 'completed') {
+                    if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.innerHTML = '';
-
-                    // 根據後端傳來的 task_type 決定要產生的按鈕
                     let buttonGroup;
                     if (payload.task_type === 'download_only') {
-                        // 僅下載音訊完成，提供「下載」和「傳送至轉錄區」按鈕
                         buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
                     } else {
-                        // 完整 YouTube 分析流程完成，提供報告的「預覽」和「下載」
                         buttonGroup = createActionButtons(payload.task_id, 'application/pdf', '.pdf', 'youtube_report');
                     }
-
                     statusSpan.appendChild(buttonGroup);
-
-                    // For downloader tasks, don't move the element
                     const isDownloaderTask = taskElement.parentElement.id === 'downloader-tasks';
                     if (!isDownloaderTask) {
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                     }
-
-                    // Add a checkbox to ALL completed youtube tasks (downloader and report)
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
                     checkbox.className = 'task-checkbox';
@@ -778,13 +955,11 @@
                     checkbox.style.marginRight = '15px';
                     checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
                     taskElement.prepend(checkbox);
-
-                    // Enable the zip button if it's a downloader task
                     if(isDownloaderTask) {
                         document.getElementById('zip-download-btn').disabled = false;
                     }
-
                 } else if (payload.status === 'failed') {
+                    if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.textContent = `❌ 失敗: ${payload.error}`;
                 }
             };
@@ -792,15 +967,12 @@
             const createActionButtons = (taskId, previewType, extension, taskType = 'transcription') => {
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'task-actions';
-
-                // --- 通用下載按鈕 ---
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `/api/download/${taskId}`;
                 downloadBtn.className = 'btn-download';
                 downloadBtn.textContent = '下載';
                 const taskElement = taskElements.get(taskId);
                 const originalFilename = taskElement.querySelector('.task-filename').textContent;
-                // 移除括號中的任務類型，以獲得更乾淨的檔名
                 const cleanFilename = originalFilename.split('(')[0].trim();
                 const baseName = cleanFilename.substring(0, cleanFilename.lastIndexOf('.')) || cleanFilename;
                 downloadBtn.download = `${baseName}_result${extension}`;
@@ -808,38 +980,26 @@
                     logAction('click-download-task', taskId);
                 });
 
-
                 if (taskType === 'download_only') {
-                    // --- 「僅下載音訊」完成的專屬按鈕 ---
                     const sendToWhisperBtn = document.createElement('a');
                     sendToWhisperBtn.href = '#';
-                    sendToWhisperBtn.className = 'btn-preview'; // 沿用藍色樣式
+                    sendToWhisperBtn.className = 'btn-preview';
                     sendToWhisperBtn.textContent = '送至轉錄區';
                     sendToWhisperBtn.addEventListener('click', async (e) => {
                         e.preventDefault();
                         logAction('click-send-to-whisper', taskId);
                         sendToWhisperBtn.textContent = '處理中...';
                         try {
-                            // 1. 從後端獲取 Blob
                             const response = await fetch(`/api/download/${taskId}`);
                             if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
                             const audioBlob = await response.blob();
-
-                            // 2. 將 Blob 轉換為 File 物件
                             const audioFile = new File([audioBlob], `${baseName}.mp3`, { type: 'audio/mpeg' });
-
-                            // 3. 將檔案加入到第一個分頁的待上傳列表
                             if (!uploadedFiles.some(f => f.name === audioFile.name)) {
                                 uploadedFiles.push(audioFile);
                             }
-
-                            // 4. 切換分頁並更新 UI
                             document.querySelector('.tab-button[data-tab="local-file-tab"]').click();
                             updateFileDisplay();
-
-                            // 5. (可選) 提示使用者
                             showStatusMessage(`檔案 "${audioFile.name}" 已成功載入至「本機檔案轉錄」分頁！`, false);
-
                         } catch (error) {
                             console.error('傳送至轉錄區失敗:', error);
                             showStatusMessage(`錯誤：${error.message}`, true);
@@ -849,54 +1009,48 @@
                     });
                     buttonGroup.appendChild(sendToWhisperBtn);
                     buttonGroup.appendChild(downloadBtn);
-
                 } else {
-                    // --- 傳統的「預覽」按鈕 (用於文字稿和 PDF 報告) ---
                     const previewBtn = document.createElement('a');
+                    previewBtn.href = '#';
                     previewBtn.className = 'btn-preview';
                     previewBtn.textContent = '預覽';
-
-                    const isPdf = previewType === 'application/pdf';
-                    if (isPdf) {
-                        previewBtn.href = `/api/download/${taskId}`;
-                        previewBtn.target = '_blank';
-                         previewBtn.addEventListener('click', (e) => {
-                            logAction('click-preview-pdf-task', taskId);
-                        });
-                    } else {
-                        previewBtn.href = `#preview-area`;
-                        previewBtn.addEventListener('click', async (e) => {
-                            e.preventDefault();
-                            logAction('click-preview-text-task', taskId);
-                            previewArea.classList.remove('hidden');
-                            previewArea.scrollIntoView({ behavior: 'smooth' });
-                            previewContentText.classList.remove('hidden');
-                            previewContentHtml.classList.add('hidden');
-                            previewContentText.textContent = '正在載入預覽...';
-                            try {
-                                const response = await fetch(`/api/download/${taskId}`);
-                                if (!response.ok) throw new Error('無法獲取檔案內容');
-                                previewContentText.textContent = await response.text();
-                            } catch (error) {
-                                previewContentText.textContent = `預覽載入失敗: ${error.message}`;
-                            }
-                        });
-                    }
+                    previewBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const taskElement = taskElements.get(taskId);
+                        const filenameSpan = taskElement.querySelector('.task-filename');
+                        const rawFilename = filenameSpan.textContent.split('(')[0].trim();
+                        const baseName = rawFilename.substring(0, rawFilename.lastIndexOf('.')) || rawFilename;
+                        const finalFilename = `${baseName}_result${extension}`;
+                        openPreviewModal(taskId, finalFilename, previewType);
+                    });
                     buttonGroup.appendChild(previewBtn);
                     buttonGroup.appendChild(downloadBtn);
                 }
-
                 return buttonGroup;
             };
 
+            /**
+             * 建立一個新的任務項目 UI 元素，並加入獨立進度條。
+             * @param {string} displayName - 任務的顯示名稱。
+             * @param {string} taskId - 任務的唯一 ID。
+             * @param {string} taskType - 任務類型 (用於顯示)。
+             * @param {HTMLElement} container - 要將任務項目附加到的容器。
+             * @returns {HTMLElement} 新建立的任務元素。
+             */
             const createNewTaskElement = (displayName, taskId, taskType, container = ongoingTasksContainer) => {
-                // Also hide the "no task" message in the specified container
                 const noTaskMsg = container.querySelector('p');
                 if (noTaskMsg && noTaskMsg.style.display !== 'none') noTaskMsg.style.display = 'none';
 
                 const taskElement = document.createElement('div');
                 taskElement.className = 'task-item';
-                taskElement.innerHTML = `<span class="task-filename" title="${displayName}">${displayName} (${taskType})</span><span class="task-status">已建立</span>`;
+                taskElement.innerHTML = `
+                    <div style="flex-grow: 1; overflow: hidden; margin-right: 10px;">
+                        <span class="task-filename" title="${displayName}" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayName} (${taskType})</span>
+                        <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
+                            <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
+                        </div>
+                    </div>
+                    <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 100px;">已建立</span>`;
                 container.appendChild(taskElement);
                 taskElements.set(taskId, taskElement);
                 return taskElement;
@@ -938,18 +1092,8 @@
                 fileInput.value = '';
             });
 
-            // --- 繁體中文註解：修正重複彈窗問題 ---
-            // 舊有程式碼在此處為 fileDropZone (即 <label>) 額外添加了一個 click 事件監聽器，
-            // 這會導致 label 的原生行為和此監聽器重複觸發 fileInput.click()，彈出兩次檔案選擇視窗。
-            // 透過移除這個多餘的監聽器，我們僅依賴 label 的 `for="file-input"` 屬性來觸發檔案選擇，從而解決了問題。
-            // fileDropZone.addEventListener('click', () => {
-            //    logAction('click-file-drop-zone');
-            //    fileInput.click();
-            // });
-
-            // JULES'S FIX: Add drag and drop event listeners
             fileDropZone.addEventListener('dragover', (e) => {
-                e.preventDefault(); // Necessary to allow dropping
+                e.preventDefault();
                 fileDropZone.style.backgroundColor = '#f0f8ff';
                 fileDropZone.style.borderColor = 'var(--button-bg-color)';
             });
@@ -964,7 +1108,6 @@
                 e.preventDefault();
                 fileDropZone.style.backgroundColor = 'transparent';
                 fileDropZone.style.borderColor = '#ccc';
-
                 logAction('drop-file');
                 const droppedFiles = Array.from(e.dataTransfer.files);
                 if (droppedFiles.length > 0) {
@@ -974,26 +1117,20 @@
                 }
             });
 
-
             confirmBtn.addEventListener('click', () => {
                 logAction('click-confirm-settings', modelSelect.value);
                 modelDisplay.textContent = modelSelect.value;
-
-                // --- 繁體中文註解：提供即時 UI 回饋 ---
-                // 在發送請求後，立即禁用按鈕並顯示進度條，防止重複點擊並告知使用者系統正在處理。
                 confirmBtn.disabled = true;
                 modelProgressContainer.classList.remove('hidden');
                 modelProgressBar.style.width = '0%';
-                modelProgressBar.style.backgroundColor = 'var(--button-bg-color)'; // 重設顏色
+                modelProgressBar.style.backgroundColor = 'var(--button-bg-color)';
                 modelProgressText.textContent = `正在請求 ${modelSelect.value} 模型...`;
-
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
                 } else {
                     logAction('alert-websocket-not-connected');
                     showStatusMessage('WebSocket 未連線，無法下載模型。', true);
                     modelProgressText.textContent = '連線失敗';
-                    // --- 繁體中文註解：連線失敗時，恢復按鈕功能 ---
                     confirmBtn.disabled = false;
                 }
             });
@@ -1012,14 +1149,9 @@
                     try {
                         const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
                         if (!response.ok) throw new Error((await response.json()).detail || '上傳失敗');
-                        // JULES'S FIX: Let the WebSocket message be the single source of truth for creating task elements.
-                        // The button's only job is to send the request. The backend will then notify all clients
-                        // via WebSocket to create and update the task UI. This prevents race conditions and duplicate elements.
                         const result = await response.json();
                         const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
                          tasks.forEach(task => {
-                            // We no longer call createNewTaskElement here.
-                            // We just need to trigger the transcription if the task is of that type.
                             if (socket && task.type === 'transcribe') {
                                 socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
                             }
@@ -1032,13 +1164,11 @@
                 updateFileDisplay();
             });
 
-            // --- YouTube Tab Logic ---
+            // --- YouTube 分頁主要邏輯 ---
             const updateApiKeyUI = (state, message) => {
-                // This function is already logging via logAction
                 const statusSpan = apiKeyStatus.querySelector('span');
-                statusSpan.style.color = 'inherit'; // 重設顏色
+                statusSpan.style.color = 'inherit';
                 statusSpan.style.fontStyle = 'normal';
-
                 switch (state) {
                     case 'valid':
                         statusSpan.textContent = message || '驗證成功';
@@ -1066,6 +1196,7 @@
                         break;
                 }
             };
+
             const validateApiKey = async (apiKey) => {
                 if (!apiKey) {
                     updateApiKeyUI('not_provided');
@@ -1090,10 +1221,11 @@
                     updateApiKeyUI('invalid', '無法連線至後端進行驗證');
                 }
             };
+
             const loadGeminiModels = async () => {
                 try {
                     const modelsRes = await fetch('/api/youtube/models');
-                     if (!modelsRes.ok) throw new Error('無法載入模型列表');
+                    if (!modelsRes.ok) throw new Error('無法載入模型列表');
                     const modelsData = await modelsRes.json();
                     geminiModelSelect.innerHTML = '';
                     modelsData.models.forEach(model => {
@@ -1102,18 +1234,62 @@
                         option.textContent = model.name;
                         geminiModelSelect.appendChild(option);
                     });
-                     logAction('load-gemini-models-success');
+                    logAction('load-gemini-models-success');
                 } catch (error) {
                     console.error("載入 Gemini 模型時出錯:", error);
                     logAction('load-gemini-models-failed');
                     geminiModelSelect.innerHTML = `<option>${error.message}</option>`;
                 }
             };
+
+            /**
+             * 初始化 YouTube 分頁，包含 API 金鑰處理和自訂命名列表的互動邏輯。
+             */
             const initializeYouTubeTab = () => {
                 logAction('initialize-youtube-tab');
+
+                // --- YouTube 自訂命名互動邏輯 ---
+                const addNewYoutubeRow = () => {
+                    logAction('click-add-youtube-row');
+                    const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
+                    if (!firstRow) return;
+                    const newRow = firstRow.cloneNode(true);
+                    newRow.querySelector('.youtube-url-input').value = '';
+                    newRow.querySelector('.youtube-filename-input').value = '';
+                    youtubeLinkList.appendChild(newRow);
+                };
+
+                const sanitizeFilename = (filename) => {
+                    return filename.replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
+                };
+
+                addYoutubeRowBtn.addEventListener('click', addNewYoutubeRow);
+
+                youtubeLinkList.addEventListener('click', (e) => {
+                    if (e.target && e.target.classList.contains('remove-youtube-row-btn')) {
+                        logAction('click-remove-youtube-row');
+                        if (youtubeLinkList.querySelectorAll('.youtube-link-row').length > 1) {
+                            e.target.closest('.youtube-link-row').remove();
+                        } else {
+                            showStatusMessage('至少需要保留一列。', true, 3000);
+                        }
+                    }
+                });
+
+                youtubeLinkList.addEventListener('input', (e) => {
+                    if (e.target && e.target.classList.contains('youtube-filename-input')) {
+                        const originalValue = e.target.value;
+                        const sanitizedValue = sanitizeFilename(originalValue);
+                        if (originalValue !== sanitizedValue) {
+                            e.target.value = sanitizedValue;
+                        }
+                    }
+                });
+
+                // --- API 金鑰儲存與驗證邏輯 ---
                 saveApiKeyBtn.addEventListener('click', () => {
                     const apiKey = apiKeyInput.value.trim();
-                     logAction('click-save-api-key');
+                    logAction('click-save-api-key');
                     if (apiKey) {
                         localStorage.setItem('googleApiKey', apiKey);
                         validateApiKey(apiKey);
@@ -1121,6 +1297,7 @@
                         showStatusMessage('API 金鑰不能為空', true);
                     }
                 });
+
                 clearApiKeyBtn.addEventListener('click', () => {
                     logAction('click-clear-api-key');
                     localStorage.removeItem('googleApiKey');
@@ -1128,6 +1305,7 @@
                     updateApiKeyUI('not_provided');
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
                 });
+
                 const storedApiKey = localStorage.getItem('googleApiKey');
                 if (storedApiKey) {
                     apiKeyInput.value = storedApiKey;
@@ -1137,21 +1315,40 @@
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
                 }
             };
+
+            /**
+             * 處理 YouTube 相關的請求提交，包括僅下載和完整分析。
+             * @param {boolean} downloadOnly - 是否僅下載音訊。
+             */
             const processYoutubeRequest = async (downloadOnly = false) => {
                 const action = downloadOnly ? 'click-download-audio-only' : 'click-start-youtube-processing';
                 logAction(action);
-                const urls = youtubeUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
-                if (urls.length === 0) {
-                    showStatusMessage('請輸入至少一個 YouTube 網址。', true);
+
+                const rows = youtubeLinkList.querySelectorAll('.youtube-link-row');
+                const requests = [];
+                rows.forEach(row => {
+                    const urlInput = row.querySelector('.youtube-url-input');
+                    const filenameInput = row.querySelector('.youtube-filename-input');
+                    const url = urlInput.value.trim();
+                    const filename = filenameInput.value.trim();
+                    if (url) {
+                        requests.push({ url: url, filename: filename });
+                    }
+                });
+
+                if (requests.length === 0) {
+                    showStatusMessage('請輸入至少一個有效的 YouTube 網址。', true);
                     return;
                 }
+
                 const button = downloadOnly ? downloadAudioOnlyBtn : startYoutubeProcessingBtn;
                 const originalText = button.textContent;
                 button.disabled = true;
                 button.textContent = '正在建立任務...';
+
                 try {
                     const payload = {
-                        urls: urls,
+                        requests: requests,
                         model: geminiModelSelect.value,
                         download_only: downloadOnly
                     };
@@ -1160,8 +1357,10 @@
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     });
+
                     if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
                     const result = await response.json();
+
                     result.tasks.forEach(task => {
                         const taskType = downloadOnly ? '僅下載音訊' : 'YouTube 分析';
                         createNewTaskElement(task.url, task.task_id, taskType);
@@ -1169,7 +1368,16 @@
                             socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
                         }
                     });
-                    youtubeUrlsInput.value = '';
+
+                    const allRows = youtubeLinkList.querySelectorAll('.youtube-link-row');
+                    allRows.forEach((row, index) => {
+                        if (index === 0) {
+                            row.querySelector('.youtube-url-input').value = '';
+                            row.querySelector('.youtube-filename-input').value = '';
+                        } else {
+                            row.remove();
+                        }
+                    });
                 } catch (error) {
                     showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.message}`, true);
                 } finally {
@@ -1179,12 +1387,13 @@
             };
             downloadAudioOnlyBtn.addEventListener('click', () => processYoutubeRequest(true));
             startYoutubeProcessingBtn.addEventListener('click', () => processYoutubeRequest(false));
+
             closePreviewBtn.addEventListener('click', () => {
                  logAction('click-close-preview');
                  previewArea.classList.add('hidden');
             });
 
-            // --- JULES: 新增的媒體下載器邏輯 ---
+            // --- 媒體下載器邏輯 ---
             downloadTypeRadios.forEach(radio => {
                 radio.addEventListener('change', (e) => {
                     logAction('change-download-type', e.target.value);
@@ -1200,6 +1409,7 @@
                     }
                 });
             });
+
             const processDownloaderRequest = async () => {
                 logAction('click-start-download');
                 const urls = downloaderUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
@@ -1207,16 +1417,11 @@
                     showStatusMessage('請輸入至少一個網址。', true);
                     return;
                 }
-
-                // JULES'S FIX: The /api/youtube/process endpoint expects a 'download_only' flag.
-                // The complex UI options on this tab are not supported by the current backend endpoint.
-                // This fix ensures that clicking "Start Download" sends a valid request for audio download.
                 const payload = {
                     urls: urls,
                     download_only: true,
-                    model: null // Not needed for download_only, but good to be explicit
+                    model: null
                 };
-
                 startDownloadBtn.disabled = true;
                 startDownloadBtn.textContent = '正在建立任務...';
                 try {
@@ -1228,13 +1433,10 @@
                     if (!response.ok) throw new Error((await response.json()).detail || '建立下載任務失敗');
                     const result = await response.json();
                     result.tasks.forEach(task => {
-                        // The backend task type is 'youtube_download_only'.
-                        // For the UI, we can show a more user-friendly name.
                         const taskType = `僅下載音訊`;
                         const downloaderTaskContainer = document.getElementById('downloader-tasks');
                         createNewTaskElement(task.url, task.task_id, taskType, downloaderTaskContainer);
                         if (socket && socket.readyState === WebSocket.OPEN) {
-                            // The websocket message to trigger the backend is still 'START_YOUTUBE_PROCESSING'
                             socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
                         }
                     });
@@ -1247,6 +1449,7 @@
                 }
             };
             startDownloadBtn.addEventListener('click', processDownloaderRequest);
+
             zipDownloadBtn.addEventListener('click', (e) => {
                 logAction('click-zip-download');
                 const checkedBoxes = document.querySelectorAll('#downloader-tasks .task-checkbox:checked');
@@ -1266,28 +1469,24 @@
                 }, 5000);
             });
 
-            // --- Tab Switching Logic ---
+            // --- 分頁切換邏輯 ---
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const tabId = button.dataset.tab;
-                    logAction(`click-tab`, tabId); // Modified this line
+                    logAction(`click-tab`, tabId);
                     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                     button.classList.add('active');
                     document.querySelectorAll('.tab-content').forEach(content => {
-                        if (content.id === tabId) {
-                            content.classList.add('active');
-                        } else {
-                            content.classList.remove('active');
-                        }
+                        content.style.display = (content.id === tabId) ? 'block' : 'none';
                     });
                 });
             });
 
-            // --- Init & Other Listeners ---
+            // --- 初始化 & 其他監聽器 ---
             setupWebSocket();
             updateFileDisplay();
 
-            // --- JULES'S ADDITION: Log Viewer Logic ---
+            // --- 日誌檢視器邏輯 ---
             fetchLogsBtn.addEventListener('click', async () => {
                 logAction('click-fetch-logs');
                 logOutput.textContent = '載入中...';
@@ -1309,17 +1508,18 @@
                     logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
                 }
             });
+
             copyLogsBtn.addEventListener('click', () => {
                 logAction('click-copy-logs');
                 navigator.clipboard.writeText(logOutput.textContent)
                     .then(() => showStatusMessage('日誌已複製到剪貼簿！', false, 3000))
                     .catch(err => showStatusMessage('複製失敗: ' + err, true));
             });
+
             logLevelCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-level-filter', cb.value)));
             logSourceCheckboxes.forEach(cb => cb.addEventListener('change', () => logAction('toggle-log-source-filter', cb.value)));
 
-
-            // --- JULES's ADDITION: System Stats Polling ---
+            // --- 系統狀態輪詢 ---
             const cpuLabel = document.getElementById('cpu-label');
             const ramLabel = document.getElementById('ram-label');
             const gpuLabel = document.getElementById('gpu-label');
@@ -1338,14 +1538,12 @@
                         gpuLabel.textContent = '--%';
                         gpuDisplay.textContent = '未偵測到';
                     }
-                } catch (error) {
-                    // silent fail
-                }
+                } catch (error) {}
             };
             updateSystemStats();
             setInterval(updateSystemStats, 2000);
 
-            // --- Final UI Listeners for Logging ---
+            // --- 其他 UI 事件記錄 ---
             zoomInBtn.addEventListener('click', () => logAction('click-zoom-in'));
             zoomOutBtn.addEventListener('click', () => logAction('click-zoom-out'));
             timestampToggle.addEventListener('change', (e) => logAction('toggle-timestamp', e.target.checked));
