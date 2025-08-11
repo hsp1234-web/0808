@@ -66,8 +66,8 @@ def main():
         cleanup_stale_processes()
 
         log.info("🚀 啟動協調器 (Playwright 測試模式)...")
-        # 在模擬模式下啟動，以避免對外部服務 (如 Google API) 的真實呼叫
-        cmd = [sys.executable, "orchestrator.py", "--mock"]
+        # 在模擬模式下啟動，並指定 E2E 測試所需的固定埠號
+        cmd = [sys.executable, "orchestrator.py", "--mock", "--port", "42649"]
 
         popen_kwargs = {
             "stdout": subprocess.PIPE,
