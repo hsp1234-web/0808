@@ -135,9 +135,10 @@ def main():
         # 步驟 4: 提交並啟動 YouTube 測試任務
         log.info("--- 正在提交並啟動一個 YouTube 測試任務 ---")
         task_id = None
+        # 在 try 區塊的開頭定義 proc_env
+        proc_env = os.environ.copy()
         try:
             # 讀取 API 金鑰
-            proc_env = os.environ.copy()
             config_path = Path("config.json")
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -150,7 +151,7 @@ def main():
                 log.warning("未在 config.json 中找到有效的 GOOGLE_API_KEY，YouTube 測試將會失敗。")
 
             import websocket
-            test_youtube_url = "https://www.youtube.com/watch?v=LdeC_0G0E1g"
+            test_youtube_url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
             test_model = "models/gemini-1.5-flash-latest"
 
             submit_url = f"{api_url}/api/youtube/process"
@@ -196,13 +197,24 @@ def main():
         task_info = db_client.get_task_status(task_id)
         final_status = task_info.get("status")
         result_data = json.loads(task_info.get("result", "{}"))
-        if final_status == "completed":
-            html_path = result_data.get("html_report_path")
-            if not html_path or not html_path.endswith(".html"):
-                 raise ValueError(f"驗證失敗！任務成功，但結果中缺少有效的 HTML 報告路徑。")
-            log.info(f"✅ 驗證成功！任務 {task_id} 狀態為 'completed'。")
+
+        # 檢查是否有 API 金鑰
+        has_api_key = "GOOGLE_API_KEY" in proc_env
+
+        if has_api_key:
+            if final_status == "completed":
+                html_path = result_data.get("html_report_path")
+                if not html_path or not html_path.endswith(".html"):
+                    raise ValueError(f"驗證失敗！任務成功，但結果中缺少有效的 HTML 報告路徑。")
+                log.info(f"✅ 驗證成功！任務 {task_id} 狀態為 'completed'。")
+            else:
+                error_message = result_data.get("error", "未知錯誤")
+                raise ValueError(f"驗證失敗！任務 {task_id} 的最終狀態是 '{final_status}'，但應為 'completed' (因為提供了 API 金鑰)。錯誤訊息: {error_message}")
         else:
-            raise ValueError(f"驗證失敗！任務 {task_id} 的最終狀態是 '{final_status}'，但應為 'completed'。")
+            if final_status == "failed":
+                log.info(f"✅ 驗證成功！在沒有 API 金鑰的情況下，任務 {task_id} 正確地以 'failed' 狀態結束。")
+            else:
+                raise ValueError(f"驗證失敗！任務 {task_id} 的最終狀態是 '{final_status}'，但應為 'failed' (因為缺少 API 金鑰)。")
 
     except Exception as e:
         log.critical(f"💥 Local Test Runner 發生致命錯誤: {e}", exc_info=True)

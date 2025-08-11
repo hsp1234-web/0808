@@ -1,0 +1,279 @@
+2025-08-11 16:24:47,661 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:24:47,661 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:24:47,683 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:24:47,684 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:24:47,684 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:24:49,292 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42750) 的新連線。
+2025-08-11 16:24:49,292 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:24:49,293 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 2680ed28-14cd-4289-b242-ffcc9e81d1c6 (依賴: 無)
+2025-08-11 16:24:49,294 - db.database - INFO - ✅ 已成功新增任務到佇列: 2680ed28-14cd-4289-b242-ffcc9e81d1c6
+2025-08-11 16:24:49,294 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42750) 已關閉。
+2025-08-11 16:24:49,295 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42764) 的新連線。
+2025-08-11 16:24:49,296 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '9dcd5c18-7420-4b55-8c61-441146d2708d', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '2680ed28-14cd-4289-b242-ffcc9e81d1c6'}}
+2025-08-11 16:24:49,296 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 9dcd5c18-7420-4b55-8c61-441146d2708d (依賴: 2680ed28-14cd-4289-b242-ffcc9e81d1c6)
+2025-08-11 16:24:49,297 - db.database - INFO - ✅ 已成功新增任務到佇列: 9dcd5c18-7420-4b55-8c61-441146d2708d
+2025-08-11 16:24:49,297 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42764) 已關閉。
+2025-08-11 16:24:49,309 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42766) 的新連線。
+2025-08-11 16:24:49,309 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6'}}
+2025-08-11 16:24:49,310 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42766) 已關閉。
+2025-08-11 16:24:49,312 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42774) 的新連線。
+2025-08-11 16:24:49,312 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6'}}
+2025-08-11 16:24:49,313 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42774) 已關閉。
+2025-08-11 16:24:50,090 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42782) 的新連線。
+2025-08-11 16:24:50,091 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:24:49,856 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:24:50,036 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:24:50,092 - db.database - INFO - ✅ 任務 2680ed28-14cd-4289-b242-ffcc9e81d1c6 狀態已更新為: failed
+2025-08-11 16:24:50,093 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42782) 已關閉。
+2025-08-11 16:24:54,319 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42796) 的新連線。
+2025-08-11 16:24:54,319 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6'}}
+2025-08-11 16:24:54,320 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42796) 已關閉。
+2025-08-11 16:24:54,325 - DBManagerServer - INFO - 來自 ('127.0.0.1', 42810) 的新連線。
+2025-08-11 16:24:54,325 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '2680ed28-14cd-4289-b242-ffcc9e81d1c6'}}
+2025-08-11 16:24:54,326 - DBManagerServer - INFO - 連線 ('127.0.0.1', 42810) 已關閉。
+2025-08-11 16:25:58,999 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:25:58,999 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:25:59,010 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:25:59,012 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:25:59,012 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:25:59,719 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47086) 的新連線。
+2025-08-11 16:25:59,720 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:25:59,720 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 879e2319-b30d-4009-8d0f-a0d4b67beec2 (依賴: 無)
+2025-08-11 16:25:59,722 - db.database - INFO - ✅ 已成功新增任務到佇列: 879e2319-b30d-4009-8d0f-a0d4b67beec2
+2025-08-11 16:25:59,722 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47086) 已關閉。
+2025-08-11 16:25:59,723 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47094) 的新連線。
+2025-08-11 16:25:59,723 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '71c8ec01-e3be-403b-b666-75921fb8dcce', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '879e2319-b30d-4009-8d0f-a0d4b67beec2'}}
+2025-08-11 16:25:59,723 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 71c8ec01-e3be-403b-b666-75921fb8dcce (依賴: 879e2319-b30d-4009-8d0f-a0d4b67beec2)
+2025-08-11 16:25:59,724 - db.database - INFO - ✅ 已成功新增任務到佇列: 71c8ec01-e3be-403b-b666-75921fb8dcce
+2025-08-11 16:25:59,725 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47094) 已關閉。
+2025-08-11 16:25:59,737 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47108) 的新連線。
+2025-08-11 16:25:59,737 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2'}}
+2025-08-11 16:25:59,738 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47108) 已關閉。
+2025-08-11 16:25:59,740 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47116) 的新連線。
+2025-08-11 16:25:59,740 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2'}}
+2025-08-11 16:25:59,741 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47116) 已關閉。
+2025-08-11 16:26:00,283 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47120) 的新連線。
+2025-08-11 16:26:00,283 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:26:00,087 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:26:00,232 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:26:00,285 - db.database - INFO - ✅ 任務 879e2319-b30d-4009-8d0f-a0d4b67beec2 狀態已更新為: failed
+2025-08-11 16:26:00,286 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47120) 已關閉。
+2025-08-11 16:26:04,746 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47128) 的新連線。
+2025-08-11 16:26:04,747 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2'}}
+2025-08-11 16:26:04,748 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47128) 已關閉。
+2025-08-11 16:26:04,752 - DBManagerServer - INFO - 來自 ('127.0.0.1', 47130) 的新連線。
+2025-08-11 16:26:04,752 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '879e2319-b30d-4009-8d0f-a0d4b67beec2'}}
+2025-08-11 16:26:04,753 - DBManagerServer - INFO - 連線 ('127.0.0.1', 47130) 已關閉。
+2025-08-11 16:26:31,712 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:26:31,712 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:26:31,723 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:26:31,724 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:26:31,724 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:26:32,422 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60074) 的新連線。
+2025-08-11 16:26:32,422 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:26:32,422 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 780b9711-fffa-4386-ab15-b246ed352a8d (依賴: 無)
+2025-08-11 16:26:32,424 - db.database - INFO - ✅ 已成功新增任務到佇列: 780b9711-fffa-4386-ab15-b246ed352a8d
+2025-08-11 16:26:32,424 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60074) 已關閉。
+2025-08-11 16:26:32,425 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60090) 的新連線。
+2025-08-11 16:26:32,425 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'c775434e-c670-403d-b272-ef6a73affc14', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '780b9711-fffa-4386-ab15-b246ed352a8d'}}
+2025-08-11 16:26:32,425 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: c775434e-c670-403d-b272-ef6a73affc14 (依賴: 780b9711-fffa-4386-ab15-b246ed352a8d)
+2025-08-11 16:26:32,426 - db.database - INFO - ✅ 已成功新增任務到佇列: c775434e-c670-403d-b272-ef6a73affc14
+2025-08-11 16:26:32,426 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60090) 已關閉。
+2025-08-11 16:26:32,438 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60106) 的新連線。
+2025-08-11 16:26:32,438 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d'}}
+2025-08-11 16:26:32,438 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60106) 已關閉。
+2025-08-11 16:26:32,441 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60122) 的新連線。
+2025-08-11 16:26:32,441 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d'}}
+2025-08-11 16:26:32,442 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60122) 已關閉。
+2025-08-11 16:26:32,967 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60134) 的新連線。
+2025-08-11 16:26:32,967 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:26:32,786 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:26:32,919 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:26:32,969 - db.database - INFO - ✅ 任務 780b9711-fffa-4386-ab15-b246ed352a8d 狀態已更新為: failed
+2025-08-11 16:26:32,970 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60134) 已關閉。
+2025-08-11 16:26:37,447 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60136) 的新連線。
+2025-08-11 16:26:37,448 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d'}}
+2025-08-11 16:26:37,449 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60136) 已關閉。
+2025-08-11 16:26:37,453 - DBManagerServer - INFO - 來自 ('127.0.0.1', 60142) 的新連線。
+2025-08-11 16:26:37,453 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '780b9711-fffa-4386-ab15-b246ed352a8d'}}
+2025-08-11 16:26:37,454 - DBManagerServer - INFO - 連線 ('127.0.0.1', 60142) 已關閉。
+2025-08-11 16:27:16,920 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:27:16,921 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:27:16,929 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:27:16,930 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:27:16,931 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:27:17,639 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54820) 的新連線。
+2025-08-11 16:27:17,639 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:27:17,640 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: ed3c7530-751c-4653-bfbd-75706b9c5326 (依賴: 無)
+2025-08-11 16:27:17,641 - db.database - INFO - ✅ 已成功新增任務到佇列: ed3c7530-751c-4653-bfbd-75706b9c5326
+2025-08-11 16:27:17,641 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54820) 已關閉。
+2025-08-11 16:27:17,642 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54832) 的新連線。
+2025-08-11 16:27:17,642 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '8a28e81f-1105-42e4-a2a7-a028922fe4ff', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': 'ed3c7530-751c-4653-bfbd-75706b9c5326'}}
+2025-08-11 16:27:17,643 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 8a28e81f-1105-42e4-a2a7-a028922fe4ff (依賴: ed3c7530-751c-4653-bfbd-75706b9c5326)
+2025-08-11 16:27:17,644 - db.database - INFO - ✅ 已成功新增任務到佇列: 8a28e81f-1105-42e4-a2a7-a028922fe4ff
+2025-08-11 16:27:17,644 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54832) 已關閉。
+2025-08-11 16:27:17,657 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54844) 的新連線。
+2025-08-11 16:27:17,657 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326'}}
+2025-08-11 16:27:17,658 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54844) 已關閉。
+2025-08-11 16:27:17,660 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54860) 的新連線。
+2025-08-11 16:27:17,660 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326'}}
+2025-08-11 16:27:17,661 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54860) 已關閉。
+2025-08-11 16:27:18,194 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54868) 的新連線。
+2025-08-11 16:27:18,194 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:27:18,011 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:27:18,143 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:27:18,195 - db.database - INFO - ✅ 任務 ed3c7530-751c-4653-bfbd-75706b9c5326 狀態已更新為: failed
+2025-08-11 16:27:18,196 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54868) 已關閉。
+2025-08-11 16:27:22,666 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41188) 的新連線。
+2025-08-11 16:27:22,666 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326'}}
+2025-08-11 16:27:22,667 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41188) 已關閉。
+2025-08-11 16:27:22,672 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41196) 的新連線。
+2025-08-11 16:27:22,672 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'ed3c7530-751c-4653-bfbd-75706b9c5326'}}
+2025-08-11 16:27:22,673 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41196) 已關閉。
+2025-08-11 16:29:11,782 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:29:11,782 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:29:11,796 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:29:11,797 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:29:11,798 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:29:12,485 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33298) 的新連線。
+2025-08-11 16:29:12,485 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:29:12,486 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 3ed56948-0215-4e16-9d31-6bd0ae6103a1 (依賴: 無)
+2025-08-11 16:29:12,488 - db.database - INFO - ✅ 已成功新增任務到佇列: 3ed56948-0215-4e16-9d31-6bd0ae6103a1
+2025-08-11 16:29:12,488 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33298) 已關閉。
+2025-08-11 16:29:12,488 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33300) 的新連線。
+2025-08-11 16:29:12,489 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'bf20f707-e4dd-4bf7-ac1f-38a59c44be7c', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '3ed56948-0215-4e16-9d31-6bd0ae6103a1'}}
+2025-08-11 16:29:12,489 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: bf20f707-e4dd-4bf7-ac1f-38a59c44be7c (依賴: 3ed56948-0215-4e16-9d31-6bd0ae6103a1)
+2025-08-11 16:29:12,490 - db.database - INFO - ✅ 已成功新增任務到佇列: bf20f707-e4dd-4bf7-ac1f-38a59c44be7c
+2025-08-11 16:29:12,491 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33300) 已關閉。
+2025-08-11 16:29:12,505 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33312) 的新連線。
+2025-08-11 16:29:12,505 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1'}}
+2025-08-11 16:29:12,506 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33312) 已關閉。
+2025-08-11 16:29:12,508 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33318) 的新連線。
+2025-08-11 16:29:12,508 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1'}}
+2025-08-11 16:29:12,508 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33318) 已關閉。
+2025-08-11 16:29:13,072 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33324) 的新連線。
+2025-08-11 16:29:13,072 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:29:12,868 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:29:13,020 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:29:13,073 - db.database - INFO - ✅ 任務 3ed56948-0215-4e16-9d31-6bd0ae6103a1 狀態已更新為: failed
+2025-08-11 16:29:13,074 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33324) 已關閉。
+2025-08-11 16:29:17,513 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33338) 的新連線。
+2025-08-11 16:29:17,514 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1'}}
+2025-08-11 16:29:17,515 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33338) 已關閉。
+2025-08-11 16:29:17,520 - DBManagerServer - INFO - 來自 ('127.0.0.1', 33354) 的新連線。
+2025-08-11 16:29:17,520 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '3ed56948-0215-4e16-9d31-6bd0ae6103a1'}}
+2025-08-11 16:29:17,521 - DBManagerServer - INFO - 連線 ('127.0.0.1', 33354) 已關閉。
+2025-08-11 16:30:20,801 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:30:20,801 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:30:20,812 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:30:20,813 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:30:20,813 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:30:21,522 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40616) 的新連線。
+2025-08-11 16:30:21,523 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:30:21,523 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 74553973-3033-459b-bff2-9c38204cc005 (依賴: 無)
+2025-08-11 16:30:21,524 - db.database - INFO - ✅ 已成功新增任務到佇列: 74553973-3033-459b-bff2-9c38204cc005
+2025-08-11 16:30:21,525 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40616) 已關閉。
+2025-08-11 16:30:21,526 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40630) 的新連線。
+2025-08-11 16:30:21,526 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '52c22ed3-6127-4287-b812-587a483ab2aa', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '74553973-3033-459b-bff2-9c38204cc005'}}
+2025-08-11 16:30:21,526 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 52c22ed3-6127-4287-b812-587a483ab2aa (依賴: 74553973-3033-459b-bff2-9c38204cc005)
+2025-08-11 16:30:21,528 - db.database - INFO - ✅ 已成功新增任務到佇列: 52c22ed3-6127-4287-b812-587a483ab2aa
+2025-08-11 16:30:21,528 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40630) 已關閉。
+2025-08-11 16:30:21,542 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40640) 的新連線。
+2025-08-11 16:30:21,542 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005'}}
+2025-08-11 16:30:21,543 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40640) 已關閉。
+2025-08-11 16:30:21,544 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40652) 的新連線。
+2025-08-11 16:30:21,544 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005'}}
+2025-08-11 16:30:21,545 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40652) 已關閉。
+2025-08-11 16:30:22,160 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40666) 的新連線。
+2025-08-11 16:30:22,160 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:30:21,906 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:30:22,105 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:30:22,162 - db.database - INFO - ✅ 任務 74553973-3033-459b-bff2-9c38204cc005 狀態已更新為: failed
+2025-08-11 16:30:22,162 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40666) 已關閉。
+2025-08-11 16:30:26,551 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40680) 的新連線。
+2025-08-11 16:30:26,551 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005'}}
+2025-08-11 16:30:26,552 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40680) 已關閉。
+2025-08-11 16:30:26,557 - DBManagerServer - INFO - 來自 ('127.0.0.1', 40696) 的新連線。
+2025-08-11 16:30:26,557 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '74553973-3033-459b-bff2-9c38204cc005'}}
+2025-08-11 16:30:26,558 - DBManagerServer - INFO - 連線 ('127.0.0.1', 40696) 已關閉。
+2025-08-11 16:31:07,753 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:31:07,753 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:31:07,769 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:31:07,770 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:31:07,770 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:31:08,425 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41750) 的新連線。
+2025-08-11 16:31:08,425 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:31:08,426 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: e4324e06-834b-43ef-9a50-39c212004a31 (依賴: 無)
+2025-08-11 16:31:08,427 - db.database - INFO - ✅ 已成功新增任務到佇列: e4324e06-834b-43ef-9a50-39c212004a31
+2025-08-11 16:31:08,428 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41750) 已關閉。
+2025-08-11 16:31:08,428 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41758) 的新連線。
+2025-08-11 16:31:08,428 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'fc119866-1e04-4378-954f-f71c5381f9ca', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': 'e4324e06-834b-43ef-9a50-39c212004a31'}}
+2025-08-11 16:31:08,429 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: fc119866-1e04-4378-954f-f71c5381f9ca (依賴: e4324e06-834b-43ef-9a50-39c212004a31)
+2025-08-11 16:31:08,430 - db.database - INFO - ✅ 已成功新增任務到佇列: fc119866-1e04-4378-954f-f71c5381f9ca
+2025-08-11 16:31:08,431 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41758) 已關閉。
+2025-08-11 16:31:08,444 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41770) 的新連線。
+2025-08-11 16:31:08,444 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31'}}
+2025-08-11 16:31:08,445 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41770) 已關閉。
+2025-08-11 16:31:08,447 - DBManagerServer - INFO - 來自 ('127.0.0.1', 41786) 的新連線。
+2025-08-11 16:31:08,447 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31'}}
+2025-08-11 16:31:08,448 - DBManagerServer - INFO - 連線 ('127.0.0.1', 41786) 已關閉。
+2025-08-11 16:31:09,001 - DBManagerServer - INFO - 來自 ('127.0.0.1', 34792) 的新連線。
+2025-08-11 16:31:09,001 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:31:08,795 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-12 00:31:08,949 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 16:31:09,003 - db.database - INFO - ✅ 任務 e4324e06-834b-43ef-9a50-39c212004a31 狀態已更新為: failed
+2025-08-11 16:31:09,004 - DBManagerServer - INFO - 連線 ('127.0.0.1', 34792) 已關閉。
+2025-08-11 16:31:13,454 - DBManagerServer - INFO - 來自 ('127.0.0.1', 34804) 的新連線。
+2025-08-11 16:31:13,454 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31'}}
+2025-08-11 16:31:13,455 - DBManagerServer - INFO - 連線 ('127.0.0.1', 34804) 已關閉。
+2025-08-11 16:31:13,460 - DBManagerServer - INFO - 來自 ('127.0.0.1', 34816) 的新連線。
+2025-08-11 16:31:13,460 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'e4324e06-834b-43ef-9a50-39c212004a31'}}
+2025-08-11 16:31:13,461 - DBManagerServer - INFO - 連線 ('127.0.0.1', 34816) 已關閉。
+2025-08-11 16:32:21,397 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:32:21,397 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:32:21,405 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:32:21,406 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:32:21,407 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:32:22,112 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49944) 的新連線。
+2025-08-11 16:32:22,112 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b', 'payload': '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:32:22,113 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 0ba91120-f685-493d-96ab-6d791aba763b (依賴: 無)
+2025-08-11 16:32:22,115 - db.database - INFO - ✅ 已成功新增任務到佇列: 0ba91120-f685-493d-96ab-6d791aba763b
+2025-08-11 16:32:22,115 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49944) 已關閉。
+2025-08-11 16:32:22,116 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49954) 的新連線。
+2025-08-11 16:32:22,116 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '13fce8f0-5400-4f90-bb36-327619361e22', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '0ba91120-f685-493d-96ab-6d791aba763b'}}
+2025-08-11 16:32:22,116 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 13fce8f0-5400-4f90-bb36-327619361e22 (依賴: 0ba91120-f685-493d-96ab-6d791aba763b)
+2025-08-11 16:32:22,117 - db.database - INFO - ✅ 已成功新增任務到佇列: 13fce8f0-5400-4f90-bb36-327619361e22
+2025-08-11 16:32:22,118 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49954) 已關閉。
+2025-08-11 16:32:22,130 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49968) 的新連線。
+2025-08-11 16:32:22,130 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b'}}
+2025-08-11 16:32:22,131 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49968) 已關閉。
+2025-08-11 16:32:22,132 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49984) 的新連線。
+2025-08-11 16:32:22,132 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b'}}
+2025-08-11 16:32:22,133 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49984) 已關閉。
+2025-08-11 16:32:23,163 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49994) 的新連線。
+2025-08-11 16:32:23,163 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:32:22,488 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw\\n2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - \\ud83c\\udfac Video Title: Me at the zoo\\n2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - \\u23f1\\ufe0f Duration: 19 seconds\\n2025-08-12 00:32:22,713 - youtube_downloader_tool - INFO - \\u23f3 Starting download to /app/uploads/Me_at_the_zoo.mp4...\\n2025-08-12 00:32:23,100 - youtube_downloader_tool - CRITICAL - \\u274c An unexpected error occurred during download: HTTP Error 403: Forbidden\\nTraceback (most recent call last):\\n  File \\"/app/tools/youtube_downloader.py\\", line 103, in download_audio\\n    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)\\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py\\", line 398, in download\\n    for chunk in request.stream(\\n                 ^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py\\", line 154, in stream\\n    response = _execute_request(\\n               ^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py\\", line 35, in _execute_request\\n    return urlopen(request, timeout=timeout)  # nosec\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 215, in urlopen\\n    return opener.open(url, data, timeout)\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 521, in open\\n    response = meth(req, response)\\n               ^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 630, in http_response\\n    response = self.parent.error(\\n               ^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 553, in error\\n    result = self._call_chain(*args)\\n             ^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 492, in _call_chain\\n    result = func(*args)\\n             ^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 745, in http_error_302\\n    return self.parent.open(new, timeout=req.timeout)\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 521, in open\\n    response = meth(req, response)\\n               ^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 630, in http_response\\n    response = self.parent.error(\\n               ^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 559, in error\\n    return self._call_chain(*args)\\n           ^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 492, in _call_chain\\n    result = func(*args)\\n             ^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 639, in http_error_default\\n    raise HTTPError(req.full_url, code, msg, hdrs, fp)\\nurllib.error.HTTPError: HTTP Error 403: Forbidden\\n"}'}}
+2025-08-11 16:32:23,165 - db.database - INFO - ✅ 任務 0ba91120-f685-493d-96ab-6d791aba763b 狀態已更新為: failed
+2025-08-11 16:32:23,165 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49994) 已關閉。
+2025-08-11 16:32:27,138 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49998) 的新連線。
+2025-08-11 16:32:27,138 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b'}}
+2025-08-11 16:32:27,139 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49998) 已關閉。
+2025-08-11 16:32:27,144 - DBManagerServer - INFO - 來自 ('127.0.0.1', 50014) 的新連線。
+2025-08-11 16:32:27,144 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '0ba91120-f685-493d-96ab-6d791aba763b'}}
+2025-08-11 16:32:27,145 - DBManagerServer - INFO - 連線 ('127.0.0.1', 50014) 已關閉。
+2025-08-11 16:32:50,867 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 16:32:50,867 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 16:32:50,883 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 16:32:50,885 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 16:32:50,886 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 16:32:52,403 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49298) 的新連線。
+2025-08-11 16:32:52,404 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9', 'payload': '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 16:32:52,404 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 1dd37db7-7966-40bd-9f31-068b025c22b9 (依賴: 無)
+2025-08-11 16:32:52,406 - db.database - INFO - ✅ 已成功新增任務到佇列: 1dd37db7-7966-40bd-9f31-068b025c22b9
+2025-08-11 16:32:52,407 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49298) 已關閉。
+2025-08-11 16:32:52,445 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49308) 的新連線。
+2025-08-11 16:32:52,445 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': 'cb79c13c-1883-4bac-b553-8f5cb8b87f8b', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '1dd37db7-7966-40bd-9f31-068b025c22b9'}}
+2025-08-11 16:32:52,446 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: cb79c13c-1883-4bac-b553-8f5cb8b87f8b (依賴: 1dd37db7-7966-40bd-9f31-068b025c22b9)
+2025-08-11 16:32:52,447 - db.database - INFO - ✅ 已成功新增任務到佇列: cb79c13c-1883-4bac-b553-8f5cb8b87f8b
+2025-08-11 16:32:52,448 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49308) 已關閉。
+2025-08-11 16:32:52,471 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49312) 的新連線。
+2025-08-11 16:32:52,471 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9'}}
+2025-08-11 16:32:52,472 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49312) 已關閉。
+2025-08-11 16:32:52,477 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49322) 的新連線。
+2025-08-11 16:32:52,478 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9'}}
+2025-08-11 16:32:52,479 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49322) 已關閉。
+2025-08-11 16:32:53,746 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49330) 的新連線。
+2025-08-11 16:32:53,746 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-12 00:32:53,067 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw\\n2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - \\ud83c\\udfac Video Title: Me at the zoo\\n2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - \\u23f1\\ufe0f Duration: 19 seconds\\n2025-08-12 00:32:53,290 - youtube_downloader_tool - INFO - \\u23f3 Starting download to /app/uploads/Me_at_the_zoo.mp4...\\n2025-08-12 00:32:53,674 - youtube_downloader_tool - CRITICAL - \\u274c An unexpected error occurred during download: HTTP Error 403: Forbidden\\nTraceback (most recent call last):\\n  File \\"/app/tools/youtube_downloader.py\\", line 103, in download_audio\\n    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)\\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py\\", line 398, in download\\n    for chunk in request.stream(\\n                 ^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py\\", line 154, in stream\\n    response = _execute_request(\\n               ^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py\\", line 35, in _execute_request\\n    return urlopen(request, timeout=timeout)  # nosec\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 215, in urlopen\\n    return opener.open(url, data, timeout)\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 521, in open\\n    response = meth(req, response)\\n               ^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 630, in http_response\\n    response = self.parent.error(\\n               ^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 553, in error\\n    result = self._call_chain(*args)\\n             ^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 492, in _call_chain\\n    result = func(*args)\\n             ^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 745, in http_error_302\\n    return self.parent.open(new, timeout=req.timeout)\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 521, in open\\n    response = meth(req, response)\\n               ^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 630, in http_response\\n    response = self.parent.error(\\n               ^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 559, in error\\n    return self._call_chain(*args)\\n           ^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 492, in _call_chain\\n    result = func(*args)\\n             ^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py\\", line 639, in http_error_default\\n    raise HTTPError(req.full_url, code, msg, hdrs, fp)\\nurllib.error.HTTPError: HTTP Error 403: Forbidden\\n"}'}}
+2025-08-11 16:32:53,749 - db.database - INFO - ✅ 任務 1dd37db7-7966-40bd-9f31-068b025c22b9 狀態已更新為: failed
+2025-08-11 16:32:53,749 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49330) 已關閉。
+2025-08-11 16:32:57,487 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49338) 的新連線。
+2025-08-11 16:32:57,487 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9'}}
+2025-08-11 16:32:57,488 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49338) 已關閉。
+2025-08-11 16:32:57,496 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49352) 的新連線。
+2025-08-11 16:32:57,496 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '1dd37db7-7966-40bd-9f31-068b025c22b9'}}
+2025-08-11 16:32:57,497 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49352) 已關閉。
