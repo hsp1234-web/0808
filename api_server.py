@@ -494,40 +494,43 @@ async def process_youtube_urls(request: Request):
     接收 YouTube URL，根據 'download_only' 旗標決定是僅下載音訊，還是執行完整的 AI 分析流程。
     """
     payload = await request.json()
-    urls = payload.get("urls", [])
+    # JULES'S FIX: 前端發送的是 'requests' 物件陣列，而非 'urls' 字串陣列。修正這裡以正確解析。
+    requests_list = payload.get("requests", [])
     model = payload.get("model")
     download_only = payload.get("download_only", False)
 
-    if not urls:
-        raise HTTPException(status_code=400, detail="請求中必須包含 'urls'。")
+    if not requests_list:
+        raise HTTPException(status_code=400, detail="請求中必須包含 'requests'。")
     if not download_only and not model:
         raise HTTPException(status_code=400, detail="執行完整分析時必須提供 'model'。")
 
     tasks = []
-    for url in urls:
-        if not url.strip():
+    for req_item in requests_list:
+        url = req_item.get("url")
+        filename = req_item.get("filename") # 雖然目前未使用，但先讀取出來
+
+        if not url or not url.strip():
             continue
 
         task_id = str(uuid.uuid4())
 
         if download_only:
             # 僅下載模式：只建立一個下載任務
-            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR)}
-            # 使用更明確的 task_type
+            # 將自訂檔名存入 payload，以便未來使用
+            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
             db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
             tasks.append({"url": url, "task_id": task_id})
         else:
             # 完整分析模式：建立下載和處理兩個任務
-            download_task_id = task_id # 讓主任務 ID 成為下載任務 ID
+            download_task_id = task_id
             process_task_id = str(uuid.uuid4())
 
-            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR)}
+            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
             process_payload = {"model": model, "output_dir": "transcripts"}
 
             db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
             db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
 
-            # 回傳給前端的是起始任務 ID
             tasks.append({"url": url, "task_id": download_task_id})
 
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})

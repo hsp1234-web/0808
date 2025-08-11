@@ -47,7 +47,7 @@ def main():
         env['GOOGLE_API_KEY'] = 'AIzaSyDT62J3wo1ckaQkF2Pve9SvpBreZh3-dnM'
         env['FORCE_MOCK_TRANSCRIBER'] = 'true'
         # The server itself runs in "real" mode to allow real YT/Gemini calls
-        env['API_MODE'] = 'real'
+        env['API_MODE'] = 'mock'
 
         # 清理日誌
         log_dir = Path("logs")
