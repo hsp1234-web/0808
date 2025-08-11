@@ -44,98 +44,19 @@ def print_progress(status: str, detail: str, extra_data: dict = None):
         progress_data.update(extra_data)
     print(json.dumps(progress_data), flush=True)
 
-# --- 提示詞 (Prompts from damo.py) ---
-SUMMARY_TRANSCRIPT_PROMPT = """請您扮演一位專業的逐字稿分析師。
-您將收到一個名為 '{original_filename}' (原始影片標題為: '{video_title}') 的音訊檔案。請完成以下兩項任務，並嚴格依照指定格式（包含標記）輸出，所有文字內容請使用繁體中文（台灣用語習慣）：
+# --- 提示詞載入 ---
+PROMPTS = {}
+try:
+    # 建立一個相對於目前檔案位置的路徑
+    prompts_path = Path(__file__).resolve().parent.parent / "prompts" / "default_prompts.json"
+    with open(prompts_path, 'r', encoding='utf-8') as f:
+        PROMPTS = json.load(f)
+    log.info(f"✅ 成功從 {prompts_path} 載入提示詞。")
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    log.critical(f"🔴 無法載入提示詞檔案，請檢查 prompts/default_prompts.json 是否存在且格式正確。錯誤: {e}")
+    # 在無法載入提示詞的嚴重情況下，程式無法繼續執行
+    sys.exit(1)
 
-任務一：重點摘要
-請根據音訊內容，簡潔扼要地總結其核心內容與主要觀點。摘要應包含一個總體主旨的開頭段落，以及數個帶有粗體子標題的重點條目，每個條目下使用無序列表列出關鍵細節。請勿包含時間戳記。
-
-任務二：詳細逐字稿
-請提供完整的逐字稿。如果內容包含多位發言者，請嘗試區分（例如：發言者A, 發言者B）。對於專有名詞、品牌名稱、人名等，請盡可能以「中文 (English)」的格式呈現。
-
-輸出格式範例（請嚴格遵守此分隔方式與標記）：
-[重點摘要開始]
-[此處為您的重點摘要內容，包含總體主旨和帶子標題的條目，使用繁體中文]
-[重點摘要結束]
-
----[逐字稿分隔線]---
-
-[詳細逐字稿開始]
-[此處為您的詳細逐字稿內容，使用繁體中文]
-[詳細逐字稿結束]
-"""
-
-HTML_GENERATION_PROMPT = """請生成一個完整的HTML檔案，該檔案應包含響應式設計（Responsive Web Design）的考量，並將提供的內容整合成一個頁面。所有文字內容請使用繁體中文（台灣用語習慣）。頁面內容分為兩大部分：「重點摘要」和「逐字稿」。
-
-**自動生成的「影片標題」應作為頁面的主要H1標題。**
-
-**自動生成的「重點摘要」部分必須包含以下元素和要求（使用繁體中文）：**
-* 一個開頭的段落，簡要說明音訊的整體主旨。
-* 多個重點條目，每個條目都應該有一個**粗體**的子標題（例如：「**1. 專注力的普遍適用性**」）。
-* 在每個重點條目下，使用無序列表 (`<ul>` 和 `<li>`) 形式，簡潔地列出該重點下的關鍵細節。
-* 重點條目和其下的細節應精煉、準確地反映逐字稿中的核心思想和關鍵資訊。
-* 請勿在「重點摘要」部分包含時間戳記。
-
-**生成的HTML檔案，除了上述內容生成要求外，需全面滿足以下排版、功能和響應式設計要求：**
-
-1.  **響應式設計 (Responsive Design)：**
-    * 頁面應能良好適應不同尺寸的螢幕（從5.5吋手機到22吋電腦螢幕），提供最佳閱讀體驗。
-    * 在 `<head>` 中包含 `<meta name="viewport" content="width=device-width, initial-scale=1.0">`。
-    * 圖片 (`<img>`) 應具備彈性，設定 `max-width: 100%; height: auto; display: block;` (如果內容中包含圖片)。
-    * 利用媒體查詢 (Media Queries) 針對不同螢幕斷點（例如：手機為 `max-width: 480px`，平板為 `min-width: 481px` and `max-width: 768px`，桌面為 `min-width: 769px`）調整 CSS 樣式，包括：
-        * `font-size` (字體大小) - 應使用 `rem` 單位。
-        * `line-height` (行高)。
-        * `margin` 和 `padding` (邊距與內邊距)。
-        * `hr` (水平線) 的樣式。
-    * 內容主體應限制最大寬度（例如 `max-width: 900px;`）並置中 (`margin: 0 auto;`)，避免在大螢幕下閱讀行長度過長。
-    * 採用行動優先 (Mobile-First) 設計原則，基礎樣式適用於小螢幕，再逐步擴展。
-
-2.  **排版與易讀性 (Layout & Readability)：**
-    * **無縮排：** 段落 (`<p>`) 和列表項目 (`<li>`) 應完全靠左對齊，無首行縮排 (`text-indent: 0;`)。
-    * **水平線整理：** 大量使用 `<hr>` 標籤作為視覺分隔，並透過 CSS 美化，使其具有清晰的區隔感（例如：`border: 0; height: 1.5px;`），並有足夠的上下邊距。
-    * **層次清晰：** 使用 `<h1>`, `<h2>`, `<h3>` 等標題標籤來表示內容層次，並透過 CSS 調整其字體大小和顏色，使其易於識別。
-        * `<h1>` 應居中並有底部邊框。
-        * `<h2>` 應靠左對齊，有底部邊框和強調色。
-        * `<h3>` 應靠左對齊，字體大小適中。
-    * **字體與間距：** 選擇易讀的字體 (例如：'微軟正黑體', 'Arial', sans-serif)，設定適中的行高（例如 `line-height: 1.7;`）和段落間距，提升閱讀舒適度。
-    * **強調文字：** 重要概念和關鍵詞使用 `<strong>` 標籤加粗，並設定醒目顏色。
-    * 列表項目 (`<ul>`) 應有適當的左邊距，嵌套列表 (`<ul><ul>`) 應有不同的列表樣式（例如 `circle`）。
-
-3.  **暗色模式 (Dark Mode) 功能：**
-    * 實作一個可切換的暗色模式功能。
-    * 使用 CSS 變數 (`:root` 和 `body.dark-mode`) 來定義淺色和暗色模式下的**所有**顏色方案，包括背景色、內文文字顏色、標題顏色、強調色/連結色、加粗文字顏色、水平線顏色，以及**按鈕的背景色和文字顏色**，以確保足夠的對比度，提升暗色模式下的閱讀體驗。請確保不同元素在兩種模式下的顏色值都能提供良好的對比度。
-    * 在頁面右上角固定一個功能按鈕容器 (`.controls-container`)，包含一個切換按鈕 (`<button id="darkModeToggle" class="control-button">`)，允許使用者手動切換模式。
-    * 使用 JavaScript 處理按鈕點擊事件，切換 `<body>` 元素的 `dark-mode` 類別。
-    * JavaScript 應能偵測使用者系統的暗色模式偏好，並將用戶的模式選擇儲存到 `localStorage` 中，以便下次訪問時保持相同的模式。
-    * 顏色切換應具有平滑的過渡效果 (`transition`)。
-
-4.  **字體大小調整功能：**
-    * 實作三個按鈕 (`<button id="fontSmall" class="control-button">`, `<button id="fontMedium" class="control-button">`, `<button id="fontLarge" class="control-button">`)，分別對應「小」、「中」、「大」三種字體大小，並放置在上述功能按鈕容器中。
-    * 使用 CSS 變數 (`--base-font-size`) 來控制 HTML 根元素 (`<html>`) 的基礎字體大小，所有其他字體大小應使用 `rem` 單位，以實現統一縮放。
-    * JavaScript 應處理按鈕點擊事件，動態更新 `--base-font-size` 變數。
-    * 用戶的字體大小選擇應儲存到 `localStorage` 中，以便下次訪問時保持相同的偏好。
-    * 字體大小切換應具有平滑的過渡效果 (`transition`)。
-
-**以下是需要嵌入的內容（請確保這些內容也使用繁體中文）：**
-
-影片標題：
----[影片標題開始]---
-{video_title_for_html}
----[影片標題結束]---
-
-重點摘要內容：
----[重點摘要內容開始]---
-{summary_text_for_html}
----[重點摘要內容結束]---
-
-逐字稿內容：
----[逐字稿內容開始]---
-{transcript_text_for_html}
----[逐字稿內容結束]---
-
-請嚴格按照上述要求，將提供的「影片標題」、「重點摘要內容」和「逐字稿內容」填充到生成的HTML的相應位置。確保最終輸出的是一個可以直接使用的、包含所有 CSS 和 JavaScript 的完整 HTML 檔案內容，以 `<!DOCTYPE html>` 開頭。
-"""
 
 import google.generativeai as genai
 
@@ -215,38 +136,46 @@ def upload_to_gemini(genai_module, audio_path: Path, display_filename: str):
         log.critical(f"🔴 Failed to upload file to Gemini: {e}", exc_info=True)
         raise
 
-def get_summary_and_transcript(genai_module, gemini_file_resource, model_api_name: str, video_title: str, original_filename: str):
-    """使用 Gemini 模型生成摘要與逐字稿。"""
-    log.info(f"🤖 Requesting summary and transcript from model '{model_api_name}'...")
-    print_progress("generating_transcript", "AI 正在生成摘要與逐字稿...")
-    prompt = SUMMARY_TRANSCRIPT_PROMPT.format(original_filename=original_filename, video_title=video_title)
+def get_summary(genai_module, gemini_file_resource, model_api_name: str, video_title: str):
+    """使用 Gemini 模型生成重點摘要。"""
+    model = genai_module.GenerativeModel(model_api_name)
+    log.info(f"🤖 Requesting summary from model '{model_api_name}'...")
+    print_progress("generating_summary", "AI 正在生成重點摘要...")
+    summary_prompt = PROMPTS['task_prompts']['summary']['prompt'].format(video_title=video_title)
     try:
-        model = genai_module.GenerativeModel(model_api_name)
-        response = model.generate_content([prompt, gemini_file_resource], request_options={'timeout': 3600})
-        full_response_text = response.text
-
-        summary_match = re.search(r"\[重點摘要開始\](.*?)\[重點摘要結束\]", full_response_text, re.DOTALL)
-        summary_text = summary_match.group(1).strip() if summary_match else "未擷取到重點摘要。"
-
-        transcript_match = re.search(r"\[詳細逐字稿開始\](.*?)\[詳細逐字稿結束\]", full_response_text, re.DOTALL)
-        transcript_text = transcript_match.group(1).strip() if transcript_match else "未擷取到詳細逐字稿。"
-
-        if "未擷取到" in summary_text and "未擷取到" in transcript_text and "---[逐字稿分隔線]---" not in full_response_text:
-            transcript_text = full_response_text
-            summary_text = "（自動摘要失敗，請參考下方逐字稿自行整理）"
-
-        log.info("✅ Successfully generated summary and transcript.")
-        print_progress("transcript_generated", "摘要與逐字稿生成完畢。")
-        return summary_text, transcript_text
+        summary_response = model.generate_content([summary_prompt, gemini_file_resource], request_options={'timeout': 1800})
+        summary_text = summary_response.text
+        log.info("✅ Successfully generated summary.")
+        return summary_text
     except Exception as e:
-        log.critical(f"🔴 Failed to get summary/transcript from Gemini: {e}", exc_info=True)
-        raise
+        log.error(f"🔴 Failed to get summary from Gemini: {e}", exc_info=True)
+        return "生成重點摘要時發生錯誤。"
 
-def generate_html_report(genai_module, summary_text: str, transcript_text: str, model_api_name: str, video_title: str):
-    """使用 Gemini 模型生成 HTML 報告。"""
+def get_transcript(genai_module, gemini_file_resource, model_api_name: str, video_title: str):
+    """使用 Gemini 模型生成詳細逐字稿。"""
+    model = genai_module.GenerativeModel(model_api_name)
+    log.info(f"🤖 Requesting transcript from model '{model_api_name}'...")
+    print_progress("generating_transcript", "AI 正在生成詳細逐字稿...")
+    transcript_prompt = PROMPTS['task_prompts']['transcript']['prompt'].format(video_title=video_title)
+    try:
+        transcript_response = model.generate_content([transcript_prompt, gemini_file_resource], request_options={'timeout': 3600})
+        transcript_text = transcript_response.text
+        log.info("✅ Successfully generated transcript.")
+        return transcript_text
+    except Exception as e:
+        log.error(f"🔴 Failed to get transcript from Gemini: {e}", exc_info=True)
+        return "生成詳細逐字稿時發生錯誤。"
+
+def generate_html_report(genai_module, model_api_name: str, video_title: str, **kwargs):
+    """使用 Gemini 模型，根據提供的內容生成 HTML 報告。"""
     log.info(f"🎨 Requesting HTML report from model '{model_api_name}'...")
     print_progress("generating_html", "AI 正在美化格式並生成 HTML 報告...")
-    prompt = HTML_GENERATION_PROMPT.format(
+
+    # 從 kwargs 獲取內容，若無則提供預設值
+    summary_text = kwargs.get('summary', '（未要求產生摘要）')
+    transcript_text = kwargs.get('transcript', '（未要求產生逐字稿）')
+
+    prompt = PROMPTS['format_prompts']['html_report']['prompt'].format(
         video_title_for_html=video_title,
         summary_text_for_html=summary_text,
         transcript_text_for_html=transcript_text
@@ -256,6 +185,7 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
         response = model.generate_content(prompt, request_options={'timeout': 1800})
         generated_html = response.text
 
+        # 清理 AI 可能額外添加的 markdown 標記
         if generated_html.strip().startswith("```html"):
             generated_html = generated_html.strip()[7:]
         if generated_html.strip().endswith("```"):
@@ -272,16 +202,15 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
         log.critical(f"🔴 Failed to generate HTML report from Gemini: {e}", exc_info=True)
         raise
 
-def process_audio_file(audio_path: Path, model: str, video_title: str, output_dir: Path):
+def process_audio_file(audio_path: Path, model: str, video_title: str, output_dir: Path, tasks: list, output_format: str):
     """
-    完整的處理流程：上傳、分析、生成報告、轉換為 PDF、儲存、清理。
+    更具彈性的處理流程：根據指定的任務和格式執行。
     """
-    #延遲導入，使其只在需要時才導入
+    # 延遲導入，使其只在需要時才導入
     try:
         import google.generativeai as genai
-        from weasyprint import HTML
     except ImportError:
-        log.critical("🔴 Necessary libraries (google-generativeai, WeasyPrint) not installed.")
+        log.critical("🔴 Necessary library 'google-generativeai' not installed.")
         raise
 
     # 1. 設定 API 金鑰
@@ -292,37 +221,68 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
     gemini_file_resource = None
     try:
-        # 2. 上傳檔案
+        # 2. 上傳檔案 (所有任務都需要)
         gemini_file_resource = upload_to_gemini(genai, audio_path, audio_path.name)
 
-        # 3. 取得摘要與逐字稿
-        summary, transcript = get_summary_and_transcript(genai, gemini_file_resource, model, video_title, audio_path.name)
+        # 3. 根據 `tasks` 列表執行 AI 任務
+        task_results = {}
+        if 'summary' in tasks:
+            task_results['summary'] = get_summary(genai, gemini_file_resource, model, video_title)
+        if 'transcript' in tasks:
+            task_results['transcript'] = get_transcript(genai, gemini_file_resource, model, video_title)
+        # 未來可以在此處擴充其他任務，例如 'translation'
 
-        # 4. 生成 HTML 報告內容 (仍在記憶體中)
-        html_content = generate_html_report(genai, summary, transcript, model, video_title)
-
-        # 5. 將 HTML 轉換並儲存為 PDF
+        # 4. 根據 `output_format` 格式化並儲存結果
         sanitized_title = sanitize_filename(video_title)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        pdf_filename = f"{sanitized_title}_{timestamp}_AI_Report.pdf"
-        pdf_path = output_dir / pdf_filename
+        base_filename = f"{sanitized_title}_{timestamp}_AI_Report"
 
-        log.info(f"📄 Converting HTML to PDF and saving to: {pdf_path}")
-        print_progress("generating_pdf", "正在將報告轉換為 PDF...")
-        HTML(string=html_content, base_url=str(output_dir)).write_pdf(pdf_path)
-        log.info(f"✅ PDF report saved successfully.")
+        output_path = None
+        result_key = "output_path"
 
-        # 6. 輸出最終結果
+        if output_format == 'html':
+            log.info("🖌️ Formatting output as HTML report...")
+            html_content = generate_html_report(genai, model, video_title, **task_results)
+            output_path = output_dir / f"{base_filename}.html"
+            result_key = "html_report_path"
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            log.info(f"✅ HTML report saved to: {output_path}")
+
+        elif output_format == 'txt':
+            log.info("✍️ Formatting output as plain text file...")
+            # 建立一個簡單的純文字報告
+            txt_content = []
+            txt_content.append(f"# {video_title}\n")
+            if 'summary' in task_results:
+                txt_content.append("## 重點摘要\n")
+                txt_content.append(task_results['summary'])
+                txt_content.append("\n---\n")
+            if 'transcript' in task_results:
+                txt_content.append("## 詳細逐字稿\n")
+                txt_content.append(task_results['transcript'])
+
+            full_txt_content = "\n".join(txt_content)
+            output_path = output_dir / f"{base_filename}.txt"
+            result_key = "text_file_path"
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(full_txt_content)
+            log.info(f"✅ Text file saved to: {output_path}")
+
+        else:
+            raise ValueError(f"不支援的輸出格式: {output_format}")
+
+        # 5. 輸出最終結果
         final_result = {
             "type": "result",
             "status": "completed",
-            "pdf_report_path": str(pdf_path), # 回傳 PDF 路徑
+            result_key: str(output_path),
             "video_title": video_title
         }
         print(json.dumps(final_result), flush=True)
 
     finally:
-        # 7. 清理 Gemini 雲端檔案
+        # 6. 清理 Gemini 雲端檔案
         if gemini_file_resource:
             log.info(f"🗑️ Cleaning up Gemini file: {gemini_file_resource.name}")
             try:
@@ -343,7 +303,7 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gemini AI 處理工具。")
+    parser = argparse.ArgumentParser(description="Gemini AI 處理工具 v2。")
     parser.add_argument(
         "--command",
         type=str,
@@ -351,26 +311,23 @@ def main():
         choices=["process", "list_models", "validate_key"],
         help="要執行的操作。"
     )
-    # 根據指令，動態決定其他參數是否為必需
-    # 我們先解析一次，看看指令是什麼
     args, remaining_argv = parser.parse_known_args()
 
     if args.command == "list_models":
         list_models()
         return
-
     if args.command == "validate_key":
         validate_key()
         return
 
-    # 如果是 'process' 指令，則需要其他參數
     if args.command == "process":
         process_parser = argparse.ArgumentParser()
-        process_parser.add_argument("--command", type=str, help=argparse.SUPPRESS) # 忽略已解析的 command
         process_parser.add_argument("--audio-file", type=str, required=True, help="要處理的音訊檔案路徑。")
         process_parser.add_argument("--model", type=str, required=True, help="要使用的 Gemini 模型 API 名稱。")
         process_parser.add_argument("--video-title", type=str, required=True, help="原始影片標題，用於提示詞。")
         process_parser.add_argument("--output-dir", type=str, required=True, help="儲存生成報告的目錄。")
+        process_parser.add_argument("--tasks", type=str, default="summary,transcript", help="要執行的任務列表，以逗號分隔 (例如 'summary,transcript')。")
+        process_parser.add_argument("--format", type=str, default="html", choices=['html', 'txt'], help="最終輸出的檔案格式。")
 
         process_args = process_parser.parse_args(remaining_argv)
 
@@ -383,8 +340,18 @@ def main():
             print(json.dumps({"type": "result", "status": "failed", "error": f"Input file not found: {audio_path}"}), flush=True)
             sys.exit(1)
 
+        # 將 tasks 字串轉換為列表
+        tasks_list = [task.strip() for task in process_args.tasks.split(',')]
+
         try:
-            process_audio_file(audio_path, process_args.model, process_args.video_title, output_path)
+            process_audio_file(
+                audio_path,
+                process_args.model,
+                process_args.video_title,
+                output_path,
+                tasks=tasks_list,
+                output_format=process_args.format
+            )
         except Exception as e:
             log.critical(f"An error occurred in the main processing flow: {e}", exc_info=True)
             print(json.dumps({"type": "result", "status": "failed", "error": str(e)}), flush=True)
