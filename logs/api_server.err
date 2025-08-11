@@ -42,3 +42,36 @@ ModuleNotFoundError: No module named 'torch'
 2025-08-11 20:03:19,931 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
 2025-08-11 20:03:19,936 - api_server - INFO - WebSocket 用戶端已離線。
 INFO:     connection closed
+2025-08-11 20:36:38,242 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-11 20:36:38,243 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-11 20:36:38,387 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-11 20:36:38,387 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [7590]
+INFO:     Waiting for application startup.
+2025-08-11 20:36:38,488 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-11 20:36:38,494 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+INFO:     127.0.0.1:41370 - "WebSocket /api/ws" [accepted]
+2025-08-11 20:36:38,662 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     connection open
+2025-08-11 20:36:38,667 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "03cacb32-96e7-4c27-a500-b814dfadd808"}}
+2025-08-11 20:36:38,669 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 03cacb32-96e7-4c27-a500-b814dfadd808)。
+2025-08-11 20:36:38,671 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 03cacb32-96e7-4c27-a500-b814dfadd808
+2025-08-11 20:36:38,672 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-11 20:36:38,679 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-11 20:36:38,683 - api_server - INFO - ✅ 回傳任務 03cacb32-96e7-4c27-a500-b814dfadd808 的狀態: pending
+INFO:     connection closed
+2025-08-11 20:36:39,795 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-11 20:36:39,594 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
+2025-08-11 20:36:39,747 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+Traceback (most recent call last):
+  File "/app/api_server.py", line 744, in _process_in_thread
+    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
+RuntimeError: YouTube downloader failed: 2025-08-11 20:36:39,594 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
+2025-08-11 20:36:39,747 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+
+2025-08-11 20:36:43,691 - api_server - INFO - ✅ 回傳任務 03cacb32-96e7-4c27-a500-b814dfadd808 的狀態: failed
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7590]

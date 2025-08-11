@@ -21,3 +21,34 @@
 2025-08-11 12:03:19,912 - DBManagerServer - INFO - 來自 ('127.0.0.1', 51534) 的新連線。
 2025-08-11 12:03:19,912 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
 2025-08-11 12:03:19,913 - DBManagerServer - INFO - 連線 ('127.0.0.1', 51534) 已關閉。
+2025-08-11 12:36:37,302 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-11 12:36:37,302 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-11 12:36:37,363 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-11 12:36:37,366 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-11 12:36:37,368 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-11 12:36:38,651 - DBManagerServer - INFO - 來自 ('127.0.0.1', 58614) 的新連線。
+2025-08-11 12:36:38,651 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808', 'payload': '{"url": "https://www.youtube.com/watch?v=LdeC_0G0E1g", "output_dir": "/app/uploads"}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-11 12:36:38,651 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 03cacb32-96e7-4c27-a500-b814dfadd808 (依賴: 無)
+2025-08-11 12:36:38,653 - db.database - INFO - ✅ 已成功新增任務到佇列: 03cacb32-96e7-4c27-a500-b814dfadd808
+2025-08-11 12:36:38,653 - DBManagerServer - INFO - 連線 ('127.0.0.1', 58614) 已關閉。
+2025-08-11 12:36:38,655 - DBManagerServer - INFO - 來自 ('127.0.0.1', 58628) 的新連線。
+2025-08-11 12:36:38,655 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '938a4287-e56a-4a1c-aca9-e886b295099b', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts"}', 'task_type': 'gemini_process', 'depends_on': '03cacb32-96e7-4c27-a500-b814dfadd808'}}
+2025-08-11 12:36:38,655 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 938a4287-e56a-4a1c-aca9-e886b295099b (依賴: 03cacb32-96e7-4c27-a500-b814dfadd808)
+2025-08-11 12:36:38,657 - db.database - INFO - ✅ 已成功新增任務到佇列: 938a4287-e56a-4a1c-aca9-e886b295099b
+2025-08-11 12:36:38,657 - DBManagerServer - INFO - 連線 ('127.0.0.1', 58628) 已關閉。
+2025-08-11 12:36:38,678 - DBManagerServer - INFO - 來自 ('127.0.0.1', 58630) 的新連線。
+2025-08-11 12:36:38,679 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808'}}
+2025-08-11 12:36:38,680 - DBManagerServer - INFO - 連線 ('127.0.0.1', 58630) 已關閉。
+2025-08-11 12:36:38,683 - DBManagerServer - INFO - 來自 ('127.0.0.1', 58634) 的新連線。
+2025-08-11 12:36:38,683 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808'}}
+2025-08-11 12:36:38,683 - DBManagerServer - INFO - 連線 ('127.0.0.1', 58634) 已關閉。
+2025-08-11 12:36:39,800 - DBManagerServer - INFO - 來自 ('127.0.0.1', 58638) 的新連線。
+2025-08-11 12:36:39,800 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-11 20:36:39,594 - youtube_downloader_tool - INFO - \\ud83d\\udd17 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g\\n2025-08-11 20:36:39,747 - youtube_downloader_tool - ERROR - \\u274c Video not available or URL is invalid: LdeC_0G0E1g is unavailable\\n"}'}}
+2025-08-11 12:36:39,803 - db.database - INFO - ✅ 任務 03cacb32-96e7-4c27-a500-b814dfadd808 狀態已更新為: failed
+2025-08-11 12:36:39,803 - DBManagerServer - INFO - 連線 ('127.0.0.1', 58638) 已關閉。
+2025-08-11 12:36:43,690 - DBManagerServer - INFO - 來自 ('127.0.0.1', 38514) 的新連線。
+2025-08-11 12:36:43,690 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808'}}
+2025-08-11 12:36:43,691 - DBManagerServer - INFO - 連線 ('127.0.0.1', 38514) 已關閉。
+2025-08-11 12:36:43,697 - DBManagerServer - INFO - 來自 ('127.0.0.1', 38518) 的新連線。
+2025-08-11 12:36:43,697 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '03cacb32-96e7-4c27-a500-b814dfadd808'}}
+2025-08-11 12:36:43,698 - DBManagerServer - INFO - 連線 ('127.0.0.1', 38518) 已關閉。
