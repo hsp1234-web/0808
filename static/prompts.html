@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示詞管理面板</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg-color: #ffffff;
+            --card-border-color: #dee2e6;
+            --button-bg-color: #007bff;
+            --button-hover-bg-color: #0056b3;
+            --input-bg-color: #f1f3f5;
+            --input-border-color: #ced4da;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --header-bg-color: #e9ecef;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 24px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        header {
+            background-color: var(--header-bg-color);
+            padding: 16px 24px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+
+        .card {
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--card-border-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        h2 {
+            font-size: 1.4em;
+            margin-top: 0;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .prompt-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .prompt-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .prompt-item label {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .prompt-item .prompt-description {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--input-border-color);
+            background-color: var(--input-bg-color);
+            font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+            font-size: 0.95em;
+            line-height: 1.5;
+            resize: vertical;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--button-bg-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+
+        .save-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--button-bg-color);
+            color: white;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .save-button:hover:not(:disabled) {
+            background-color: var(--button-hover-bg-color);
+            transform: translateY(-1px);
+        }
+
+        .save-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none;
+            margin-left: 20px;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: var(--button-bg-color);
+            font-weight: 500;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>提示詞管理面板</h1>
+                <a href="/static/mp3.html" class="back-link">← 返回主操作頁面</a>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <button id="save-prompts-btn" class="save-button">儲存變更</button>
+                <div id="status-indicator" class="status-message"></div>
+            </div>
+        </header>
+
+        <div id="loading-indicator">
+            <p>正在從伺服器載入提示詞...</p>
+        </div>
+
+        <div id="prompts-container" class="card" style="display: none;">
+            <!-- 內容將由 JavaScript 動態生成 -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const promptsContainer = document.getElementById('prompts-container');
+            const saveBtn = document.getElementById('save-prompts-btn');
+            const statusIndicator = document.getElementById('status-indicator');
+
+            let currentPrompts = {};
+
+            const showStatus = (message, isError = false) => {
+                statusIndicator.textContent = message;
+                statusIndicator.className = 'status-message'; // Reset classes
+                statusIndicator.classList.add(isError ? 'error' : 'success');
+                statusIndicator.style.display = 'block';
+
+                setTimeout(() => {
+                    statusIndicator.style.display = 'none';
+                }, 4000);
+            };
+
+            const buildPromptsUI = (prompts) => {
+                promptsContainer.innerHTML = ''; // 清空現有內容
+                for (const groupKey in prompts) {
+                    const group = prompts[groupKey];
+
+                    const groupTitle = document.createElement('h2');
+                    groupTitle.textContent = groupKey === 'task_prompts' ? '任務提示詞' : '格式化提示詞';
+                    promptsContainer.appendChild(groupTitle);
+
+                    const groupContainer = document.createElement('div');
+                    groupContainer.className = 'prompt-group';
+
+                    for (const promptKey in group) {
+                        const promptData = group[promptKey];
+                        const itemContainer = document.createElement('div');
+                        itemContainer.className = 'prompt-item';
+
+                        const label = document.createElement('label');
+                        label.setAttribute('for', `${groupKey}-${promptKey}`);
+                        label.textContent = promptData.name || promptKey;
+
+                        const description = document.createElement('p');
+                        description.className = 'prompt-description';
+                        description.textContent = promptData.description || `ID: ${promptKey}`;
+
+                        const textarea = document.createElement('textarea');
+                        textarea.id = `${groupKey}-${promptKey}`;
+                        textarea.dataset.groupKey = groupKey;
+                        textarea.dataset.promptKey = promptKey;
+                        textarea.value = promptData.prompt;
+
+                        itemContainer.appendChild(label);
+                        itemContainer.appendChild(description);
+                        itemContainer.appendChild(textarea);
+                        groupContainer.appendChild(itemContainer);
+                    }
+                    promptsContainer.appendChild(groupContainer);
+                }
+            };
+
+            const fetchPrompts = async () => {
+                try {
+                    const response = await fetch('/api/prompts');
+                    if (!response.ok) {
+                        throw new Error(`伺服器錯誤: ${response.status} ${response.statusText}`);
+                    }
+                    currentPrompts = await response.json();
+                    buildPromptsUI(currentPrompts);
+                    loadingIndicator.style.display = 'none';
+                    promptsContainer.style.display = 'block';
+                } catch (error) {
+                    loadingIndicator.innerHTML = `<p style="color: var(--error-color);">載入提示詞失敗: ${error.message}</p>`;
+                }
+            };
+
+            const savePrompts = async () => {
+                saveBtn.disabled = true;
+                saveBtn.textContent = '儲存中...';
+
+                // 從 UI 收集更新後的提示詞
+                const updatedPrompts = JSON.parse(JSON.stringify(currentPrompts)); // Deep copy
+                const textareas = promptsContainer.querySelectorAll('textarea');
+                textareas.forEach(textarea => {
+                    const { groupKey, promptKey } = textarea.dataset;
+                    if (updatedPrompts[groupKey] && updatedPrompts[groupKey][promptKey]) {
+                        updatedPrompts[groupKey][promptKey].prompt = textarea.value;
+                    }
+                });
+
+                try {
+                    const response = await fetch('/api/prompts', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(updatedPrompts),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `伺服器錯誤: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    showStatus(result.message || '儲存成功！');
+                    currentPrompts = updatedPrompts; // 更新本地狀態
+                } catch (error) {
+                    showStatus(`儲存失敗: ${error.message}`, true);
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '儲存變更';
+                }
+            };
+
+            saveBtn.addEventListener('click', savePrompts);
+
+            // 初始載入
+            fetchPrompts();
+        });
+    </script>
+</body>
+</html>
