@@ -151,7 +151,9 @@ def check_model_exists(model_size: str) -> bool:
     """
     檢查指定的 Whisper 模型是否已經被下載到本地快取。
     """
-    tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+    # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
+    force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
+    tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "tools/transcriber.py"
     log.info(f"使用 '{tool_script}' 檢查模型 '{model_size}' 是否存在...")
 
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
@@ -618,7 +620,9 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
         dummy_output_path = output_dir / f"{task_id}.txt"
 
         try:
-            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+            # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
+            force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
+            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "tools/transcriber.py"
             cmd = [
                 sys.executable,
                 tool_script,

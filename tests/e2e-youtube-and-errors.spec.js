@@ -2,9 +2,31 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import wav from 'wav';
 
 const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/';
 const TEST_TIMEOUT = 60000;
+const DUMMY_FILE_NAME = "dummy_audio.wav";
+
+/**
+ * 建立一個簡短的、無聲的 WAV 檔案用於測試上傳。
+ * @param {string} filename
+ */
+const createDummyWav = (filename) => {
+    const filepath = path.resolve(filename);
+    const file = fs.createWriteStream(filepath);
+    const writer = new wav.Writer({
+        channels: 1,
+        sampleRate: 16000,
+        bitDepth: 16
+    });
+    writer.pipe(file);
+    writer.write(Buffer.alloc(16000 * 2)); // 1 秒的靜音
+    writer.end();
+    console.log(`✅ 已建立臨時音訊檔案於: ${filepath}`);
+    return filepath;
+};
+
 
 // Helper to check for the status message
 const expectStatusMessage = async (page, expectedMessage, isError = false) => {
@@ -19,6 +41,18 @@ const expectStatusMessage = async (page, expectedMessage, isError = false) => {
 test.describe('綜合功能 E2E 測試', () => {
 
     test.setTimeout(TEST_TIMEOUT);
+
+    // 在所有測試開始前，建立一次假檔案
+    test.beforeAll(() => {
+        createDummyWav(DUMMY_FILE_NAME);
+    });
+
+    // 所有測試結束後，清理假檔案
+    test.afterAll(() => {
+        if (fs.existsSync(DUMMY_FILE_NAME)) {
+            fs.unlinkSync(DUMMY_FILE_NAME);
+        }
+    });
 
     test.beforeEach(async ({ page }) => {
         await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
@@ -56,14 +90,14 @@ test.describe('綜合功能 E2E 測試', () => {
 
     test('應能使用 Base64 成功上傳本地檔案', async ({ page }) => {
         // 讀取 dummy audio 檔案並轉為 Base64
-        const audioFilePath = path.resolve('dummy_audio.wav');
+        const audioFilePath = path.resolve(DUMMY_FILE_NAME);
         const audioFileBuffer = fs.readFileSync(audioFilePath);
         const audioBase64 = audioFileBuffer.toString('base64');
 
         // 使用 page.evaluate 在瀏覽器中執行 JS 來處理 Base64
-        await page.evaluate(async (base64) => {
+        await page.evaluate(async (data) => {
             // 將 Base64 轉回 ArrayBuffer
-            const byteCharacters = atob(base64);
+            const byteCharacters = atob(data.base64);
             const byteNumbers = new Array(byteCharacters.length);
             for (let i = 0; i < byteCharacters.length; i++) {
                 byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -72,7 +106,7 @@ test.describe('綜合功能 E2E 測試', () => {
             const blob = new Blob([byteArray], { type: 'audio/wav' });
 
             // 建立 File 物件
-            const file = new File([blob], 'dummy_audio.wav', { type: 'audio/wav' });
+            const file = new File([blob], filename, { type: 'audio/wav' });
 
             // 建立 DataTransfer 物件，這是模擬拖放所必需的
             const dataTransfer = new DataTransfer();

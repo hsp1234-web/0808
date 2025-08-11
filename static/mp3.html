@@ -654,13 +654,19 @@
                     const percent = payload.percent || 0;
                     modelProgressBar.style.width = `${percent}%`;
                     modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
+                    // --- 繁體中文註解：確保下載過程中按鈕保持禁用 ---
+                    confirmBtn.disabled = true;
                 } else if (payload.status === 'completed') {
                     modelProgressBar.style.width = '100%';
                     modelProgressText.textContent = '下載完成';
+                    // --- 繁體中文註解：下載完成後，恢復按鈕功能 ---
+                    confirmBtn.disabled = false;
                 } else if (payload.status === 'failed') {
                     modelProgressBar.style.width = '100%';
                     modelProgressBar.style.backgroundColor = '#dc3545';
                     modelProgressText.textContent = `下載失敗: ${payload.error}`;
+                    // --- 繁體中文註解：下載失敗後，恢復按鈕功能 ---
+                    confirmBtn.disabled = false;
                 }
             };
 
@@ -726,6 +732,21 @@
                 }
                 const statusSpan = taskElement.querySelector('.task-status');
                 statusSpan.textContent = payload.message || payload.status;
+
+                // --- 繁體中文註解：即時更新 YouTube 影片標題 ---
+                // 當後端完成影片資訊抓取後，會透過 WebSocket 傳來包含 `filename` 的訊息
+                // 此處檢查 payload 中是否有 filename，若有，則更新 UI 上的任務顯示名稱
+                if (payload.filename) {
+                    const filenameSpan = taskElement.querySelector('.task-filename');
+                    if (filenameSpan) {
+                        // 保留括號中的任務類型，只更新前面的檔名
+                        const originalText = filenameSpan.textContent;
+                        const taskTypeMatch = originalText.match(/\s\(.*\)$/);
+                        const taskTypeSuffix = taskTypeMatch ? taskTypeMatch[0] : '';
+                        filenameSpan.textContent = `${payload.filename}${taskTypeSuffix}`;
+                        filenameSpan.title = payload.filename; // 更新滑鼠懸停時顯示的完整標題
+                    }
+                }
 
                 if (payload.status === 'completed') {
                     statusSpan.innerHTML = '';
@@ -916,10 +937,15 @@
                 updateFileDisplay();
                 fileInput.value = '';
             });
-             fileDropZone.addEventListener('click', () => {
-                logAction('click-file-drop-zone');
-                fileInput.click();
-            });
+
+            // --- 繁體中文註解：修正重複彈窗問題 ---
+            // 舊有程式碼在此處為 fileDropZone (即 <label>) 額外添加了一個 click 事件監聽器，
+            // 這會導致 label 的原生行為和此監聽器重複觸發 fileInput.click()，彈出兩次檔案選擇視窗。
+            // 透過移除這個多餘的監聽器，我們僅依賴 label 的 `for="file-input"` 屬性來觸發檔案選擇，從而解決了問題。
+            // fileDropZone.addEventListener('click', () => {
+            //    logAction('click-file-drop-zone');
+            //    fileInput.click();
+            // });
 
             // JULES'S FIX: Add drag and drop event listeners
             fileDropZone.addEventListener('dragover', (e) => {
@@ -952,11 +978,23 @@
             confirmBtn.addEventListener('click', () => {
                 logAction('click-confirm-settings', modelSelect.value);
                 modelDisplay.textContent = modelSelect.value;
+
+                // --- 繁體中文註解：提供即時 UI 回饋 ---
+                // 在發送請求後，立即禁用按鈕並顯示進度條，防止重複點擊並告知使用者系統正在處理。
+                confirmBtn.disabled = true;
+                modelProgressContainer.classList.remove('hidden');
+                modelProgressBar.style.width = '0%';
+                modelProgressBar.style.backgroundColor = 'var(--button-bg-color)'; // 重設顏色
+                modelProgressText.textContent = `正在請求 ${modelSelect.value} 模型...`;
+
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
                 } else {
                     logAction('alert-websocket-not-connected');
                     showStatusMessage('WebSocket 未連線，無法下載模型。', true);
+                    modelProgressText.textContent = '連線失敗';
+                    // --- 繁體中文註解：連線失敗時，恢復按鈕功能 ---
+                    confirmBtn.disabled = false;
                 }
             });
 
