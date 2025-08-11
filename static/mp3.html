@@ -474,11 +474,14 @@
             </div>
         </div>
 
-        <!-- YouTube 轉報告分頁 (從舊的 YouTube 分頁移動而來) -->
+<!-- YouTube 轉報告分頁 (全新升級版) -->
         <div id="youtube-report-tab" class="tab-content">
             <div class="card">
                 <!-- 區域 1: API 金鑰管理 -->
-                <h2>🔑 Google API 金鑰管理</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <h2>🔑 Google API 金鑰管理</h2>
+                    <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
+                </div>
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
                     <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                     <button id="save-api-key-btn">儲存金鑰</button>
@@ -486,35 +489,56 @@
                 </div>
                 <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
 
-                <!-- 舊的後端金鑰提示區塊，保留但預設隱藏，用於向後相容或顯示後端特定錯誤 -->
-                <div id="api-key-area" class="hidden">
-                    <div id="api-key-prompt" class="hidden" style="padding: 15px; border: 1px solid var(--status-yellow); border-radius: 8px; background-color: #fffbe6; margin-bottom: 20px;"></div>
-                    <div id="api-key-success" class="hidden" style="padding: 15px; border: 1px solid var(--status-green); border-radius: 8px; background-color: #e6ffed;"></div>
-                </div>
-
-                <!-- 區域 2: YouTube 影片處理與自訂命名 -->
-                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片與自訂檔名</h2>
-                <!-- fieldset 現在預設啟用 -->
+                <!-- 區域 2: YouTube 影片處理 -->
+                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
                 <fieldset id="youtube-controls-fieldset">
                     <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
                         <!-- JS 動態新增的列將會插入到這裡 -->
                         <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                             <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選，留空則自動命名)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
                             <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
                         </div>
                     </div>
                     <button id="add-youtube-row-btn" style="margin-top: 12px;">+ 新增一列</button>
+                </fieldset>
+            </div>
 
-                    <div style="margin-top: 24px;">
-                        <label for="gemini-model-select">選擇 Gemini AI 模型 (僅供 AI 分析使用)</label>
-                        <select id="gemini-model-select">
-                            <option>等待從伺服器載入模型列表...</option>
-                        </select>
+            <!-- 區域 3: 參數控制區 -->
+            <div class="card" style="margin-top: 24px;">
+                <h2>⚙️ 參數控制區</h2>
+                <fieldset id="youtube-params-fieldset" disabled>
+                    <div class="grid-2-col">
+                        <!-- 左側：任務選項 -->
+                        <div>
+                            <label><strong>任務選項</strong></label>
+                            <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                                <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                <label><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
+                            </div>
+                        </div>
+                        <!-- 右側：模型與格式 -->
+                        <div class="flex-col">
+                            <div>
+                                <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                                <select id="gemini-model-select">
+                                    <option>等待從伺服器載入模型列表...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                                <select id="yt-output-format-select">
+                                    <option value="html">HTML 報告</option>
+                                    <option value="txt">純文字 (.txt)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </fieldset>
             </div>
-            <!-- 區域 3: 操作按鈕 -->
+
+            <!-- 區域 4: 操作按鈕 -->
             <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
                 <button id="download-audio-only-btn">🎧 僅下載音訊</button>
                 <button id="start-youtube-processing-btn" disabled>🚀 分析影片 (Gemini)</button>
@@ -672,7 +696,7 @@
             const modalDownloadBtn = document.getElementById('modal-download-btn');
             const modalCopyLinkBtn = document.getElementById('modal-copy-link-btn');
 
-            // --- YouTube 分頁元素 (含自訂命名) ---
+            // --- YouTube 分頁元素 (升級版) ---
             const apiKeyInput = document.getElementById('api-key-input');
             const saveApiKeyBtn = document.getElementById('save-api-key-btn');
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
@@ -682,6 +706,9 @@
             const geminiModelSelect = document.getElementById('gemini-model-select');
             const addYoutubeRowBtn = document.getElementById('add-youtube-row-btn');
             const youtubeLinkList = document.getElementById('youtube-link-list');
+            const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
+            const ytOutputFormatSelect = document.getElementById('yt-output-format-select');
+
 
             // --- 媒體下載器元素 ---
             const downloaderUrlsInput = document.getElementById('downloader-urls-input');
@@ -713,7 +740,7 @@
              * 開啟預覽彈窗，並根據檔案類型顯示內容。
              * @param {string} taskId - 任務 ID。
              * @param {string} filename - 用於顯示的檔案名稱。
-             * @param {string} fileType - 檔案的 MIME 類型 (例如 'application/pdf', 'text/plain')。
+             * @param {string} fileType - 檔案的 MIME 類型 (例如 'application/pdf', 'text/plain', 'text/html')。
              */
             const openPreviewModal = async (taskId, filename, fileType) => {
                 logAction('open-preview-modal', taskId);
@@ -723,7 +750,7 @@
                 modalIframe.src = 'about:blank';
                 modalIframe.srcdoc = '<p style="text-align: center; margin-top: 20px;">正在載入預覽...</p>';
 
-                if (fileType === 'application/pdf' || fileType === 'text/html') {
+                if (fileType === 'text/html') {
                     modalIframe.src = downloadUrl;
                     modalIframe.srcdoc = '';
                 } else if (fileType === 'text/plain') {
@@ -737,7 +764,7 @@
                         modalIframe.srcdoc = `<p style="text-align: center; color: red;">預覽載入失敗: ${error.message}</p>`;
                     }
                 } else {
-                    modalIframe.srcdoc = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
+                     modalIframe.srcdoc = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
                 }
 
                 modalDownloadBtn.href = downloadUrl;
@@ -939,8 +966,12 @@
                     let buttonGroup;
                     if (payload.task_type === 'download_only') {
                         buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
-                    } else {
-                        buttonGroup = createActionButtons(payload.task_id, 'application/pdf', '.pdf', 'youtube_report');
+                    } else { // This is a gemini_process task
+                        const result = payload.result || {};
+                        const outputPath = result.output_path || '';
+                        const extension = outputPath.includes('.html') ? '.html' : '.txt';
+                        const previewType = extension === '.html' ? 'text/html' : 'text/plain';
+                        buttonGroup = createActionButtons(payload.task_id, previewType, extension, 'youtube_report');
                     }
                     statusSpan.appendChild(buttonGroup);
                     const isDownloaderTask = taskElement.parentElement.id === 'downloader-tasks';
@@ -1164,34 +1195,35 @@
                 updateFileDisplay();
             });
 
-            // --- YouTube 分頁主要邏輯 ---
+            // --- YouTube 分頁主要邏輯 (已升級) ---
             const updateApiKeyUI = (state, message) => {
                 const statusSpan = apiKeyStatus.querySelector('span');
                 statusSpan.style.color = 'inherit';
                 statusSpan.style.fontStyle = 'normal';
+
+                const isValid = state === 'valid';
+                startYoutubeProcessingBtn.disabled = !isValid;
+                youtubeParamsFieldset.disabled = !isValid;
+
                 switch (state) {
                     case 'valid':
                         statusSpan.textContent = message || '驗證成功';
                         statusSpan.style.color = 'var(--status-green)';
-                        startYoutubeProcessingBtn.disabled = false;
                         startYoutubeProcessingBtn.title = '';
                         break;
                     case 'invalid':
                         statusSpan.textContent = message || '驗證失敗';
                         statusSpan.style.color = '#dc3545';
-                        startYoutubeProcessingBtn.disabled = true;
                         startYoutubeProcessingBtn.title = '請提供有效的 API 金鑰以啟用此功能';
                         break;
                     case 'validating':
                         statusSpan.textContent = message || '正在驗證中...';
                         statusSpan.style.fontStyle = 'italic';
-                        startYoutubeProcessingBtn.disabled = true;
                         break;
                     case 'not_provided':
                     default:
                         statusSpan.textContent = message || '尚未提供金鑰';
                         statusSpan.style.fontStyle = 'italic';
-                        startYoutubeProcessingBtn.disabled = true;
                         startYoutubeProcessingBtn.title = '請提供有效的 API 金鑰以啟用此功能';
                         break;
                 }
@@ -1242,13 +1274,9 @@
                 }
             };
 
-            /**
-             * 初始化 YouTube 分頁，包含 API 金鑰處理和自訂命名列表的互動邏輯。
-             */
             const initializeYouTubeTab = () => {
                 logAction('initialize-youtube-tab');
 
-                // --- YouTube 自訂命名互動邏輯 ---
                 const addNewYoutubeRow = () => {
                     logAction('click-add-youtube-row');
                     const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
@@ -1259,9 +1287,7 @@
                     youtubeLinkList.appendChild(newRow);
                 };
 
-                const sanitizeFilename = (filename) => {
-                    return filename.replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
-                };
+                const sanitizeFilename = (filename) => filename.replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
 
                 addYoutubeRowBtn.addEventListener('click', addNewYoutubeRow);
 
@@ -1278,15 +1304,10 @@
 
                 youtubeLinkList.addEventListener('input', (e) => {
                     if (e.target && e.target.classList.contains('youtube-filename-input')) {
-                        const originalValue = e.target.value;
-                        const sanitizedValue = sanitizeFilename(originalValue);
-                        if (originalValue !== sanitizedValue) {
-                            e.target.value = sanitizedValue;
-                        }
+                        e.target.value = sanitizeFilename(e.target.value);
                     }
                 });
 
-                // --- API 金鑰儲存與驗證邏輯 ---
                 saveApiKeyBtn.addEventListener('click', () => {
                     const apiKey = apiKeyInput.value.trim();
                     logAction('click-save-api-key');
@@ -1316,10 +1337,6 @@
                 }
             };
 
-            /**
-             * 處理 YouTube 相關的請求提交，包括僅下載和完整分析。
-             * @param {boolean} downloadOnly - 是否僅下載音訊。
-             */
             const processYoutubeRequest = async (downloadOnly = false) => {
                 const action = downloadOnly ? 'click-download-audio-only' : 'click-start-youtube-processing';
                 logAction(action);
@@ -1332,12 +1349,18 @@
                     const url = urlInput.value.trim();
                     const filename = filenameInput.value.trim();
                     if (url) {
-                        requests.push({ url: url, filename: filename });
+                        requests.push({ url, filename });
                     }
                 });
 
                 if (requests.length === 0) {
                     showStatusMessage('請輸入至少一個有效的 YouTube 網址。', true);
+                    return;
+                }
+
+                const selectedTasks = Array.from(document.querySelectorAll('input[name="yt-task"]:checked')).map(cb => cb.value);
+                if (!downloadOnly && selectedTasks.length === 0) {
+                    showStatusMessage('請至少選擇一個 AI 分析任務。', true);
                     return;
                 }
 
@@ -1350,7 +1373,9 @@
                     const payload = {
                         requests: requests,
                         model: geminiModelSelect.value,
-                        download_only: downloadOnly
+                        download_only: downloadOnly,
+                        tasks: selectedTasks.join(','),
+                        output_format: ytOutputFormatSelect.value
                     };
                     const response = await fetch('/api/youtube/process', {
                         method: 'POST',
