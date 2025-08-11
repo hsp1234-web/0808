@@ -4,11 +4,14 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@playwright/test": "^1.45.0",
     "@types/bun": "latest",
-    "jsdom": "^26.1.0",
-    "@playwright/test": "^1.45.0"
+    "jsdom": "^26.1.0"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "wav": "^1.0.2"
   }
 }

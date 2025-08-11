@@ -137,7 +137,57 @@ HTML_GENERATION_PROMPT = """請生成一個完整的HTML檔案，該檔案應包
 請嚴格按照上述要求，將提供的「影片標題」、「重點摘要內容」和「逐字稿內容」填充到生成的HTML的相應位置。確保最終輸出的是一個可以直接使用的、包含所有 CSS 和 JavaScript 的完整 HTML 檔案內容，以 `<!DOCTYPE html>` 開頭。
 """
 
+import google.generativeai as genai
+
 # --- 核心 Gemini 處理函式 ---
+
+def list_models():
+    """列出可用的 Gemini 模型並以 JSON 格式輸出。"""
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable not set.")
+        genai.configure(api_key=api_key)
+
+        models_list = []
+        for m in genai.list_models():
+            # 我們只關心支援 'generateContent' 且可用於 'models/' 的模型
+            if 'generateContent' in m.supported_generation_methods:
+                # 簡化輸出，只包含名稱和顯示名稱
+                 models_list.append({
+                     "id": m.name,
+                     "name": m.display_name
+                 })
+        print(json.dumps(models_list), flush=True)
+    except Exception as e:
+        log.critical(f"🔴 Failed to list models: {e}", exc_info=True)
+        # 將錯誤訊息輸出到 stderr，以便父程序擷取
+        print(f"Error listing models: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+def validate_key():
+    """
+    僅驗證 API 金鑰的有效性。
+    透過一個輕量級的操作（如列出模型）來實現。
+    如果成功，以 exit code 0 退出。
+    如果失敗，以 non-zero exit code 退出，並在 stderr 中提供錯誤訊息。
+    """
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable not set.")
+        genai.configure(api_key=api_key)
+
+        # list_models 是一個相對輕量級的驗證操作
+        genai.list_models()
+        log.info("✅ API key validation successful.")
+        sys.exit(0)
+    except Exception as e:
+        # 將具體的錯誤訊息輸出到 stderr
+        # Google API 錯誤通常有自己的詳細描述
+        print(f"API key not valid. Reason: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
+
 
 def upload_to_gemini(genai_module, audio_path: Path, display_filename: str):
     """上傳檔案至 Gemini Files API。"""
@@ -293,28 +343,53 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gemini AI 處理工具。接收音訊檔案並生成分析報告。")
-    parser.add_argument("--audio-file", type=str, required=True, help="要處理的音訊檔案路徑。")
-    parser.add_argument("--model", type=str, required=True, help="要使用的 Gemini 模型 API 名稱。")
-    parser.add_argument("--video-title", type=str, required=True, help="原始影片標題，用於提示詞。")
-    parser.add_argument("--output-dir", type=str, required=True, help="儲存生成報告的目錄。")
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Gemini AI 處理工具。")
+    parser.add_argument(
+        "--command",
+        type=str,
+        default="process",
+        choices=["process", "list_models", "validate_key"],
+        help="要執行的操作。"
+    )
+    # 根據指令，動態決定其他參數是否為必需
+    # 我們先解析一次，看看指令是什麼
+    args, remaining_argv = parser.parse_known_args()
 
-    audio_path = Path(args.audio_file)
-    output_path = Path(args.output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    if args.command == "list_models":
+        list_models()
+        return
 
-    if not audio_path.exists():
-        log.critical(f"Input audio file not found: {audio_path}")
-        print(json.dumps({"type": "result", "status": "failed", "error": f"Input file not found: {audio_path}"}), flush=True)
-        sys.exit(1)
+    if args.command == "validate_key":
+        validate_key()
+        return
 
-    try:
-        process_audio_file(audio_path, args.model, args.video_title, output_path)
-    except Exception as e:
-        log.critical(f"An error occurred in the main processing flow: {e}", exc_info=True)
-        print(json.dumps({"type": "result", "status": "failed", "error": str(e)}), flush=True)
-        sys.exit(1)
+    # 如果是 'process' 指令，則需要其他參數
+    if args.command == "process":
+        process_parser = argparse.ArgumentParser()
+        process_parser.add_argument("--command", type=str, help=argparse.SUPPRESS) # 忽略已解析的 command
+        process_parser.add_argument("--audio-file", type=str, required=True, help="要處理的音訊檔案路徑。")
+        process_parser.add_argument("--model", type=str, required=True, help="要使用的 Gemini 模型 API 名稱。")
+        process_parser.add_argument("--video-title", type=str, required=True, help="原始影片標題，用於提示詞。")
+        process_parser.add_argument("--output-dir", type=str, required=True, help="儲存生成報告的目錄。")
+
+        process_args = process_parser.parse_args(remaining_argv)
+
+        audio_path = Path(process_args.audio_file)
+        output_path = Path(process_args.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        if not audio_path.exists():
+            log.critical(f"Input audio file not found: {audio_path}")
+            print(json.dumps({"type": "result", "status": "failed", "error": f"Input file not found: {audio_path}"}), flush=True)
+            sys.exit(1)
+
+        try:
+            process_audio_file(audio_path, process_args.model, process_args.video_title, output_path)
+        except Exception as e:
+            log.critical(f"An error occurred in the main processing flow: {e}", exc_info=True)
+            print(json.dumps({"type": "result", "status": "failed", "error": str(e)}), flush=True)
+            sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

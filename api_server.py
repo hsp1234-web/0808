@@ -404,21 +404,48 @@ async def download_transcript(task_id: str):
 
 # --- YouTube 功能相關 API ---
 
-@app.get("/api/youtube/status")
-async def get_youtube_status():
-    """檢查 YouTube 功能是否已啟用 (透過檢查 GOOGLE_API_KEY)。"""
-    # 在模擬模式下，永遠回傳啟用
-    if IS_MOCK_MODE:
-        return {"enabled": True, "reason": "模擬模式已啟用。"}
+@app.post("/api/youtube/validate_api_key")
+async def validate_api_key(request: Request):
+    """接收前端傳來的 API Key 並進行驗證。"""
+    try:
+        payload = await request.json()
+        api_key = payload.get("api_key")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="未提供 API 金鑰。")
 
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if api_key:
-        return {"enabled": True}
-    else:
-        return {
-            "enabled": False,
-            "reason": "後端尚未設定 Google API 金鑰。請在 config.json 中設定您的 GOOGLE_API_KEY，然後重新啟動伺服器以啟用此功能。"
-        }
+        # 在模擬模式下，只要金鑰非空就視為有效
+        if IS_MOCK_MODE:
+            log.info("模擬模式：將非空 API 金鑰視為有效。")
+            return {"valid": True}
+
+        # 真實模式下，呼叫工具進行驗證
+        tool_script = "tools/gemini_processor.py"
+        cmd = [sys.executable, tool_script, "--command=validate_key"]
+
+        # 將金鑰作為環境變數傳遞給子程序，更安全
+        env = os.environ.copy()
+        env["GOOGLE_API_KEY"] = api_key
+
+        # 設定 check=False，因為我們預期在金鑰無效時程序會失敗
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=env, check=False)
+
+        if result.returncode == 0:
+            log.info(f"API 金鑰驗證成功。")
+            return {"valid": True}
+        else:
+            log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
+            # 嘗試從 stderr 中提取更具體的錯誤訊息
+            error_message = result.stderr.strip()
+            if "API key not valid" in error_message:
+                detail = "API 金鑰無效。請檢查您的金鑰是否正確。"
+            else:
+                detail = "金鑰驗證失敗，可能是網路問題或金鑰權限不足。"
+            return JSONResponse(status_code=400, content={"valid": False, "detail": detail})
+
+    except Exception as e:
+        log.error(f"驗證 API 金鑰時發生伺服器內部錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
+
 
 @app.get("/api/youtube/models")
 async def get_youtube_models():
@@ -432,47 +459,66 @@ async def get_youtube_models():
             ]
         }
 
-    # 真實模式下，可以從 gemini_processor.py 獲取
+    # 真實模式下，從 gemini_processor.py 獲取
+    # 注意：此端點現在依賴於一個有效的 GOOGLE_API_KEY 環境變數
     try:
+        if not os.environ.get("GOOGLE_API_KEY"):
+             raise HTTPException(status_code=401, detail="後端尚未設定有效的 Google API 金鑰。")
+
         tool_script = "tools/gemini_processor.py"
         cmd = [sys.executable, tool_script, "--command=list_models"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
         models = json.loads(result.stdout)
         return {"models": models}
+    except subprocess.CalledProcessError as e:
+        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {e.stderr}")
+        raise HTTPException(status_code=401, detail="無法使用提供的 API 金鑰獲取模型列表。")
     except Exception as e:
         log.error(f"獲取 Gemini 模型列表時發生錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
 
+
 @app.post("/api/youtube/process", status_code=202)
 async def process_youtube_urls(request: Request):
-    """接收一或多個 YouTube URL，為每一個 URL 建立處理任務。"""
+    """
+    接收 YouTube URL，根據 'download_only' 旗標決定是僅下載音訊，還是執行完整的 AI 分析流程。
+    """
     payload = await request.json()
     urls = payload.get("urls", [])
     model = payload.get("model")
+    download_only = payload.get("download_only", False)
 
-    if not urls or not model:
-        raise HTTPException(status_code=400, detail="請求中必須包含 'urls' 和 'model'。")
+    if not urls:
+        raise HTTPException(status_code=400, detail="請求中必須包含 'urls'。")
+    if not download_only and not model:
+        raise HTTPException(status_code=400, detail="執行完整分析時必須提供 'model'。")
 
     tasks = []
     for url in urls:
         if not url.strip():
             continue
 
-        download_task_id = str(uuid.uuid4())
-        process_task_id = str(uuid.uuid4())
+        task_id = str(uuid.uuid4())
 
-        download_payload = { "url": url, "output_dir": str(UPLOADS_DIR) }
-        process_payload = { "model": model, "output_dir": "transcripts" }
+        if download_only:
+            # 僅下載模式：只建立一個下載任務
+            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR)}
+            # 使用更明確的 task_type
+            db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
+            tasks.append({"url": url, "task_id": task_id})
+        else:
+            # 完整分析模式：建立下載和處理兩個任務
+            download_task_id = task_id # 讓主任務 ID 成為下載任務 ID
+            process_task_id = str(uuid.uuid4())
 
-        db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
-        db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
+            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR)}
+            process_payload = {"model": model, "output_dir": "transcripts"}
 
-        tasks.append({
-            "url": url,
-            "type": "youtube", # 新增類型以利前端辨識
-            "download_task_id": download_task_id,
-            "process_task_id": process_task_id
-        })
+            db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
+            db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
+
+            # 回傳給前端的是起始任務 ID
+            tasks.append({"url": url, "task_id": download_task_id})
 
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
 
@@ -655,22 +701,23 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
     """在一個單獨的執行緒中執行 YouTube 處理流程。"""
     def _process_in_thread():
-        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始任務 ID: {task_id}")
+        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務，ID: {task_id}")
 
-        download_task_id = task_id
+        task_info = db_client.get_task_status(task_id)
+        if not task_info:
+            log.error(f"❌ [執行緒] 找不到任務 {task_id}")
+            return
+
+        task_type = task_info.get('type')
 
         try:
-            # 1. 下載音訊
-            download_task_info = db_client.get_task_status(download_task_id)
-            if not download_task_info:
-                raise ValueError(f"找不到下載任務 {download_task_id}")
-
-            payload = json.loads(download_task_info['payload'])
+            # --- 步驟 1: 下載音訊 (所有 YouTube 任務都需要) ---
+            payload = json.loads(task_info['payload'])
             url = payload['url']
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": download_task_id, "status": "downloading", "message": f"正在下載: {url}"}
+                "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載: {url}", "task_type": task_type}
             }), loop)
 
             tool_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
@@ -682,76 +729,73 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             if process.stdout:
                 for line in iter(process.stdout.readline, ''):
                     line = line.strip()
-                    if line:
-                        last_line = line
-                        # Optional: broadcast progress if the tool supports it
-                        try:
-                            progress_data = json.loads(line)
-                            if progress_data.get("type") == "progress":
-                                asyncio.run_coroutine_threadsafe(manager.broadcast_json({"type": "YOUTUBE_DOWNLOAD_PROGRESS", "payload": progress_data}), loop)
-                        except json.JSONDecodeError:
-                            pass # Ignore non-json lines
+                    if line: last_line = line
 
             process.wait()
             if process.returncode != 0:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
-                raise RuntimeError(f"YouTube downloader failed with exit code {process.returncode}: {stderr_output}")
+                raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
 
             download_result = json.loads(last_line)
-            # JULES: 修正此處的鍵名，根據 downloader 工具的實際輸出，應為 'output_path'
             audio_file_path = download_result['output_path']
-            video_title = download_result.get('video_title', '無標題影片') # 從下載結果中獲取標題
-
-            db_client.update_task_status(download_task_id, 'completed', json.dumps(download_result))
+            video_title = download_result.get('video_title', '無標題影片')
             log.info(f"✅ [執行緒] YouTube 音訊下載完成: {audio_file_path}")
 
-            # 2. 觸發 AI 處理
-            # 找到依賴此下載任務的處理任務
-            dependent_task_id = db_client.find_dependent_task(download_task_id)
+            # --- 步驟 2: 根據任務類型決定下一步 ---
+            if task_type == 'youtube_download_only':
+                # 如果只是下載任務，到此結束
+                db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+                log.info(f"✅ [執行緒] '僅下載音訊' 任務 {task_id} 完成。")
+
+                asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                    "type": "YOUTUBE_STATUS",
+                    "payload": {"task_id": task_id, "status": "completed", "result": download_result, "task_type": "download_only"}
+                }), loop)
+                return # 結束執行緒
+
+            # --- 步驟 3: 執行 Gemini AI 分析 (僅適用於完整流程) ---
+            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+
+            dependent_task_id = db_client.find_dependent_task(task_id)
             if not dependent_task_id:
-                raise ValueError(f"找不到依賴於 {download_task_id} 的處理任務")
+                raise ValueError(f"找不到依賴於 {task_id} 的 gemini_process 任務")
 
             process_task_info = db_client.get_task_status(dependent_task_id)
             process_payload = json.loads(process_task_info['payload'])
             model = process_payload['model']
 
-            # 通知前端開始處理
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析..."}
+                "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析...", "task_type": "gemini_process"}
             }), loop)
 
             tool_script = "tools/mock_gemini_processor.py" if IS_MOCK_MODE else "tools/gemini_processor.py"
-            # JULES: 確保傳遞給工具的 output_dir 是相對於專案根目錄的
             report_output_dir = ROOT_DIR / "transcripts"
             report_output_dir.mkdir(exist_ok=True)
 
             cmd = [
-                sys.executable,
-                tool_script,
+                sys.executable, tool_script,
                 "--audio-file", audio_file_path,
                 "--model", model,
                 "--output-dir", str(report_output_dir),
-                "--video-title", video_title  # 將標題傳遞給處理器
+                "--video-title", video_title
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
             process_result = json.loads(result.stdout)
 
             db_client.update_task_status(dependent_task_id, 'completed', json.dumps(process_result))
-            report_path = process_result.get("pdf_report_path") or process_result.get("html_report_path")
-            log.info(f"✅ [執行緒] Gemini AI 處理完成。報告位於: {report_path}")
+            log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
-            # 發送最終完成訊息
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "completed", "result": process_result}
+                "payload": {"task_id": dependent_task_id, "status": "completed", "result": process_result, "task_type": "gemini_process"}
             }), loop)
 
         except Exception as e:
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
             # 確定要更新哪個任務為失敗狀態
-            failed_task_id = 'dependent_task_id' if 'dependent_task_id' in locals() else download_task_id
+            failed_task_id = 'dependent_task_id' if 'dependent_task_id' in locals() and dependent_task_id else task_id
             db_client.update_task_status(failed_task_id, 'failed', json.dumps({"error": str(e)}))
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
