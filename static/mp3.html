@@ -731,6 +731,7 @@
             const closePreviewBtn = document.getElementById('close-preview-btn');
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const fontSizeDisplay = document.getElementById('font-size-display');
             const timestampToggle = document.getElementById('timestamp-toggle');
 
             // --- 預覽 Modal 彈窗元素 ---
@@ -789,6 +790,7 @@
             let socket;
             const taskElements = new Map();
             const modelStatus = {};
+            let currentFontSize = 100;
 
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
@@ -1107,8 +1109,36 @@
                     }
                 } else if (payload.status === 'failed') {
                     if (progressContainer) progressContainer.style.display = 'none';
-                    statusSpan.textContent = `❌ 失敗: ${payload.error}`;
+
+                    // 將主要狀態更新為「失敗」
+                    statusSpan.textContent = `❌ 失敗`;
                     statusSpan.classList.add('status-failed');
+                    statusSpan.style.fontWeight = 'bold'; // 讓它更突出
+
+                    // 檢查是否已存在錯誤詳情元素，若無則建立
+                    let errorDetails = taskElement.querySelector('.task-error-details');
+                    if (!errorDetails) {
+                        errorDetails = document.createElement('div');
+                        errorDetails.className = 'task-error-details';
+                        // 為錯誤訊息框套用樣式
+                        errorDetails.style.cssText = `
+                            color: #721c24;
+                            background-color: #f8d7da;
+                            border: 1px solid #f5c6cb;
+                            border-radius: 6px;
+                            padding: 10px;
+                            margin-top: 8px;
+                            font-size: 0.9em;
+                            white-space: pre-wrap;
+                            word-break: break-all;
+                            width: 100%;
+                            box-sizing: border-box;
+                            font-family: monospace;
+                        `;
+                        taskElement.appendChild(errorDetails);
+                    }
+                    // 填入錯誤訊息
+                    errorDetails.textContent = payload.error || '未提供具體錯誤訊息。';
                 }
             };
 
@@ -1215,7 +1245,7 @@
                 const taskElement = document.createElement('div');
                 taskElement.className = 'task-item';
                 taskElement.innerHTML = `
-                    <div style="flex-grow: 1; overflow: hidden; margin-right: 10px;">
+                    <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
                         <span class="task-filename" title="${displayName}" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayName} (${taskType})</span>
                         <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
                             <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
@@ -1819,9 +1849,29 @@
             updateSystemStats();
             setInterval(updateSystemStats, 2000);
 
+            // --- 字體縮放功能 ---
+            const updateFontSize = () => {
+                document.body.style.fontSize = `${currentFontSize}%`;
+                fontSizeDisplay.textContent = `${currentFontSize}%`;
+            };
+
+            zoomInBtn.addEventListener('click', () => {
+                logAction('click-zoom-in');
+                if (currentFontSize < 150) { // 設定最大縮放
+                    currentFontSize += 10;
+                    updateFontSize();
+                }
+            });
+
+            zoomOutBtn.addEventListener('click', () => {
+                logAction('click-zoom-out');
+                 if (currentFontSize > 70) { // 設定最小縮放
+                    currentFontSize -= 10;
+                    updateFontSize();
+                }
+            });
+
             // --- 其他 UI 事件記錄 ---
-            zoomInBtn.addEventListener('click', () => logAction('click-zoom-in'));
-            zoomOutBtn.addEventListener('click', () => logAction('click-zoom-out'));
             timestampToggle.addEventListener('change', (e) => logAction('toggle-timestamp', e.target.checked));
             modelSelect.addEventListener('change', (e) => logAction('change-model-select', e.target.value));
             languageSelect.addEventListener('change', (e) => logAction('change-language-select', e.target.value));
