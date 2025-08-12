@@ -1,6 +1,9 @@
 # --- Worker & Tooling Dependencies ---
 
 # Transcription Engine
+# JULES: 'torch' is an implicit dependency of 'faster-whisper' but not listed as a requirement.
+# We must add it explicitly for the environment to be set up correctly.
+torch
 faster-whisper
 
 # For Chinese Traditional/Simplified conversion

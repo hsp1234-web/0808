@@ -24,6 +24,7 @@ Thumbs.db
 # AI Agent generated environments
 /baked_envs/
 /temp_build/
+/benchmark_workspace/
 
 # Python
 __pycache__/
