@@ -5,6 +5,10 @@ export default defineConfig({
   // Timeout for each test, includes hooks. 3 minutes.
   timeout: 180000,
 
+  testDir: './tests', // JULES'S ADDITION: Explicitly set test directory
+  fullyParallel: false, // JULES'S FIX: Run tests serially
+  workers: 1, // JULES'S FIX: Force serial execution to prevent test pollution
+
   expect: {
     // Timeout for expect() assertions.
     timeout: 10000,
@@ -14,8 +18,8 @@ export default defineConfig({
   reporter: 'list',
 
   use: {
-    // Base URL to use in actions like `await page.goto('/')`.
-    baseURL: 'http://127.0.0.1:3000',
+    // JULES'S FIX: Set the correct baseURL for the test server
+    baseURL: 'http://127.0.0.1:42649',
 
     // Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer
     trace: 'on-first-retry',

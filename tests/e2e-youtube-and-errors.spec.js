@@ -95,6 +95,7 @@ test.describe('綜合功能 E2E 測試', () => {
         const audioBase64 = audioFileBuffer.toString('base64');
 
         // 使用 page.evaluate 在瀏覽器中執行 JS 來處理 Base64
+        // JULES'S FIX: 將 base64 和 filename 作為一個物件傳遞，並修復 evaluate 內部的邏輯
         await page.evaluate(async (data) => {
             // 將 Base64 轉回 ArrayBuffer
             const byteCharacters = atob(data.base64);
@@ -105,8 +106,8 @@ test.describe('綜合功能 E2E 測試', () => {
             const byteArray = new Uint8Array(byteNumbers);
             const blob = new Blob([byteArray], { type: 'audio/wav' });
 
-            // 建立 File 物件
-            const file = new File([blob], filename, { type: 'audio/wav' });
+            // 建立 File 物件，使用從 data 物件傳入的檔名
+            const file = new File([blob], data.filename, { type: 'audio/wav' });
 
             // 建立 DataTransfer 物件，這是模擬拖放所必需的
             const dataTransfer = new DataTransfer();
@@ -122,7 +123,7 @@ test.describe('綜合功能 E2E 測試', () => {
                 });
                 dropZone.dispatchEvent(dropEvent);
             }
-        }, audioBase64);
+        }, { base64: audioBase64, filename: DUMMY_FILE_NAME });
 
         // 驗證檔案是否出現在待上傳列表
         await expect(page.locator('#file-list .task-item')).toHaveCount(1);

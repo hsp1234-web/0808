@@ -588,6 +588,12 @@ async def process_youtube_urls(request: Request):
     payload = await request.json()
     requests_list = payload.get("requests", [])
 
+    # JULES'S FIX: 為了相容舊的 local_run.py 測試腳本
+    if not requests_list and "urls" in payload:
+        log.warning("偵測到舊版的 'urls' 負載格式，正在進行相容處理。")
+        requests_list = [{"url": url, "filename": None} for url in payload.get("urls", [])]
+
+
     # 新的彈性參數
     model = payload.get("model")
     tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
@@ -595,7 +601,8 @@ async def process_youtube_urls(request: Request):
     download_only = payload.get("download_only", False)
 
     if not requests_list:
-        raise HTTPException(status_code=400, detail="請求中必須包含 'requests'。")
+        # 在加入相容性邏輯後，更新錯誤訊息
+        raise HTTPException(status_code=400, detail="請求中必須包含 'requests' 或 'urls'。")
     if not download_only and not model:
         raise HTTPException(status_code=400, detail="執行 AI 分析時必須提供 'model'。")
 
@@ -1103,6 +1110,16 @@ async def notify_task_update(payload: Dict):
     result = payload.get("result")
     log.info(f"🔔 收到來自 Worker 的任務更新通知: Task {task_id} -> {status}")
 
+    # JULES'S FIX: 查詢任務類型以發送正確的 WebSocket 訊息
+    task_info = db_client.get_task_status(task_id)
+    task_type = task_info.get("type", "transcribe") if task_info else "transcribe"
+
+    message_type = "TRANSCRIPTION_STATUS"
+    if "youtube" in task_type or "gemini" in task_type:
+        message_type = "YOUTUBE_STATUS"
+
+    log.info(f"根據任務類型 '{task_type}'，將使用 WebSocket 訊息類型: '{message_type}'")
+
     # 確保 result 是字典格式
     if isinstance(result, str):
         try:
@@ -1111,11 +1128,12 @@ async def notify_task_update(payload: Dict):
             log.warning(f"來自 worker 的任務 {task_id} 結果不是有效的 JSON 格式。")
 
     message = {
-        "type": "TRANSCRIPTION_STATUS",
+        "type": message_type,
         "payload": {
             "task_id": task_id,
             "status": status,
-            "result": result
+            "result": result,
+            "task_type": task_type  # 將 task_type 也傳給前端
         }
     }
     await manager.broadcast_json(message)

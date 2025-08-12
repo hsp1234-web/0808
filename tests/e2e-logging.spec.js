@@ -48,6 +48,11 @@ test.describe('前端操作日誌 E2E 測試 (資料庫模式)', () => {
     // 導覽至頁面並等待 WebSocket 連線
     await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
+
+    // JULES'S FIX: Add a dummy action to flush any lingering logs from previous tests.
+    // This makes the logging test independent and robust against pollution.
+    await page.locator('#zoom-in-btn').click();
+    await expectLatestLogToContain(page, 'click-zoom-in');
   });
 
   test('應能正確將各種 UI 互動記錄到資料庫', async ({ page }) => {

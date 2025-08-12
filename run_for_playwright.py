@@ -63,6 +63,13 @@ def main():
             shutil.rmtree(upload_dir)
         upload_dir.mkdir()
 
+        # JULES'S FIX: Clean up the database file to ensure test isolation
+        db_file = Path("db/queue.db")
+        if db_file.exists():
+            log.info(f"--- 正在清理舊的資料庫檔案 ({db_file}) ---")
+            db_file.unlink()
+            log.info("✅ 舊資料庫已刪除。")
+
         # 啟動資料庫管理器
         log.info("--- 正在啟動資料庫管理器 ---")
         db_log_file = open("logs/db_manager.log", "w")

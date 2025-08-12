@@ -1,19 +1,7 @@
 import { test, expect } from '@playwright/test';
-import fs from 'fs';
 
 test.describe('YouTube Refactor E2E Test', () => {
-  let serverUrl;
-
-  // Read the server URL from the orchestrator log before running tests
-  test.beforeAll(() => {
-    const log = fs.readFileSync('orchestrator.log', 'utf-8');
-    const match = log.match(/PROXY_URL: (http:\/\/127\.0\.0\.1:\d+)/);
-    if (!match) {
-      throw new Error('Could not find PROXY_URL in orchestrator.log');
-    }
-    serverUrl = match[1];
-    console.log(`Server URL for test: ${serverUrl}`);
-  });
+  const serverUrl = 'http://127.0.0.1:42649';
 
   test('should run the new YouTube to Report workflow and produce a .txt file', async ({ page }) => {
     // 1. Go to the page
@@ -30,10 +18,10 @@ test.describe('YouTube Refactor E2E Test', () => {
     await expect(page.locator('#youtube-params-fieldset')).toBeEnabled();
 
     // 4. Enter a YouTube URL
-    await page.locator('.youtube-url-input').fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    const MOCK_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    await page.locator('.youtube-url-input').fill(MOCK_URL);
 
     // 5. Uncheck "詳細逐字稿" and check "翻譯", leaving "重點摘要" checked.
-    // Default is summary and transcript checked.
     await page.locator('input[name="yt-task"][value="transcript"]').uncheck();
     await page.locator('input[name="yt-task"][value="translate"]').check();
 
@@ -48,17 +36,18 @@ test.describe('YouTube Refactor E2E Test', () => {
     // 7. Click the "Analyze" button
     await page.getByRole('button', { name: '🚀 分析影片 (Gemini)' }).click();
 
-    // 8. Wait for the task to appear in the "completed" list
-    const completedTask = page.locator('#completed-tasks .task-item');
-    // Wait for the first completed task to appear, timeout extended to handle processing time
+    // 8. Wait for the task to appear in the YouTube report browser list
+    const completedTask = page.locator('#youtube-file-browser .task-item');
     await expect(completedTask.first()).toBeVisible({ timeout: 30000 });
 
+    // Check that the task text contains the video title
+    const MOCK_TITLE = `'${MOCK_URL}' 的模擬影片標題`;
     const completedTaskText = await completedTask.first().textContent();
-    expect(completedTaskText).toContain('YouTube 分析');
+    expect(completedTaskText).toContain(MOCK_TITLE);
 
-    // Check for the download button to have the .txt extension
+    // Check for the download button to have the correct .txt extension
     const downloadLink = completedTask.first().locator('a.btn-download');
-    await expect(downloadLink).toHaveAttribute('download', /_result\.txt$/);
+    await expect(downloadLink).toHaveAttribute('download', /_report\.txt$/);
 
     // 9. Take a screenshot
     await page.screenshot({ path: 'tests/e2e_youtube_refactor_screenshot.png' });

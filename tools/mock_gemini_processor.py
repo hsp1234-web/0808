@@ -92,11 +92,12 @@ def main():
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(txt_content)
 
-        # Output the final success JSON
+        # JULES'S FIX: Add the video_title to the final JSON output
         result = {
             "type": "result",
             "status": "completed",
-            "output_path": str(output_path)
+            "output_path": str(output_path),
+            "video_title": process_args.video_title
         }
         print(json.dumps(result), flush=True)
         sys.exit(0)

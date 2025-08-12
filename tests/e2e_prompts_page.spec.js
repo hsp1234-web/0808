@@ -1,18 +1,7 @@
 import { test, expect } from '@playwright/test';
-import fs from 'fs';
 
 test.describe('Prompts Page E2E Test', () => {
-  let serverUrl;
-
-  test.beforeAll(() => {
-    const log = fs.readFileSync('orchestrator.log', 'utf-8');
-    const match = log.match(/PROXY_URL: (http:\/\/127\.0\.0\.1:\d+)/);
-    if (!match) {
-      throw new Error('Could not find PROXY_URL in orchestrator.log');
-    }
-    serverUrl = match[1];
-    console.log(`Prompts page test using server URL: ${serverUrl}`);
-  });
+  const serverUrl = 'http://127.0.0.1:42649';
 
   test('should load, edit, save, and reload prompts', async ({ page }) => {
     // 1. Navigate to the prompts page

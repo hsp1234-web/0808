@@ -791,6 +791,7 @@
             const taskElements = new Map();
             const modelStatus = {};
             let currentFontSize = 100;
+            let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
 
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
@@ -875,7 +876,10 @@
                     logAction('websocket-connect-success');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
-                    initializeYouTubeTab();
+                    if (!isInitialized) {
+                        initializeYouTubeTab();
+                        isInitialized = true;
+                    }
                 };
 
                 socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
@@ -894,6 +898,7 @@
             };
 
             const handleWebSocketMessage = (message) => {
+                console.log(`[WebSocket Received]: ${JSON.stringify(message)}`);
                 const { type, payload } = message;
                 if (type === 'DOWNLOAD_STATUS') {
                     handleDownloadStatus(payload);
@@ -1055,6 +1060,18 @@
                 const statusSpan = taskElement.querySelector('.task-status');
                 const progressContainer = taskElement.querySelector('.task-progress-container');
                 const progressBar = taskElement.querySelector('.task-progress-bar');
+
+                // JULES'S FIX: Intercept the completion of the first part of a YouTube analysis chain.
+                // This prevents the intermediate audio file from being moved to the completed list.
+                if (payload.status === 'completed' && payload.task_type === 'youtube_download') {
+                    statusSpan.textContent = '音訊下載完成，等待 AI 分析...';
+                    statusSpan.className = 'task-status status-processing'; // Keep it looking "in progress"
+                    if (progressContainer) {
+                        const bar = progressContainer.querySelector('.task-progress-bar');
+                        if (bar) bar.style.width = '50%'; // Show it's half-way done
+                    }
+                    return; // Stop further processing for this intermediate step.
+                }
 
                 statusSpan.textContent = payload.message || payload.status;
                 statusSpan.className = 'task-status';
@@ -1564,11 +1581,9 @@
                 previewBtn.onclick = (e) => {
                     e.preventDefault();
                     logAction('click-yt-report-preview', taskId);
-                    if (extension === '.html') {
-                        window.open(`/api/download/${taskId}`, '_blank');
-                    } else {
-                        openPreviewModal(taskId, `${videoTitle}_report.txt`, 'text/plain');
-                    }
+                    const fileType = extension === '.html' ? 'text/html' : 'text/plain';
+                    const filename = `${videoTitle.replace(/ /g, '_')}_report${extension}`;
+                    openPreviewModal(taskId, filename, fileType);
                 };
 
                 const downloadBtn = document.createElement('a');
