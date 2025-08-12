@@ -5,9 +5,13 @@ import json
 import sys
 from unittest.mock import MagicMock, patch, mock_open, call
 
-# 為了讓 pytest 能夠找到 api_server 模組，我們需要將專案根目錄加入 sys.path
-# 假設 tests 目錄與 api_server.py 在同一個根目錄下
-sys.path.insert(0, '.')
+from pathlib import Path
+
+# 將 'src' 目錄新增至 Python 路徑，
+# 這樣我們就可以匯入 'api_server' 和 'db' 之類的模組。
+SRC_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SRC_DIR))
+
 
 # 現在我們可以安全地匯入目標函式和模組
 import api_server
@@ -108,16 +112,18 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
     # 斷言子程序被正確呼叫
     expected_cmd = [
         sys.executable,
-        "tools/mock_youtube_downloader.py" if api_server.IS_MOCK_MODE else "tools/youtube_downloader.py",
+            "src/tools/mock_youtube_downloader.py" if api_server.IS_MOCK_MODE else "src/tools/youtube_downloader.py",
         "--url", TEST_URL,
         "--output-dir", str(api_server.UPLOADS_DIR)
     ]
+    from unittest.mock import ANY
     mock_subprocess.assert_called_once_with(
         expected_cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        encoding='utf-8'
+        encoding='utf-8',
+        env=ANY
     )
 
     # 斷言 WebSocket 廣播的訊息

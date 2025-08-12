@@ -114,3 +114,19 @@ Traceback (most recent call last):
   File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 478, in server_bind
     self.socket.bind(self.server_address)
 OSError: [Errno 98] Address already in use
+2025-08-12 22:33:16,048 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 22:33:16,048 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 22:33:16,088 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 22:33:16,091 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-12 22:33:16,091 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-12 22:33:17,998 - DBManagerServer - INFO - 來自 ('127.0.0.1', 49940) 的新連線。
+2025-08-12 22:33:17,998 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-12 22:33:17,999 - DBManagerServer - INFO - 連線 ('127.0.0.1', 49940) 已關閉。
+2025-08-12 22:33:45,884 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 22:33:45,884 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 22:33:45,885 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 22:33:45,886 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-12 22:33:45,887 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-12 22:33:47,887 - DBManagerServer - INFO - 來自 ('127.0.0.1', 37218) 的新連線。
+2025-08-12 22:33:47,887 - DBManagerServer - INFO - 收到請求: {'action': 'get_system_logs', 'params': {'levels': [], 'sources': ['frontend_action']}}
+2025-08-12 22:33:47,888 - DBManagerServer - INFO - 連線 ('127.0.0.1', 37218) 已關閉。

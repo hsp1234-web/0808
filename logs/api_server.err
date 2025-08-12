@@ -168,3 +168,35 @@ INFO:     Application startup complete.
 ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 42649): address already in use
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
+2025-08-13 06:33:16,755 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 06:33:16,756 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 06:33:16,891 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 06:33:16,891 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [4866]
+INFO:     Waiting for application startup.
+2025-08-13 06:33:16,972 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 06:33:16,977 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+2025-08-13 06:33:17,490 - frontend_action - INFO - db_logging_test_action_1755037997
+2025-08-13 06:33:17,492 - api_server - INFO - 📝 已將前端操作記錄到資料庫: db_logging_test_action_1755037997
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4866]
+2025-08-13 06:33:46,367 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 06:33:46,367 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 06:33:46,436 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 06:33:46,436 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [5227]
+INFO:     Waiting for application startup.
+2025-08-13 06:33:46,472 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 06:33:46,475 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+2025-08-13 06:33:47,379 - frontend_action - INFO - db_logging_test_action_1755038027
+2025-08-13 06:33:47,381 - api_server - INFO - 📝 已將前端操作記錄到資料庫: db_logging_test_action_1755038027
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [5227]
