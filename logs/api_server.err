@@ -58,3 +58,77 @@ INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
 INFO:     Finished server process [11722]
+2025-08-13 04:07:12,323 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 04:07:12,323 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 04:07:12,624 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 04:07:12,624 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [3222]
+INFO:     Waiting for application startup.
+2025-08-13 04:07:12,796 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 04:07:12,803 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3222]
+2025-08-13 04:14:32,777 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 04:14:32,777 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 04:14:33,183 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 04:14:33,183 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [2733]
+INFO:     Waiting for application startup.
+2025-08-13 04:14:33,412 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 04:14:33,421 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2733]
+2025-08-13 04:15:06,876 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 04:15:06,876 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 04:15:06,946 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 04:15:06,946 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [3107]
+INFO:     Waiting for application startup.
+2025-08-13 04:15:06,980 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 04:15:06,985 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+2025-08-13 04:15:07,718 - frontend_action - INFO - fast_integration_test_action_98765
+2025-08-13 04:15:07,720 - api_server - INFO - 📝 已將前端操作記錄到資料庫: fast_integration_test_action_98765
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3107]
+2025-08-13 04:15:28,896 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 04:15:28,896 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 04:15:28,965 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 04:15:28,965 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [3433]
+INFO:     Waiting for application startup.
+2025-08-13 04:15:29,000 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 04:15:29,003 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+2025-08-13 04:15:30,018 - frontend_action - INFO - fast_integration_test_action_98765
+2025-08-13 04:15:30,020 - api_server - INFO - 📝 已將前端操作記錄到資料庫: fast_integration_test_action_98765
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3433]
+2025-08-13 04:16:29,887 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 04:16:29,888 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 04:16:29,956 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 04:16:29,956 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [3984]
+INFO:     Waiting for application startup.
+2025-08-13 04:16:29,990 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 04:16:29,994 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3984]

@@ -9,3 +9,6 @@ circus
 
 # For health checks in runner scripts
 requests
+
+# For testing with mocks
+pytest-mock
