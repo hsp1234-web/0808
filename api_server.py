@@ -412,6 +412,60 @@ async def download_transcript(task_id: str):
         raise HTTPException(status_code=500, detail="無法解析任務結果。")
 
 
+@app.post("/api/rename/{task_id}", status_code=200)
+async def rename_task_file(task_id: str, request: Request):
+    """
+    重新命名與已完成任務關聯的檔案。
+    """
+    log.info(f"收到重新命名任務 {task_id} 的請求。")
+    try:
+        data = await request.json()
+        new_filename_base = data.get("new_filename")
+        if not new_filename_base:
+            raise HTTPException(status_code=400, detail="請求中未提供 'new_filename'。")
+
+        task = db_client.get_task_status(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
+        if task['status'] != 'completed':
+            raise HTTPException(status_code=400, detail="只能重新命名已完成的任務。")
+
+        result_data = json.loads(task['result'])
+        old_path_str = result_data.get("output_path")
+        if not old_path_str:
+            raise HTTPException(status_code=500, detail="任務結果中找不到檔案路徑。")
+
+        old_path = Path(old_path_str)
+        file_extension = old_path.suffix
+        new_path = old_path.with_name(f"{new_filename_base}{file_extension}")
+
+        if old_path == new_path:
+            return {"status": "success", "message": "新舊檔名相同，無需變更。", "new_filename": new_filename_base}
+
+        if new_path.exists():
+            raise HTTPException(status_code=409, detail=f"目標檔名 {new_path.name} 已存在。")
+
+        os.rename(old_path, new_path)
+        log.info(f"檔案已從 {old_path} 重新命名為 {new_path}")
+
+        # Update the result in the database
+        result_data["output_path"] = str(new_path)
+        result_data["video_title"] = new_filename_base
+
+        db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+        log.info(f"已更新資料庫中任務 {task_id} 的結果。")
+
+        return {"status": "success", "message": "檔案重新命名成功。", "new_filename": new_filename_base}
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="無法解析任務結果。")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="找不到要重新命名的原始檔案。")
+    except Exception as e:
+        log.error(f"❌ 重新命名檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
+
+
 # --- 提示詞管理 API ---
 PROMPTS_FILE_PATH = ROOT_DIR / "prompts" / "default_prompts.json"
 
@@ -783,6 +837,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             # --- 步驟 1: 下載音訊 (所有 YouTube 任務都需要) ---
             payload = json.loads(task_info['payload'])
             url = payload['url']
+            custom_filename = payload.get("custom_filename")
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
@@ -791,6 +846,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
 
             downloader_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
             cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
+            if custom_filename:
+                cmd_dl.extend(["--custom-filename", custom_filename])
 
             proc_env = os.environ.copy()
             process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)

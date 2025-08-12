@@ -213,6 +213,10 @@
         .task-list .btn-download {
              background-color: var(--success-color); /* Green */
         }
+        .task-list .task-actions a.btn-rename {
+            background-color: var(--status-yellow);
+            color: var(--text-color);
+        }
 
         /* --- 即時輸出 --- */
         .transcript-output {
@@ -473,7 +477,6 @@
                             <label><strong>進階功能</strong></label>
                             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
                                 <label><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
-                                <label><input type="checkbox" id="rename-file-checkbox"> 下載前手動命名檔案</label>
                             </div>
                         </div>
                     </div>
@@ -981,34 +984,78 @@
                 }
             };
 
+            const renameTask = async (taskId) => {
+                const taskElement = taskElements.get(taskId);
+                if (!taskElement) return;
+
+                const filenameSpan = taskElement.querySelector('.task-filename');
+                const currentName = filenameSpan.textContent.split('(')[0].trim();
+
+                const newName = prompt("請輸入新的檔案名稱 (不需包含副檔名):", currentName);
+
+                if (newName && newName.trim() && newName.trim() !== currentName) {
+                    logAction('click-rename-task-confirm', taskId);
+                    const sanitizedName = newName.trim().replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
+
+                    try {
+                        const response = await fetch(`/api/rename/${taskId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ new_filename: sanitizedName })
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.detail || '重新命名失敗');
+                        }
+
+                        const result = await response.json();
+
+                        const taskTypeMatch = filenameSpan.textContent.match(/\s\(.*\)$/);
+                        const taskTypeSuffix = taskTypeMatch ? taskTypeMatch[0] : '';
+                        filenameSpan.textContent = `${result.new_filename}${taskTypeSuffix}`;
+                        filenameSpan.title = result.new_filename;
+
+                        const downloadBtn = taskElement.querySelector('.btn-download');
+                        if (downloadBtn) {
+                            downloadBtn.download = `${result.new_filename}.mp3`;
+                        }
+
+                        showStatusMessage('檔案重新命名成功！', false);
+
+                    } catch (error) {
+                        console.error('重新命名失敗:', error);
+                        showStatusMessage(`錯誤: ${error.message}`, true);
+                    }
+                }
+            };
+
             const handleYoutubeStatus = (payload) => {
                 if (!payload || !payload.task_id) return;
 
-                // JULES'S REFACTOR: Divert completed gemini_process tasks to the new file browser
                 if (payload.status === 'completed' && payload.task_type === 'gemini_process') {
                     addYoutubeReportToList(payload);
-                    // Remove the task from the "ongoing" list
                     const taskElement = taskElements.get(payload.task_id);
                     if (taskElement) {
                         taskElement.remove();
                         taskElements.delete(payload.task_id);
                     }
-                    return; // Stop further processing in this function
+                    return;
                 }
-
 
                 let taskElement = taskElements.get(payload.task_id);
                 if (!taskElement) {
                     const url = payload.url || payload.message || payload.task_id;
                     const taskType = payload.task_type === 'download_only' ? '僅下載音訊' : 'YouTube 分析';
-                    taskElement = createNewTaskElement(url, payload.task_id, taskType);
+                    const container = payload.task_type === 'download_only' ? document.getElementById('downloader-tasks') : ongoingTasksContainer;
+                    taskElement = createNewTaskElement(url, payload.task_id, taskType, container);
                 }
                 const statusSpan = taskElement.querySelector('.task-status');
                 const progressContainer = taskElement.querySelector('.task-progress-container');
                 const progressBar = taskElement.querySelector('.task-progress-bar');
 
                 statusSpan.textContent = payload.message || payload.status;
-                statusSpan.className = 'task-status'; // Reset classes
+                statusSpan.className = 'task-status';
 
                 if (payload.status === 'downloading' || (payload.progress_code && payload.progress_code.includes('upload'))) {
                     statusSpan.classList.add('status-downloading');
@@ -1025,19 +1072,19 @@
                     progressBar.style.width = `${payload.progress}%`;
                 }
 
-                if (payload.filename) {
+                const filename = payload.filename || (payload.result && payload.result.video_title);
+                if (filename) {
                     const filenameSpan = taskElement.querySelector('.task-filename');
                     if (filenameSpan) {
                         const originalText = filenameSpan.textContent;
                         const taskTypeMatch = originalText.match(/\s\(.*\)$/);
                         const taskTypeSuffix = taskTypeMatch ? taskTypeMatch[0] : '';
-                        filenameSpan.textContent = `${payload.filename}${taskTypeSuffix}`;
-                        filenameSpan.title = payload.filename;
+                        filenameSpan.textContent = `${filename}${taskTypeSuffix}`;
+                        filenameSpan.title = filename;
                     }
                 }
 
                 if (payload.status === 'completed') {
-                    // This block now only handles 'youtube_download_only' completions
                     if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.innerHTML = '';
                     let buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
@@ -1068,20 +1115,37 @@
             const createActionButtons = (taskId, previewType, extension, taskType = 'transcription') => {
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'task-actions';
+
+                const taskElement = taskElements.get(taskId);
+                if (!taskElement) {
+                    console.error(`Could not find task element for ID: ${taskId}`);
+                    return buttonGroup;
+                }
+
+                const filenameSpan = taskElement.querySelector('.task-filename');
+                const originalFilename = filenameSpan ? filenameSpan.textContent : '';
+                const cleanFilename = originalFilename.split('(')[0].trim();
+                const baseName = cleanFilename.substring(0, cleanFilename.lastIndexOf('.')) || cleanFilename;
+
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `/api/download/${taskId}`;
                 downloadBtn.className = 'btn-download';
                 downloadBtn.textContent = '下載';
-                const taskElement = taskElements.get(taskId);
-                const originalFilename = taskElement.querySelector('.task-filename').textContent;
-                const cleanFilename = originalFilename.split('(')[0].trim();
-                const baseName = cleanFilename.substring(0, cleanFilename.lastIndexOf('.')) || cleanFilename;
-                downloadBtn.download = `${baseName}_result${extension}`;
+                downloadBtn.download = `${baseName}.mp3`;
                 downloadBtn.addEventListener('click', (e) => {
                     logAction('click-download-task', taskId);
                 });
 
                 if (taskType === 'download_only') {
+                    const renameBtn = document.createElement('a');
+                    renameBtn.href = '#';
+                    renameBtn.className = 'btn-rename';
+                    renameBtn.textContent = '修改名稱';
+                    renameBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        renameTask(taskId);
+                    });
+
                     const sendToWhisperBtn = document.createElement('a');
                     sendToWhisperBtn.href = '#';
                     sendToWhisperBtn.className = 'btn-preview';
@@ -1094,7 +1158,12 @@
                             const response = await fetch(`/api/download/${taskId}`);
                             if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
                             const audioBlob = await response.blob();
-                            const audioFile = new File([audioBlob], `${baseName}.mp3`, { type: 'audio/mpeg' });
+
+                            const currentFilenameSpan = taskElements.get(taskId).querySelector('.task-filename');
+                            const currentFilename = currentFilenameSpan ? currentFilenameSpan.textContent.split('(')[0].trim() : 'downloaded_audio';
+
+                            const audioFile = new File([audioBlob], `${currentFilename}.mp3`, { type: 'audio/mpeg' });
+
                             if (!uploadedFiles.some(f => f.name === audioFile.name)) {
                                 uploadedFiles.push(audioFile);
                             }
@@ -1108,8 +1177,11 @@
                              sendToWhisperBtn.textContent = '送至轉錄區';
                         }
                     });
+
+                    buttonGroup.appendChild(renameBtn);
                     buttonGroup.appendChild(sendToWhisperBtn);
                     buttonGroup.appendChild(downloadBtn);
+
                 } else {
                     const previewBtn = document.createElement('a');
                     previewBtn.href = '#';
@@ -1117,13 +1189,11 @@
                     previewBtn.textContent = '預覽';
                     previewBtn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const taskElement = taskElements.get(taskId);
-                        const filenameSpan = taskElement.querySelector('.task-filename');
-                        const rawFilename = filenameSpan.textContent.split('(')[0].trim();
-                        const baseName = rawFilename.substring(0, rawFilename.lastIndexOf('.')) || rawFilename;
                         const finalFilename = `${baseName}_result${extension}`;
                         openPreviewModal(taskId, finalFilename, previewType);
                     });
+
+                    downloadBtn.download = `${baseName}_result${extension}`;
                     buttonGroup.appendChild(previewBtn);
                     buttonGroup.appendChild(downloadBtn);
                 }

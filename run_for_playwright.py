@@ -49,12 +49,18 @@ def main():
         # The server itself runs in "real" mode to allow real YT/Gemini calls
         env['API_MODE'] = 'mock'
 
-        # 清理日誌
+        # 清理日誌和上傳檔案
         log_dir = Path("logs")
         if log_dir.exists():
             import shutil
             shutil.rmtree(log_dir)
         log_dir.mkdir()
+
+        upload_dir = Path("uploads")
+        if upload_dir.exists():
+            import shutil
+            shutil.rmtree(upload_dir)
+        upload_dir.mkdir()
 
         # 啟動資料庫管理器
         log.info("--- 正在啟動資料庫管理器 ---")
