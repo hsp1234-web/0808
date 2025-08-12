@@ -1,6 +1,9 @@
 # local_run.py (測試監控器)
 import subprocess
 import sys
+from pathlib import Path
+# JULES: 將 src 目錄加入 Python 路徑，以確保可以找到其下的模組
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import time
 import logging
 import os
@@ -23,7 +26,7 @@ def cleanup_stale_processes():
     import psutil
     log.info("--- 正在檢查並清理舊的程序 ---")
     # 新增 'circusd' 到清理列表
-    stale_process_names = ["circusd", "api_server.py", "db/manager.py"]
+    stale_process_names = ["circusd", "src/api_server.py", "src/db/manager.py"]
     cleaned_count = 0
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
@@ -47,7 +50,7 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     # 安裝所有 Python 依賴
-    requirements_files = ["requirements-server.txt", "requirements-worker.txt"]
+    requirements_files = ["src/requirements-server.txt", "src/requirements-worker.txt"]
     log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
     uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
     for req_file in requirements_files:
@@ -87,7 +90,7 @@ def main():
 
     # 步驟 1: 清理環境
     cleanup_stale_processes()
-    db_file = Path("db/queue.db")
+    db_file = Path("src/db/queue.db")
     if db_file.exists():
         log.info(f"--- 正在清理舊的資料庫檔案 ({db_file}) ---")
         db_file.unlink()

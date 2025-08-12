@@ -1,5 +1,8 @@
 import subprocess
 import sys
+# JULES: 將 src 目錄加入 Python 路徑，以確保可以找到其下的模組
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import time
 import logging
 import os
@@ -15,7 +18,7 @@ log = logging.getLogger('playwright_runner')
 
 def install_dependencies():
     log.info("--- 正在安裝 Python 依賴 ---")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-server.txt", "-r", "requirements-worker.txt"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "src/requirements-server.txt", "-r", "src/requirements-worker.txt"])
     log.info("✅ Python 依賴安裝成功。")
     log.info("--- 正在安裝 Node.js 依賴 ---")
     subprocess.check_call(["bun", "install"])
@@ -64,7 +67,7 @@ def main():
         upload_dir.mkdir()
 
         # JULES'S FIX: Clean up the database file to ensure test isolation
-        db_file = Path("db/queue.db")
+        db_file = Path("src/db/queue.db")
         if db_file.exists():
             log.info(f"--- 正在清理舊的資料庫檔案 ({db_file}) ---")
             db_file.unlink()
@@ -72,13 +75,15 @@ def main():
 
         # 啟動資料庫管理器
         log.info("--- 正在啟動資料庫管理器 ---")
-        db_log_file = open("logs/db_manager.log", "w")
-        log_files['db'] = db_log_file
+        db_stdout_file = open("logs/db_manager.log", "w")
+        db_stderr_file = open("logs/db_manager.err", "w")
+        log_files['db_stdout'] = db_stdout_file
+        log_files['db_stderr'] = db_stderr_file
         db_proc = subprocess.Popen(
-            [sys.executable, "db/manager.py"],
+            [sys.executable, "src/db/manager.py"],
             env=env,
-            stdout=db_log_file,
-            stderr=db_log_file
+            stdout=db_stdout_file,
+            stderr=db_stderr_file
         )
         procs.append(db_proc)
         log.info(f"✅ 資料庫管理器已啟動 (PID: {db_proc.pid})。")
@@ -86,13 +91,15 @@ def main():
 
         # 啟動 API 伺服器
         log.info("--- 正在啟動 API 伺服器 ---")
-        api_log_file = open("logs/api_server.log", "w")
-        log_files['api'] = api_log_file
+        api_stdout_file = open("logs/api_server.log", "w")
+        api_stderr_file = open("logs/api_server.err", "w")
+        log_files['api_stdout'] = api_stdout_file
+        log_files['api_stderr'] = api_stderr_file
         api_proc = subprocess.Popen(
-            [sys.executable, "api_server.py", "--port", "42649"],
+            [sys.executable, "src/api_server.py", "--port", "42649"],
             env=env,
-            stdout=api_log_file,
-            stderr=api_log_file
+            stdout=api_stdout_file,
+            stderr=api_stderr_file
         )
         procs.append(api_proc)
         log.info(f"✅ API 伺服器已啟動 (PID: {api_proc.pid})。")

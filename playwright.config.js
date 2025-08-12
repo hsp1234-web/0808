@@ -5,7 +5,7 @@ export default defineConfig({
   // Timeout for each test, includes hooks. 3 minutes.
   timeout: 180000,
 
-  testDir: './tests', // JULES'S ADDITION: Explicitly set test directory
+  testDir: './src/tests', // JULES'S ADDITION: Explicitly set test directory
   fullyParallel: false, // JULES'S FIX: Run tests serially
   workers: 1, // JULES'S FIX: Force serial execution to prevent test pollution
 

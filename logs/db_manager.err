@@ -54,3 +54,63 @@
 2025-08-12 20:16:29,413 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
 2025-08-12 20:16:29,414 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
 2025-08-12 20:16:29,415 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-12 21:30:39,238 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 21:30:39,239 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 21:30:39,257 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 21:30:39,259 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+Traceback (most recent call last):
+  File "/app/src/db/manager.py", line 166, in <module>
+    run_server()
+  File "/app/src/db/manager.py", line 153, in run_server
+    with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+2025-08-12 21:32:41,395 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 21:32:41,396 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 21:32:41,422 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 21:32:41,425 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+Traceback (most recent call last):
+  File "/app/src/db/manager.py", line 166, in <module>
+    run_server()
+  File "/app/src/db/manager.py", line 153, in run_server
+    with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+2025-08-12 21:32:46,402 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 21:32:46,402 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 21:32:46,406 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 21:32:46,407 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+Traceback (most recent call last):
+  File "/app/src/db/manager.py", line 166, in <module>
+    run_server()
+  File "/app/src/db/manager.py", line 153, in run_server
+    with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+2025-08-12 21:33:47,857 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 21:33:47,858 - db.database - INFO - 正在檢查並初始化資料庫於: /app/src/db/queue.db
+2025-08-12 21:33:47,902 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 21:33:47,905 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+Traceback (most recent call last):
+  File "/app/src/db/manager.py", line 166, in <module>
+    run_server()
+  File "/app/src/db/manager.py", line 153, in run_server
+    with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use

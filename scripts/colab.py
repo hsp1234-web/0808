@@ -200,7 +200,7 @@ class ServerManager:
             # 採用「混合式安裝」策略，以最快速度讓伺服器上線
 
             # 1. 安裝輕量的核心伺服器依賴 (使用 pip)
-            server_reqs_path = project_path / "requirements-server.txt"
+            server_reqs_path = project_path / "src" / "requirements-server.txt"
             if server_reqs_path.is_file():
                 self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
                 add_system_log("colab_setup", "INFO", "Installing server dependencies...")
@@ -217,7 +217,7 @@ class ServerManager:
 
             # 2. 立刻啟動核心協調器，讓 API 服務上線
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            orchestrator_script_path = project_path / "orchestrator.py"
+            orchestrator_script_path = project_path / "src" / "orchestrator.py"
             if not orchestrator_script_path.is_file():
                 self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path}")
                 return
@@ -227,7 +227,7 @@ class ServerManager:
 
             # --- JULES 於 2025-08-10 的修復 ---
             # 在啟動前，先清理上一次執行可能遺留的 port 檔案，避免讀取到過期的埠號
-            port_file_path = project_path / "db" / "db_manager.port"
+            port_file_path = project_path / "src" / "db" / "db_manager.port"
             if port_file_path.exists():
                 self._log_manager.log("WARN", f"偵測到舊的埠號檔案，正在清理: {port_file_path}")
                 try:
@@ -239,7 +239,7 @@ class ServerManager:
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
             # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
             # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/orchestrator.py", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
@@ -295,7 +295,7 @@ class ServerManager:
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
             # 3. 在背景執行緒中安裝大型依賴 (使用 uv)
-            worker_reqs_path = project_path / "requirements-worker.txt"
+            worker_reqs_path = project_path / "src" / "requirements-worker.txt"
             background_install_thread = threading.Thread(
                 target=self._install_worker_deps,
                 args=(worker_reqs_path,),

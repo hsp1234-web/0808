@@ -18,8 +18,10 @@ if sys.platform != 'win32':
 # --- 時區設定結束 ---
 
 # 將專案根目錄加入 sys.path
-ROOT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT_DIR))
+# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent
+# sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
+# sys.path.insert(0, str(ROOT_DIR))
 
 # from db import database # REMOVED: No longer used directly
 from db.client import get_client
@@ -140,7 +142,7 @@ def main():
 
         # --- JULES' FIX START ---
         # 修復：在啟動前，先清理上一次執行可能遺留的 port 檔案
-        port_file_path = ROOT_DIR / "db" / "db_manager.port"
+        port_file_path = ROOT_DIR / "src" / "db" / "db_manager.port"
         if port_file_path.exists():
             log.warning(f"偵測到舊的埠號檔案，正在清理: {port_file_path}")
             try:
@@ -149,7 +151,7 @@ def main():
                 log.error(f"清理舊的埠號檔案時發生錯誤: {e}")
         # --- JULES' FIX END ---
 
-        db_manager_cmd = [sys.executable, "db/manager.py"]
+        db_manager_cmd = [sys.executable, "src/db/manager.py"]
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
         log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
@@ -188,7 +190,7 @@ def main():
             api_port = find_free_port()
             log.info(f"找到一個隨機的空閒埠號: {api_port}")
 
-        api_server_cmd = [sys.executable, "api_server.py", "--port", str(api_port)]
+        api_server_cmd = [sys.executable, "src/api_server.py", "--port", str(api_port)]
         if args.mock:
             api_server_cmd.append("--mock")
         log.info(f"🔧 正在啟動 API 伺服器: {' '.join(api_server_cmd)}")

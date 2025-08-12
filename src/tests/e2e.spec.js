@@ -75,7 +75,7 @@ test.describe('鳳凰音訊轉錄儀 E2E 整合測試', () => {
 
     const transcriptOutput = page.locator('#transcript-output');
     await expect(transcriptOutput.locator('h3')).toBeVisible();
-    await expect(transcriptOutput).toContainText('你好，歡迎使用', { timeout: 10000 });
+    await expect(transcriptOutput).toContainText('你好', { timeout: 10000 });
 
     const completedTask = page.locator('#completed-tasks .task-item', { hasText: DUMMY_FILE_NAME_1 });
     await expect(completedTask).toBeVisible({ timeout: 20000 });

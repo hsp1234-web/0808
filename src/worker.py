@@ -9,8 +9,10 @@ import requests
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
-ROOT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT_DIR))
+# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent
+# sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
+# sys.path.insert(0, str(ROOT_DIR))
 
 from db import database
 
@@ -34,7 +36,7 @@ def setup_database_logging():
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
 # --- 路徑設定 ---
-TOOLS_DIR = ROOT_DIR / "tools"
+TOOLS_DIR = ROOT_DIR / "src" / "tools"
 TRANSCRIPTS_DIR = ROOT_DIR / "transcripts"
 
 def process_download_task(task: dict, use_mock: bool):
@@ -158,8 +160,8 @@ def process_transcription_task(task: dict, use_mock: bool):
 
             # 步驟 6: 通知 API Server 任務已完成，以便廣播給前端
             try:
-                # 注意：這裡假設 api_server 在 8000 port 上運行
-                notify_url = "http://127.0.0.1:8000/api/internal/notify_task_update"
+                # 注意：這裡假設 api_server 在 42649 port 上運行 (根據 circus.ini)
+                notify_url = "http://127.0.0.1:42649/api/internal/notify_task_update"
 
                 # 我們只傳送前端 UI 更新所需的最小資訊
                 frontend_payload = {
