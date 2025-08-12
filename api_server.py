@@ -575,7 +575,13 @@ async def process_youtube_urls(request: Request):
             db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
             db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
 
-            tasks.append({"url": url, "task_id": download_task_id})
+            # JULES'S FIX: Return both task IDs so the frontend can track the full chain.
+            tasks.append({
+                "url": url,
+                "task_id": download_task_id, # For display and initial tracking
+                "final_task_id": process_task_id, # For listening to the final result
+                "task_type": "youtube_process_chain"
+            })
 
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
 
@@ -786,7 +792,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             downloader_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
             cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
 
-            process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+            proc_env = os.environ.copy()
+            process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
 
             last_line = ""
             if process_dl.stdout:
@@ -852,9 +859,47 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "--output-format", output_format
             ]
 
-            result = subprocess.run(cmd_process, capture_output=True, text=True, check=True, encoding='utf-8')
-            process_result = json.loads(result.stdout)
+            # JULES'S REFACTOR: Use Popen to stream progress updates from stderr
+            proc_env = os.environ.copy()
+            process_gemini = subprocess.Popen(
+                cmd_process,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                env=proc_env
+            )
 
+            # Stream progress from stderr
+            if process_gemini.stderr:
+                for line in iter(process_gemini.stderr.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        # We expect progress updates to be JSON
+                        progress_data = json.loads(line)
+                        if progress_data.get("type") == "progress":
+                            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                                "type": "YOUTUBE_STATUS",
+                                "payload": {
+                                    "task_id": dependent_task_id,
+                                    "status": "processing",
+                                    "message": progress_data.get("detail", "AI 分析中..."),
+                                    "task_type": "gemini_process",
+                                    "progress_code": progress_data.get("status") # e.g., "uploading"
+                                }
+                            }), loop)
+                    except json.JSONDecodeError:
+                        # It might just be a regular log line, we can ignore it for broadcast
+                        log.debug(f"[stderr from gemini_processor]: {line}")
+
+            # Wait for the process to finish and get the final result from stdout
+            stdout_output, _ = process_gemini.communicate()
+            if process_gemini.returncode != 0:
+                raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+
+            process_result = json.loads(stdout_output)
             db_client.update_task_status(dependent_task_id, 'completed', json.dumps(process_result))
             log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 

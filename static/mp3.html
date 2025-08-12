@@ -168,9 +168,27 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+            gap: 10px; /* Add gap for wrapped items */
         }
-        .task-filename { font-weight: 600; }
-        .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
+        .task-filename {
+            font-weight: 600;
+            /* JULES'S FIX for long filenames */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 350px; /* Adjust as needed */
+        }
+        .task-status {
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #666;
+            transition: color 0.3s ease; /* Smooth color transition */
+        }
+        .task-status.status-downloading { color: #007bff; } /* Blue */
+        .task-status.status-processing { color: #fd7e14; } /* Orange */
+        .task-status.status-completed { color: #28a745; } /* Green */
+        .task-status.status-failed { color: #dc3545; } /* Red */
 
         /* --- 任務列表中的按鈕 --- */
         .task-list .task-actions a {
@@ -543,6 +561,14 @@
                 <button id="download-audio-only-btn">🎧 僅下載音訊</button>
                 <button id="start-youtube-processing-btn" disabled>🚀 分析影片 (Gemini)</button>
             </div>
+
+            <!-- JULES'S NEW FEATURE: YouTube Report File Browser -->
+            <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
+                <h2>📊 YouTube 報告瀏覽區</h2>
+                <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
+                    <p id="no-youtube-report-msg">尚無已完成的報告</p>
+                </div>
+            </div>
         </div>
 
         <!-- 任務儀表板 -->
@@ -622,6 +648,22 @@
             <div class="modal-footer">
                 <a id="modal-download-btn" href="#" download class="button-like">下載檔案</a>
                 <button id="modal-copy-link-btn">複製連結</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JULES'S NEW FEATURE: Details Modal -->
+    <div id="details-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="details-modal-title">任務詳細資訊</h2>
+                <button id="details-modal-close-btn" class="modal-close-button">&times;</button>
+            </div>
+            <div id="details-modal-body" class="modal-body">
+                <!-- Details will be populated by JS -->
+            </div>
+            <div class="modal-footer">
+                 <button id="details-modal-ok-btn">確認</button>
             </div>
         </div>
     </div>
@@ -709,6 +751,16 @@
             const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
             const ytOutputFormatSelect = document.getElementById('yt-output-format-select');
 
+            // --- YouTube 報告瀏覽區元素 ---
+            const youtubeFileBrowser = document.getElementById('youtube-file-browser');
+            const noYoutubeReportMsg = document.getElementById('no-youtube-report-msg');
+
+            // --- 詳細資訊 Modal 元素 ---
+            const detailsModal = document.getElementById('details-modal');
+            const detailsModalTitle = document.getElementById('details-modal-title');
+            const detailsModalBody = document.getElementById('details-modal-body');
+            const detailsModalCloseBtn = document.getElementById('details-modal-close-btn');
+            const detailsModalOkBtn = document.getElementById('details-modal-ok-btn');
 
             // --- 媒體下載器元素 ---
             const downloaderUrlsInput = document.getElementById('downloader-urls-input');
@@ -931,6 +983,20 @@
 
             const handleYoutubeStatus = (payload) => {
                 if (!payload || !payload.task_id) return;
+
+                // JULES'S REFACTOR: Divert completed gemini_process tasks to the new file browser
+                if (payload.status === 'completed' && payload.task_type === 'gemini_process') {
+                    addYoutubeReportToList(payload);
+                    // Remove the task from the "ongoing" list
+                    const taskElement = taskElements.get(payload.task_id);
+                    if (taskElement) {
+                        taskElement.remove();
+                        taskElements.delete(payload.task_id);
+                    }
+                    return; // Stop further processing in this function
+                }
+
+
                 let taskElement = taskElements.get(payload.task_id);
                 if (!taskElement) {
                     const url = payload.url || payload.message || payload.task_id;
@@ -941,12 +1007,22 @@
                 const progressContainer = taskElement.querySelector('.task-progress-container');
                 const progressBar = taskElement.querySelector('.task-progress-bar');
 
+                statusSpan.textContent = payload.message || payload.status;
+                statusSpan.className = 'task-status'; // Reset classes
+
+                if (payload.status === 'downloading' || (payload.progress_code && payload.progress_code.includes('upload'))) {
+                    statusSpan.classList.add('status-downloading');
+                } else if (payload.status === 'processing' || (payload.progress_code && payload.progress_code.includes('generating'))) {
+                    statusSpan.classList.add('status-processing');
+                } else if (payload.status === 'failed') {
+                    statusSpan.classList.add('status-failed');
+                } else if (payload.status === 'completed') {
+                    statusSpan.classList.add('status-completed');
+                }
+
                 if (payload.progress !== undefined && progressContainer) {
                     progressContainer.style.display = 'block';
                     progressBar.style.width = `${payload.progress}%`;
-                    statusSpan.textContent = `${payload.message || '處理中'}...`;
-                } else {
-                    statusSpan.textContent = payload.message || payload.status;
                 }
 
                 if (payload.filename) {
@@ -961,19 +1037,12 @@
                 }
 
                 if (payload.status === 'completed') {
+                    // This block now only handles 'youtube_download_only' completions
                     if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.innerHTML = '';
-                    let buttonGroup;
-                    if (payload.task_type === 'download_only') {
-                        buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
-                    } else { // This is a gemini_process task
-                        const result = payload.result || {};
-                        const outputPath = result.output_path || '';
-                        const extension = outputPath.includes('.html') ? '.html' : '.txt';
-                        const previewType = extension === '.html' ? 'text/html' : 'text/plain';
-                        buttonGroup = createActionButtons(payload.task_id, previewType, extension, 'youtube_report');
-                    }
+                    let buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
                     statusSpan.appendChild(buttonGroup);
+
                     const isDownloaderTask = taskElement.parentElement.id === 'downloader-tasks';
                     if (!isDownloaderTask) {
                         completedTasksContainer.appendChild(taskElement);
@@ -992,6 +1061,7 @@
                 } else if (payload.status === 'failed') {
                     if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.textContent = `❌ 失敗: ${payload.error}`;
+                    statusSpan.classList.add('status-failed');
                 }
             };
 
@@ -1337,6 +1407,95 @@
                 }
             };
 
+            const addYoutubeReportToList = (payload) => {
+                if (noYoutubeReportMsg.style.display !== 'none') noYoutubeReportMsg.style.display = 'none';
+
+                const result = payload.result || {};
+                const taskId = payload.task_id;
+                const videoTitle = result.video_title || '無標題報告';
+                const outputPath = result.output_path || '';
+                const tokens = result.total_tokens_used || 'N/A';
+                const duration = result.processing_duration_seconds || 'N/A';
+                const extension = outputPath.includes('.html') ? '.html' : '.txt';
+
+                const reportElement = document.createElement('div');
+                reportElement.className = 'task-item';
+                reportElement.dataset.taskId = taskId;
+
+                // 1. Icon and Filename
+                const fileInfoDiv = document.createElement('div');
+                fileInfoDiv.style.display = 'flex';
+                fileInfoDiv.style.alignItems = 'center';
+                fileInfoDiv.style.gap = '10px';
+                fileInfoDiv.innerHTML = `<span style="font-size: 1.5em;">${extension === '.html' ? '📄' : '📝'}</span>`;
+
+                const filenameSpan = document.createElement('span');
+                filenameSpan.className = 'task-filename';
+                filenameSpan.textContent = videoTitle;
+                filenameSpan.title = videoTitle;
+                fileInfoDiv.appendChild(filenameSpan);
+
+                // 2. Action Buttons
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'task-actions';
+
+                const detailsBtn = document.createElement('a');
+                detailsBtn.href = '#';
+                detailsBtn.textContent = '詳細資料';
+                detailsBtn.className = 'btn-preview'; // Use same style as preview
+                detailsBtn.style.backgroundColor = '#6c757d'; // Grey
+                detailsBtn.onclick = (e) => {
+                    e.preventDefault();
+                    logAction('click-yt-report-details', taskId);
+                    detailsModalTitle.textContent = `任務詳細資訊: ${videoTitle}`;
+                    detailsModalBody.innerHTML = `
+                        <p><strong>總執行時間:</strong> ${duration} 秒</p>
+                        <p><strong>總 Token 消耗:</strong> ${tokens} tokens</p>
+                        <p><strong>報告類型:</strong> ${extension.toUpperCase()}</p>
+                        <p><strong>任務 ID:</strong> <small>${taskId}</small></p>
+                    `;
+                    detailsModal.style.display = 'flex';
+                };
+
+                const previewBtn = document.createElement('a');
+                previewBtn.href = '#';
+                previewBtn.textContent = '預覽';
+                previewBtn.className = 'btn-preview';
+                previewBtn.onclick = (e) => {
+                    e.preventDefault();
+                    logAction('click-yt-report-preview', taskId);
+                    if (extension === '.html') {
+                        window.open(`/api/download/${taskId}`, '_blank');
+                    } else {
+                        openPreviewModal(taskId, `${videoTitle}_report.txt`, 'text/plain');
+                    }
+                };
+
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `/api/download/${taskId}`;
+                downloadBtn.textContent = '下載';
+                downloadBtn.className = 'btn-download';
+                downloadBtn.download = `${videoTitle.replace(/ /g, '_')}_report${extension}`;
+                downloadBtn.onclick = () => logAction('click-yt-report-download', taskId);
+
+
+                actionsDiv.appendChild(detailsBtn);
+                actionsDiv.appendChild(previewBtn);
+                actionsDiv.appendChild(downloadBtn);
+
+                reportElement.appendChild(fileInfoDiv);
+                reportElement.appendChild(actionsDiv);
+
+                youtubeFileBrowser.appendChild(reportElement);
+            };
+
+            const closeDetailsModal = () => {
+                detailsModal.style.display = 'none';
+            }
+            detailsModalCloseBtn.addEventListener('click', closeDetailsModal);
+            detailsModalOkBtn.addEventListener('click', closeDetailsModal);
+
+
             const processYoutubeRequest = async (downloadOnly = false) => {
                 const action = downloadOnly ? 'click-download-audio-only' : 'click-start-youtube-processing';
                 logAction(action);
@@ -1387,10 +1546,20 @@
                     const result = await response.json();
 
                     result.tasks.forEach(task => {
-                        const taskType = downloadOnly ? '僅下載音訊' : 'YouTube 分析';
-                        createNewTaskElement(task.url, task.task_id, taskType);
+                        const taskType = task.task_type === 'youtube_process_chain' ? 'YouTube 分析' : '僅下載音訊';
+                        const displayId = task.task_id;
+                        const finalId = task.final_task_id || task.task_id;
+
+                        const taskElement = createNewTaskElement(task.url, displayId, taskType);
+
+                        // JULES'S FIX: Map the final task ID to the element created with the initial ID
+                        if (displayId !== finalId) {
+                            taskElements.set(finalId, taskElement);
+                        }
+
                         if (socket && socket.readyState === WebSocket.OPEN) {
-                            socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: task.task_id }}));
+                            // We always start the chain with the first task ID
+                            socket.send(JSON.stringify({ type: 'START_YOUTUBE_PROCESSING', payload: { task_id: displayId }}));
                         }
                     });
 
@@ -1442,8 +1611,10 @@
                     showStatusMessage('請輸入至少一個網址。', true);
                     return;
                 }
+                // JULES'S FIX: The /api/youtube/process endpoint now expects a 'requests' object array.
+                const requests = urls.map(url => ({ url: url, filename: '' }));
                 const payload = {
-                    urls: urls,
+                    requests: requests,
                     download_only: true,
                     model: null
                 };
@@ -1495,15 +1666,25 @@
             });
 
             // --- 分頁切換邏輯 ---
+            const transcriptContainer = document.getElementById('transcript-container');
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const tabId = button.dataset.tab;
                     logAction(`click-tab`, tabId);
+
+                    // Handle active button
                     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                     button.classList.add('active');
+
+                    // Handle active content
                     document.querySelectorAll('.tab-content').forEach(content => {
                         content.style.display = (content.id === tabId) ? 'block' : 'none';
                     });
+
+                    // JULES'S FIX: Hide transcript output on YouTube tab as per user request
+                    if (transcriptContainer) {
+                        transcriptContainer.style.display = (tabId === 'youtube-report-tab') ? 'none' : 'block';
+                    }
                 });
             });
 
