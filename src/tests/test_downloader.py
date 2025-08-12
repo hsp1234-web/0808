@@ -3,13 +3,10 @@ import pytest
 import subprocess
 import json
 import sys
-from unittest.mock import MagicMock, patch, mock_open, call
+from unittest.mock import MagicMock, patch, mock_open, call, ANY
 
-# 為了讓 pytest 能夠找到 api_server 模組，我們需要將專案根目錄加入 sys.path
-# 假設 tests 目錄與 api_server.py 在同一個根目錄下
-sys.path.insert(0, '.')
-
-# 現在我們可以安全地匯入目標函式和模組
+# 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
+# pytest 會自動將 src 目錄下的模組視為頂層模組。
 import api_server
 
 # --- 測試設定 ---
@@ -106,9 +103,14 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
     mock_db_client.get_task_status.assert_called_once_with(TEST_TASK_ID)
 
     # 斷言子程序被正確呼叫
+    # JULES'S FIX (2025-08-12): 修正因 src-layout 重構導致的路徑問題
+    # api_server.py 中硬編碼了 'src/tools/...' 的路徑，測試需要與之匹配
+    tool_name = "mock_youtube_downloader.py" if api_server.IS_MOCK_MODE else "youtube_downloader.py"
+    expected_tool_path = f"src/tools/{tool_name}"
+
     expected_cmd = [
         sys.executable,
-        "tools/mock_youtube_downloader.py" if api_server.IS_MOCK_MODE else "tools/youtube_downloader.py",
+        expected_tool_path,
         "--url", TEST_URL,
         "--output-dir", str(api_server.UPLOADS_DIR)
     ]
@@ -117,7 +119,8 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        encoding='utf-8'
+        encoding='utf-8',
+        env=ANY # JULES'S FIX (2025-08-12): 確保測試能處理 env 參數
     )
 
     # 斷言 WebSocket 廣播的訊息

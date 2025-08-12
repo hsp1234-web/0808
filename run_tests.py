@@ -26,13 +26,18 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     # 安裝所有 Python 依賴
-    requirements_files = ["requirements-server.txt", "requirements-worker.txt"]
+    requirements_files = ["src/requirements-server.txt", "src/requirements-worker.txt"]
     log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
     # 使用 -q 來減少不必要的輸出
     uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
     for req_file in requirements_files:
         if Path(req_file).is_file():
             uv_command.extend(["-r", req_file])
+
+    # 最關鍵的一步：以可編輯模式安裝目前的專案
+    # 這會讓 pytest 和其他工具能夠正確地找到 src 目錄下的模組
+    uv_command.extend(["-e", "."])
+    log.info(f"正在以可編輯模式安裝專案...")
 
     # 執行安裝指令
     subprocess.check_call(uv_command)
@@ -121,11 +126,7 @@ def main():
 
         # 為了處理既有的損壞測試，我們明確地忽略它們
         # 這確保了我們可以驗證測試執行器本身的功能
-        ignore_args = [
-            "--ignore=tests/test_worker.py",
-            "--ignore=tests/test_downloader.py",
-            "--ignore=tests/test_logging_fast.py"
-        ]
+        ignore_args = []
         for arg in ignore_args:
             if arg not in pytest_args:
                 pytest_args.insert(0, arg)
