@@ -29,3 +29,34 @@
 2025-08-12 17:25:08,879 - DBManagerServer - INFO - 來自 ('127.0.0.1', 54036) 的新連線。
 2025-08-12 17:25:08,879 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': 'a7592501-4af7-40e8-a8d2-957c650d24f9'}}
 2025-08-12 17:25:08,880 - DBManagerServer - INFO - 連線 ('127.0.0.1', 54036) 已關閉。
+2025-08-12 19:30:18,870 - DBManagerServer - INFO - 資料庫管理者伺服器啟動前，正在進行資料庫初始化...
+2025-08-12 19:30:18,871 - db.database - INFO - 正在檢查並初始化資料庫於: /app/db/queue.db
+2025-08-12 19:30:18,939 - db.database - INFO - ✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。
+2025-08-12 19:30:18,946 - DBManagerServer - INFO - ✅ 資料庫初始化成功。
+2025-08-12 19:30:18,946 - DBManagerServer - INFO - 🚀 資料庫管理者伺服器已在 127.0.0.1:49999 上啟動...
+2025-08-12 19:30:20,585 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48110) 的新連線。
+2025-08-12 19:30:20,586 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a', 'payload': '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "output_dir": "/app/uploads", "custom_filename": null}', 'task_type': 'youtube_download', 'depends_on': None}}
+2025-08-12 19:30:20,586 - db.database - INFO - DB:/app/db/queue.db 準備新增 'youtube_download' 任務: 9cbac9ee-9cb9-478e-955a-a1d678b7f48a (依賴: 無)
+2025-08-12 19:30:20,589 - db.database - INFO - ✅ 已成功新增任務到佇列: 9cbac9ee-9cb9-478e-955a-a1d678b7f48a
+2025-08-12 19:30:20,590 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48110) 已關閉。
+2025-08-12 19:30:20,590 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48116) 的新連線。
+2025-08-12 19:30:20,590 - DBManagerServer - INFO - 收到請求: {'action': 'add_task', 'params': {'task_id': '5a5c71cc-841b-444e-9daf-9f62f0198b4a', 'payload': '{"model": "models/gemini-1.5-flash-latest", "output_dir": "transcripts", "tasks": "summary,transcript", "output_format": "html"}', 'task_type': 'gemini_process', 'depends_on': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a'}}
+2025-08-12 19:30:20,591 - db.database - INFO - DB:/app/db/queue.db 準備新增 'gemini_process' 任務: 5a5c71cc-841b-444e-9daf-9f62f0198b4a (依賴: 9cbac9ee-9cb9-478e-955a-a1d678b7f48a)
+2025-08-12 19:30:20,594 - db.database - INFO - ✅ 已成功新增任務到佇列: 5a5c71cc-841b-444e-9daf-9f62f0198b4a
+2025-08-12 19:30:20,594 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48116) 已關閉。
+2025-08-12 19:30:20,650 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48122) 的新連線。
+2025-08-12 19:30:20,651 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a'}}
+2025-08-12 19:30:20,652 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48122) 已關閉。
+2025-08-12 19:30:20,669 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48124) 的新連線。
+2025-08-12 19:30:20,673 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a'}}
+2025-08-12 19:30:20,676 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48124) 已關閉。
+2025-08-12 19:30:20,893 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48130) 的新連線。
+2025-08-12 19:30:20,894 - DBManagerServer - INFO - 收到請求: {'action': 'update_task_status', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a', 'status': 'failed', 'result': '{"error": "YouTube downloader failed: 2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - \\u958b\\u59cb\\u4e0b\\u8f09\\u97f3\\u8a0a\\uff0cURL: https://www.youtube.com/watch?v=jNQXAC9IVRw\\n2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - \\u57f7\\u884c yt-dlp \\u6307\\u4ee4: yt-dlp --print-json -f bestaudio -x --audio-format mp3 -o /app/uploads/%(title)s.%(ext)s https://www.youtube.com/watch?v=jNQXAC9IVRw\\n2025-08-13 03:30:20,840 - youtube_downloader_tool - ERROR - \\u274c \\u4e0b\\u8f09\\u904e\\u7a0b\\u4e2d\\u767c\\u751f\\u672a\\u9810\\u671f\\u7684\\u932f\\u8aa4: [Errno 2] No such file or directory: \'yt-dlp\'\\nTraceback (most recent call last):\\n  File \\"/app/tools/youtube_downloader.py\\", line 42, in download_audio\\n    result = subprocess.run(\\n             ^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py\\", line 548, in run\\n    with Popen(*popenargs, **kwargs) as process:\\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py\\", line 1026, in __init__\\n    self._execute_child(args, executable, preexec_fn, close_fds,\\n  File \\"/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py\\", line 1955, in _execute_child\\n    raise child_exception_type(errno_num, err_msg, err_filename)\\nFileNotFoundError: [Errno 2] No such file or directory: \'yt-dlp\'\\n"}'}}
+2025-08-12 19:30:20,906 - db.database - INFO - ✅ 任務 9cbac9ee-9cb9-478e-955a-a1d678b7f48a 狀態已更新為: failed
+2025-08-12 19:30:20,911 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48130) 已關閉。
+2025-08-12 19:30:25,685 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48144) 的新連線。
+2025-08-12 19:30:25,685 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a'}}
+2025-08-12 19:30:25,686 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48144) 已關閉。
+2025-08-12 19:30:25,692 - DBManagerServer - INFO - 來自 ('127.0.0.1', 48160) 的新連線。
+2025-08-12 19:30:25,692 - DBManagerServer - INFO - 收到請求: {'action': 'get_task_status', 'params': {'task_id': '9cbac9ee-9cb9-478e-955a-a1d678b7f48a'}}
+2025-08-12 19:30:25,692 - DBManagerServer - INFO - 連線 ('127.0.0.1', 48160) 已關閉。

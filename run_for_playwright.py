@@ -52,10 +52,8 @@ def main():
 
         # 清理日誌和上傳檔案
         log_dir = Path("logs")
-        if log_dir.exists():
-            import shutil
-            shutil.rmtree(log_dir)
-        log_dir.mkdir()
+        if not log_dir.exists():
+            log_dir.mkdir()
 
         upload_dir = Path("uploads")
         if upload_dir.exists():
@@ -89,7 +87,7 @@ def main():
         api_log_file = open("logs/api_server.log", "w")
         log_files['api'] = api_log_file
         api_proc = subprocess.Popen(
-            [sys.executable, "api_server.py", "--port", "42649"],
+            [sys.executable, "api_server.py", "--port", "42650"],
             env=env,
             stdout=api_log_file,
             stderr=api_log_file
@@ -99,7 +97,7 @@ def main():
 
         # 等待 API 伺服器就緒
         log.info("--- 等待 API 伺服器就緒 ---")
-        api_health_url = "http://127.0.0.1:42649/api/health"
+        api_health_url = "http://127.0.0.1:42650/api/health"
         timeout = 60
         start_time = time.time()
         server_ready = False

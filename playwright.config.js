@@ -19,7 +19,7 @@ export default defineConfig({
 
   use: {
     // JULES'S FIX: Set the correct baseURL for the test server
-    baseURL: 'http://127.0.0.1:42649',
+    baseURL: 'http://127.0.0.1:42650',
 
     // Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer
     trace: 'on-first-retry',

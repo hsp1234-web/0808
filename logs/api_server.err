@@ -58,3 +58,63 @@ INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
 INFO:     Finished server process [11722]
+2025-08-13 03:30:19,822 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-13 03:30:19,822 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-13 03:30:20,040 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-13 03:30:20,040 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [2193]
+INFO:     Waiting for application startup.
+2025-08-13 03:30:20,168 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-13 03:30:20,181 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
+2025-08-13 03:30:20,580 - api_server - WARNING - 偵測到舊版的 'urls' 負載格式，正在進行相容處理。
+INFO:     127.0.0.1:43926 - "WebSocket /api/ws" [accepted]
+2025-08-13 03:30:20,605 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     connection open
+2025-08-13 03:30:20,630 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "9cbac9ee-9cb9-478e-955a-a1d678b7f48a"}}
+2025-08-13 03:30:20,637 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 9cbac9ee-9cb9-478e-955a-a1d678b7f48a)。
+2025-08-13 03:30:20,644 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: 9cbac9ee-9cb9-478e-955a-a1d678b7f48a
+2025-08-13 03:30:20,645 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-13 03:30:20,658 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-13 03:30:20,675 - api_server - INFO - ✅ 回傳任務 9cbac9ee-9cb9-478e-955a-a1d678b7f48a 的狀態: pending
+INFO:     connection closed
+2025-08-13 03:30:20,876 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - 開始下載音訊，URL: https://www.youtube.com/watch?v=jNQXAC9IVRw
+2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - 執行 yt-dlp 指令: yt-dlp --print-json -f bestaudio -x --audio-format mp3 -o /app/uploads/%(title)s.%(ext)s https://www.youtube.com/watch?v=jNQXAC9IVRw
+2025-08-13 03:30:20,840 - youtube_downloader_tool - ERROR - ❌ 下載過程中發生未預期的錯誤: [Errno 2] No such file or directory: 'yt-dlp'
+Traceback (most recent call last):
+  File "/app/tools/youtube_downloader.py", line 42, in download_audio
+    result = subprocess.run(
+             ^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'yt-dlp'
+Traceback (most recent call last):
+  File "/app/api_server.py", line 871, in _process_in_thread
+    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
+RuntimeError: YouTube downloader failed: 2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - 開始下載音訊，URL: https://www.youtube.com/watch?v=jNQXAC9IVRw
+2025-08-13 03:30:20,831 - youtube_downloader_tool - INFO - 執行 yt-dlp 指令: yt-dlp --print-json -f bestaudio -x --audio-format mp3 -o /app/uploads/%(title)s.%(ext)s https://www.youtube.com/watch?v=jNQXAC9IVRw
+2025-08-13 03:30:20,840 - youtube_downloader_tool - ERROR - ❌ 下載過程中發生未預期的錯誤: [Errno 2] No such file or directory: 'yt-dlp'
+Traceback (most recent call last):
+  File "/app/tools/youtube_downloader.py", line 42, in download_audio
+    result = subprocess.run(
+             ^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'yt-dlp'
+
+2025-08-13 03:30:25,686 - api_server - INFO - ✅ 回傳任務 9cbac9ee-9cb9-478e-955a-a1d678b7f48a 的狀態: failed
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2193]
