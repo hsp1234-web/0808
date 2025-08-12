@@ -44,7 +44,8 @@ def main():
 
         # 設定環境變數
         env = os.environ.copy()
-        env['GOOGLE_API_KEY'] = 'AIzaSyDT62J3wo1ckaQkF2Pve9SvpBreZh3-dnM'
+        # JULES: 移除了硬編碼的 API 金鑰，改用一個無害的模擬金鑰，因為此腳本在模擬模式下運行。
+        env['GOOGLE_API_KEY'] = 'playwright-mock-api-key'
         env['FORCE_MOCK_TRANSCRIBER'] = 'true'
         # The server itself runs in "real" mode to allow real YT/Gemini calls
         env['API_MODE'] = 'mock'
