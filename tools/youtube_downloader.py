@@ -3,142 +3,107 @@ import argparse
 import json
 import logging
 import sys
-import time
+import subprocess
 from pathlib import Path
 
 # --- 日誌設定 ---
+# Log to stderr so that stdout can be used for JSON output
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stderr)] # 將日誌導向 stderr，保持 stdout 乾淨以進行 JSON 通訊
+    handlers=[logging.StreamHandler(sys.stderr)]
 )
 log = logging.getLogger('youtube_downloader_tool')
 
-# --- 核心下載邏輯 ---
-# 這些輔助函式改編自 colab.py
-def sanitize_filename(title, max_len=60):
-    """清理檔案名稱，移除無效字元。"""
-    if not title:
-        title = "untitled_audio"
-    # 移除會導致路徑問題的字元
-    title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
-    title = title.replace(" ", "_")
-    return title[:max_len]
-
-def format_bytes(size_bytes):
-    """格式化位元組大小為可讀字串。"""
-    if size_bytes == 0:
-        return "0 B"
-    power = 1024
-    n = 0
-    power_labels = {0: 'B', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
-    while size_bytes >= power and n < len(power_labels) - 1:
-        size_bytes /= power
-        n += 1
-    return f"{size_bytes:.2f} {power_labels[n]}"
-
-# --- Pytube 進度回呼 ---
-_start_time = 0
-_total_size = 0
-_bytes_downloaded = 0
-
-def on_pytube_progress(stream, chunk, bytes_remaining):
-    """Pytube 下載進度回呼函式，將進度以 JSON 格式印出。"""
-    global _total_size, _bytes_downloaded, _start_time
-    if _total_size == 0:
-        _total_size = stream.filesize
-        _bytes_downloaded = 0
-        _start_time = time.time()
-
-    _bytes_downloaded = _total_size - bytes_remaining
-    percentage = (_bytes_downloaded / _total_size) * 100 if _total_size > 0 else 0
-
-    elapsed_time = time.time() - _start_time
-    speed = _bytes_downloaded / elapsed_time if elapsed_time > 0 else 0
-
-    progress_data = {
-        "type": "progress",
-        "percent": round(percentage, 2),
-        "downloaded_bytes": _bytes_downloaded,
-        "total_bytes": _total_size,
-        "speed_bytes_per_sec": round(speed),
-        "description": f"Downloading... {format_bytes(_bytes_downloaded)} / {format_bytes(_total_size)}"
-    }
-    print(json.dumps(progress_data), flush=True)
-
-
-def download_audio(youtube_url: str, output_dir: Path):
+def download_audio(youtube_url: str, output_dir: Path, custom_filename: str | None = None):
     """
-    從 YouTube 下載音訊。
+    Downloads audio from a YouTube URL using yt-dlp.
     """
-    global _total_size, _bytes_downloaded, _start_time
-    # 重設全域進度變數
-    _total_size = 0
-    _bytes_downloaded = 0
-    _start_time = 0
+    log.info(f"開始下載音訊，URL: {youtube_url}")
+
+    # If a custom filename is given, use it. Otherwise, let yt-dlp use the video title.
+    # The '.%(ext)s' part is crucial for yt-dlp to add the correct file extension.
+    output_template = f"{str(output_dir / custom_filename)}.%(ext)s" if custom_filename else f"{str(output_dir / '%(title)s')}.%(ext)s"
+
+    command = [
+        "yt-dlp",
+        "--print-json",
+        "-f", "bestaudio",
+        "-x", # --extract-audio
+        "--audio-format", "mp3",
+        "-o", output_template,
+        youtube_url
+    ]
+
+    log.info(f"執行 yt-dlp 指令: {' '.join(command)}")
 
     try:
-        from pytubefix import YouTube
-        from pytubefix.exceptions import RegexMatchError, VideoUnavailable
+        # Using subprocess.run to capture output and wait for completion
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True, # Will raise CalledProcessError if yt-dlp returns a non-zero exit code
+            encoding='utf-8'
+        )
 
-        log.info(f"🔗 Connecting to YouTube: {youtube_url}")
-        yt = YouTube(youtube_url, on_progress_callback=on_pytube_progress)
+        # The JSON output from yt-dlp is in stdout
+        video_info = json.loads(result.stdout)
 
-        log.info(f"🎬 Video Title: {yt.title}")
-        log.info(f"⏱️ Duration: {yt.length} seconds")
+        # When using -o, the `_filename` key in the JSON output gives the final calculated path.
+        # This is the most reliable way to get the filename as sanitized by yt-dlp.
+        final_filepath_str = video_info.get('_filename')
 
-        # 篩選出純音訊流並下載
-        audio_stream = yt.streams.get_audio_only()
-        if not audio_stream:
-            # 作為備用方案，尋找其他常見的音訊格式
-            audio_stream = yt.streams.filter(only_audio=True, file_extension='m4a').order_by('abr').desc().first()
-        if not audio_stream:
-            raise RuntimeError("No suitable audio-only stream found for this video.")
+        if not final_filepath_str:
+             log.error("無法從 yt-dlp 的輸出中確定檔案名稱。")
+             raise RuntimeError("yt-dlp did not provide the output filename in its JSON.")
 
-        sanitized_title = sanitize_filename(yt.title)
-        # 讓 pytube 決定副檔名，但我們指定檔名
-        final_filename = f"{sanitized_title}.{audio_stream.subtype}"
+        # The path from yt-dlp might have the original extension before conversion.
+        # We know we requested mp3, so we ensure the final path reflects that.
+        final_path = Path(final_filepath_str).with_suffix('.mp3')
 
-        log.info(f"⏳ Starting download to {output_dir / final_filename}...")
-        downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)
-        log.info(f"✅ Download complete!")
+        if not final_path.exists():
+            log.error(f"yt-dlp 執行成功，但找不到預期的輸出檔案: {final_path}")
+            # This can happen if the filesystem has characters yt-dlp handles differently
+            # than Python's path manipulation. It's a rare edge case.
+            raise FileNotFoundError(f"Downloaded file not found at {final_path}")
 
-        # 下載完成後，輸出最終結果的 JSON
         final_result = {
             "type": "result",
             "status": "completed",
-            "output_path": str(downloaded_path),
-            "video_title": yt.title,
-            "duration_seconds": yt.length
+            "output_path": str(final_path),
+            "video_title": video_info.get("title", "Unknown Title"),
+            "duration_seconds": video_info.get("duration", 0)
         }
-        print(json.dumps(final_result), flush=True)
 
-    except (RegexMatchError, VideoUnavailable) as e:
-        log.error(f"❌ Video not available or URL is invalid: {e}")
-        error_result = {"type": "result", "status": "failed", "error": str(e)}
+        # The final JSON for api_server.py is printed to stdout
+        print(json.dumps(final_result), flush=True)
+        log.info(f"✅ 音訊下載成功: {final_path}")
+
+    except subprocess.CalledProcessError as e:
+        log.error(f"❌ yt-dlp 執行失敗。返回碼: {e.returncode}")
+        log.error(f"Stderr: {e.stderr}")
+        error_result = {"type": "result", "status": "failed", "error": e.stderr}
         print(json.dumps(error_result), flush=True)
         sys.exit(1)
     except Exception as e:
-        log.critical(f"❌ An unexpected error occurred during download: {e}", exc_info=True)
+        log.error(f"❌ 下載過程中發生未預期的錯誤: {e}", exc_info=True)
         error_result = {"type": "result", "status": "failed", "error": str(e)}
         print(json.dumps(error_result), flush=True)
         sys.exit(1)
 
-
 def main():
-    """
-    主函數，解析命令列參數並執行下載。
-    """
-    parser = argparse.ArgumentParser(description="YouTube 音訊下載工具。")
-    parser.add_argument("--url", type=str, required=True, help="要下載的 YouTube 影片 URL。")
-    parser.add_argument("--output-dir", type=str, required=True, help="儲存下載音訊的目錄。")
+    parser = argparse.ArgumentParser(description="YouTube 音訊下載工具 (使用 yt-dlp)。")
+    parser.add_argument("--url", type=str, required=True, help="YouTube URL.")
+    parser.add_argument("--output-dir", type=str, required=True, help="儲存音訊的目錄。")
+    parser.add_argument("--custom-filename", type=str, default=None, help="自訂的檔案名稱 (不含副檔名)。")
 
     args = parser.parse_args()
 
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    download_audio(args.url, output_path)
+    download_audio(args.url, output_path, args.custom_filename)
 
 if __name__ == "__main__":
     main()

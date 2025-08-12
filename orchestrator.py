@@ -117,6 +117,12 @@ def main():
         default=5,
         help="心跳及健康檢查的間隔時間（秒）。"
     )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="指定 API 伺服器運行的固定埠號。如果未提供，將會隨機指派。"
+    )
     args = parser.parse_args()
 
     # DB Manager 會處理初始化，所以這裡不需要再呼叫
@@ -174,8 +180,14 @@ def main():
         # 此時，我們已確認服務就緒，get_client() 應能立即成功
         db_client = get_client()
 
-        # 3. 尋找可用埠號並啟動 API 伺服器
-        api_port = find_free_port()
+        # 3. 根據參數決定埠號並啟動 API 伺服器
+        if args.port:
+            api_port = args.port
+            log.info(f"使用指定的固定埠號: {api_port}")
+        else:
+            api_port = find_free_port()
+            log.info(f"找到一個隨機的空閒埠號: {api_port}")
+
         api_server_cmd = [sys.executable, "api_server.py", "--port", str(api_port)]
         if args.mock:
             api_server_cmd.append("--mock")

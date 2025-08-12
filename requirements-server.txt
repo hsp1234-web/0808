@@ -3,3 +3,9 @@ fastapi
 uvicorn[standard]
 python-multipart
 psutil
+
+# For process management
+circus
+
+# For health checks in runner scripts
+requests

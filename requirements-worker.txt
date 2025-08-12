@@ -7,7 +7,7 @@ faster-whisper
 opencc-python-reimplemented
 
 # For YouTube downloading and Gemini AI processing
-pytubefix
+yt-dlp
 google-generativeai
 pydub
 
@@ -17,3 +17,4 @@ WeasyPrint
 # For local testing and e2e scripts
 requests
 websocket-client
+pytest

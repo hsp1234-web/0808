@@ -12,6 +12,7 @@ import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -28,22 +29,15 @@ if sys.platform != 'win32':
 # --- 時區設定結束 ---
 
 # --- 模式設定 ---
-# 透過命令列旗標決定是否啟用模擬模式
-import argparse
-cli_parser = argparse.ArgumentParser()
-cli_parser.add_argument(
-    "--mock",
-    action="store_true",
-    help="啟用模擬模式，將使用 mock_transcriber.py。"
-)
-cli_args, _ = cli_parser.parse_known_args()
-IS_MOCK_MODE = cli_args.mock
+# JULES: 改為透過環境變數來決定模擬模式，以便與 Circus 整合
+# 預設為非模擬模式 (真實模式)
+IS_MOCK_MODE = os.environ.get("API_MODE", "real") == "mock"
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
 ROOT_DIR = Path(__file__).resolve().parent
 
-# --- 日誌設定 ---
+# --- 主日誌設定 ---
 # 主日誌器
 logging.basicConfig(
     level=logging.INFO,
@@ -64,20 +58,9 @@ def setup_database_logging():
     except Exception as e:
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
-# 建立一個專門用來記錄前端操作的日誌器
-run_log_file = ROOT_DIR / "run_log.txt"
-action_log = logging.getLogger('frontend_action')
-action_log.setLevel(logging.INFO)
 
-# 為了確保每次執行都是乾淨的，先清空日誌檔案
-if run_log_file.exists():
-    run_log_file.unlink()
+# Frontend action logging is now handled by the centralized database logger.
 
-# 為 action_log 新增一個 FileHandler
-file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-action_log.addHandler(file_handler)
-action_log.propagate = False # 防止日誌傳播到 root logger，避免在控制台重複輸出
 
 # --- WebSocket 連線管理器 ---
 class ConnectionManager:
@@ -107,13 +90,34 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+from contextlib import asynccontextmanager
+
 # --- DB 客戶端 ---
 # 在模組加載時獲取客戶端單例
 # 客戶端內部有重試機制，會等待 DB 管理者服務就緒
 db_client = get_client()
 
+# --- FastAPI Lifespan Manager ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在應用程式啟動時執行的程式碼
+    setup_database_logging()
+    log.info("資料庫日誌處理器已透過 lifespan 事件設定。")
+    yield
+    # 可以在此處加入應用程式關閉時執行的程式碼
+
 # --- FastAPI 應用實例 ---
-app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0")
+app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0", lifespan=lifespan)
+
+# --- 中介軟體 (Middleware) ---
+# JULES: 新增 CORS 中介軟體以允許來自瀏覽器腳本的跨來源請求
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允許所有來源
+    allow_credentials=True,
+    allow_methods=["*"],  # 允許所有方法
+    allow_headers=["*"],  # 允許所有標頭
+)
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
@@ -147,7 +151,9 @@ def check_model_exists(model_size: str) -> bool:
     """
     檢查指定的 Whisper 模型是否已經被下載到本地快取。
     """
-    tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+    # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
+    force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
+    tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "tools/transcriber.py"
     log.info(f"使用 '{tool_script}' 檢查模型 '{model_size}' 是否存在...")
 
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
@@ -194,6 +200,7 @@ async def create_transcription_task(
     # 3. 根據模型是否存在來建立任務
     transcription_payload = {
         "input_file": str(saved_file_path),
+        "original_filename": file.filename, # JULES'S FIX: Store the original filename
         "output_dir": "transcripts",
         "model_size": model_size,
         "language": language,
@@ -252,14 +259,17 @@ async def get_task_status_endpoint(task_id: str):
 
 
 @app.post("/api/log/action", status_code=200)
-async def log_frontend_action(payload: Dict):
+async def log_action_endpoint(payload: Dict):
     """
-    接收前端發送的操作日誌，並使用專門的日誌器記錄到檔案。
+    接收前端發送的操作日誌，並透過資料庫日誌處理器記錄。
     """
     action = payload.get("action", "unknown_action")
-    # 為了讓日誌檔案更具可讀性，我們只記錄 action 本身
-    action_log.info(f"[FRONTEND ACTION] {action}")
-    log.info(f"📝 記錄前端操作: {action}") # 在控制台也顯示日誌
+    # 獲取一個專門的 logger 來標識這些日誌的來源為 'frontend_action'
+    # DatabaseLogHandler 會擷取這個日誌，並將其與 logger 名稱一起存入資料庫
+    action_logger = logging.getLogger('frontend_action')
+    action_logger.info(action)
+
+    log.info(f"📝 已將前端操作記錄到資料庫: {action}") # 同時在主控台也顯示日誌
     return {"status": "logged"}
 
 
@@ -402,16 +412,142 @@ async def download_transcript(task_id: str):
         raise HTTPException(status_code=500, detail="無法解析任務結果。")
 
 
+@app.post("/api/rename/{task_id}", status_code=200)
+async def rename_task_file(task_id: str, request: Request):
+    """
+    重新命名與已完成任務關聯的檔案。
+    """
+    log.info(f"收到重新命名任務 {task_id} 的請求。")
+    try:
+        data = await request.json()
+        new_filename_base = data.get("new_filename")
+        if not new_filename_base:
+            raise HTTPException(status_code=400, detail="請求中未提供 'new_filename'。")
+
+        task = db_client.get_task_status(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
+        if task['status'] != 'completed':
+            raise HTTPException(status_code=400, detail="只能重新命名已完成的任務。")
+
+        result_data = json.loads(task['result'])
+        old_path_str = result_data.get("output_path")
+        if not old_path_str:
+            raise HTTPException(status_code=500, detail="任務結果中找不到檔案路徑。")
+
+        old_path = Path(old_path_str)
+        file_extension = old_path.suffix
+        new_path = old_path.with_name(f"{new_filename_base}{file_extension}")
+
+        if old_path == new_path:
+            return {"status": "success", "message": "新舊檔名相同，無需變更。", "new_filename": new_filename_base}
+
+        if new_path.exists():
+            raise HTTPException(status_code=409, detail=f"目標檔名 {new_path.name} 已存在。")
+
+        os.rename(old_path, new_path)
+        log.info(f"檔案已從 {old_path} 重新命名為 {new_path}")
+
+        # Update the result in the database
+        result_data["output_path"] = str(new_path)
+        result_data["video_title"] = new_filename_base
+
+        db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+        log.info(f"已更新資料庫中任務 {task_id} 的結果。")
+
+        return {"status": "success", "message": "檔案重新命名成功。", "new_filename": new_filename_base}
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="無法解析任務結果。")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="找不到要重新命名的原始檔案。")
+    except Exception as e:
+        log.error(f"❌ 重新命名檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
+
+
+# --- 提示詞管理 API ---
+PROMPTS_FILE_PATH = ROOT_DIR / "prompts" / "default_prompts.json"
+
+@app.get("/api/prompts")
+async def get_prompts():
+    """讀取並回傳 prompts/default_prompts.json 的內容。"""
+    if not PROMPTS_FILE_PATH.is_file():
+        log.error(f"提示詞檔案遺失: {PROMPTS_FILE_PATH}")
+        raise HTTPException(status_code=404, detail="提示詞設定檔 (default_prompts.json) 找不到。")
+    try:
+        with open(PROMPTS_FILE_PATH, 'r', encoding='utf-8') as f:
+            prompts = json.load(f)
+        return JSONResponse(content=prompts)
+    except Exception as e:
+        log.error(f"讀取或解析提示詞檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="無法讀取或解析提示詞檔案。")
+
+@app.post("/api/prompts")
+async def save_prompts(request: Request):
+    """接收前端傳來的 JSON 並儲存至 prompts/default_prompts.json。"""
+    try:
+        new_prompts = await request.json()
+        # 進行基本的驗證，確保它是一個字典
+        if not isinstance(new_prompts, dict):
+            raise HTTPException(status_code=400, detail="無效的資料格式，應為 JSON 物件。")
+
+        with open(PROMPTS_FILE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+
+        log.info(f"✅ 提示詞已成功儲存至: {PROMPTS_FILE_PATH}")
+        return {"status": "success", "message": "提示詞已成功更新。"}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="請求內容不是有效的 JSON 格式。")
+    except Exception as e:
+        log.error(f"儲存提示詞檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"儲存提示詞檔案時發生伺服器內部錯誤: {e}")
+
+
 # --- YouTube 功能相關 API ---
 
-@app.get("/api/youtube/status")
-async def get_youtube_status():
-    """檢查 YouTube 功能是否已啟用 (透過檢查 GOOGLE_API_KEY)。"""
-    # 在模擬模式下，永遠回傳啟用
-    if IS_MOCK_MODE:
-        return {"enabled": True}
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    return {"enabled": bool(api_key)}
+@app.post("/api/youtube/validate_api_key")
+async def validate_api_key(request: Request):
+    """接收前端傳來的 API Key 並進行驗證。"""
+    try:
+        payload = await request.json()
+        api_key = payload.get("api_key")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="未提供 API 金鑰。")
+
+        # 在模擬模式下，只要金鑰非空就視為有效
+        if IS_MOCK_MODE:
+            log.info("模擬模式：將非空 API 金鑰視為有效。")
+            return {"valid": True}
+
+        # 真實模式下，呼叫工具進行驗證
+        tool_script = "tools/gemini_processor.py"
+        cmd = [sys.executable, tool_script, "--command=validate_key"]
+
+        # 將金鑰作為環境變數傳遞給子程序，更安全
+        env = os.environ.copy()
+        env["GOOGLE_API_KEY"] = api_key
+
+        # 設定 check=False，因為我們預期在金鑰無效時程序會失敗
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=env, check=False)
+
+        if result.returncode == 0:
+            log.info(f"API 金鑰驗證成功。")
+            return {"valid": True}
+        else:
+            log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
+            # 嘗試從 stderr 中提取更具體的錯誤訊息
+            error_message = result.stderr.strip()
+            if "API key not valid" in error_message:
+                detail = "API 金鑰無效。請檢查您的金鑰是否正確。"
+            else:
+                detail = "金鑰驗證失敗，可能是網路問題或金鑰權限不足。"
+            return JSONResponse(status_code=400, content={"valid": False, "detail": detail})
+
+    except Exception as e:
+        log.error(f"驗證 API 金鑰時發生伺服器內部錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
+
 
 @app.get("/api/youtube/models")
 async def get_youtube_models():
@@ -425,47 +561,81 @@ async def get_youtube_models():
             ]
         }
 
-    # 真實模式下，可以從 gemini_processor.py 獲取
+    # 真實模式下，從 gemini_processor.py 獲取
+    # 注意：此端點現在依賴於一個有效的 GOOGLE_API_KEY 環境變數
     try:
+        if not os.environ.get("GOOGLE_API_KEY"):
+             raise HTTPException(status_code=401, detail="後端尚未設定有效的 Google API 金鑰。")
+
         tool_script = "tools/gemini_processor.py"
         cmd = [sys.executable, tool_script, "--command=list_models"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
         models = json.loads(result.stdout)
         return {"models": models}
+    except subprocess.CalledProcessError as e:
+        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {e.stderr}")
+        raise HTTPException(status_code=401, detail="無法使用提供的 API 金鑰獲取模型列表。")
     except Exception as e:
         log.error(f"獲取 Gemini 模型列表時發生錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
 
+
 @app.post("/api/youtube/process", status_code=202)
 async def process_youtube_urls(request: Request):
-    """接收一或多個 YouTube URL，為每一個 URL 建立處理任務。"""
+    """
+    接收 YouTube URL，並根據前端傳來的參數，建立對應的下載和 AI 分析任務。
+    """
     payload = await request.json()
-    urls = payload.get("urls", [])
-    model = payload.get("model")
+    requests_list = payload.get("requests", [])
 
-    if not urls or not model:
-        raise HTTPException(status_code=400, detail="請求中必須包含 'urls' 和 'model'。")
+    # 新的彈性參數
+    model = payload.get("model")
+    tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
+    output_format = payload.get("output_format", "html") # "html" or "txt"
+    download_only = payload.get("download_only", False)
+
+    if not requests_list:
+        raise HTTPException(status_code=400, detail="請求中必須包含 'requests'。")
+    if not download_only and not model:
+        raise HTTPException(status_code=400, detail="執行 AI 分析時必須提供 'model'。")
 
     tasks = []
-    for url in urls:
-        if not url.strip():
+    for req_item in requests_list:
+        url = req_item.get("url")
+        filename = req_item.get("filename")
+
+        if not url or not url.strip():
             continue
 
-        download_task_id = str(uuid.uuid4())
-        process_task_id = str(uuid.uuid4())
+        task_id = str(uuid.uuid4())
 
-        download_payload = { "url": url, "output_dir": str(UPLOADS_DIR) }
-        process_payload = { "model": model, "output_dir": "transcripts" }
+        if download_only:
+            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
+            tasks.append({"url": url, "task_id": task_id})
+        else:
+            download_task_id = task_id
+            process_task_id = str(uuid.uuid4())
 
-        db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
-        db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
+            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            # 將所有新參數存入 process 任務的 payload
+            process_payload = {
+                "model": model,
+                "output_dir": "transcripts",
+                "tasks": tasks_to_run,
+                "output_format": output_format
+            }
 
-        tasks.append({
-            "url": url,
-            "type": "youtube", # 新增類型以利前端辨識
-            "download_task_id": download_task_id,
-            "process_task_id": process_task_id
-        })
+            db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
+            db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
+
+            # JULES'S FIX: Return both task IDs so the frontend can track the full chain.
+            tasks.append({
+                "url": url,
+                "task_id": download_task_id, # For display and initial tracking
+                "final_task_id": process_task_id, # For listening to the final result
+                "task_type": "youtube_process_chain"
+            })
 
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
 
@@ -543,12 +713,13 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     thread.start()
 
 
-def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop):
+def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop, original_filename: Optional[str] = None):
     """
     在一個單獨的執行緒中執行轉錄，並透過 WebSocket 即時串流結果。
     """
     def _transcribe_in_thread():
-        log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {file_path}")
+        display_name = original_filename or file_path
+        log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {display_name}")
 
         # 準備一個假的輸出檔案路徑，因為 transcriber.py 需要它，但我們實際上是從 stdout 讀取
         output_dir = ROOT_DIR / "transcripts"
@@ -556,7 +727,9 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
         dummy_output_path = output_dir / f"{task_id}.txt"
 
         try:
-            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE else "tools/transcriber.py"
+            # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
+            force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
+            tool_script = "tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "tools/transcriber.py"
             cmd = [
                 sys.executable,
                 tool_script,
@@ -581,9 +754,11 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 bufsize=1 # Line-buffered
             )
 
+            # JULES'S FIX: Use the original filename for the UI if available.
+            start_message_filename = original_filename or Path(file_path).name
             start_message = {
                 "type": "TRANSCRIPTION_STATUS",
-                "payload": {"task_id": task_id, "status": "starting", "filename": Path(file_path).name}
+                "payload": {"task_id": task_id, "status": "starting", "filename": start_message_filename}
             }
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(start_message), loop)
 
@@ -595,11 +770,13 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
                     try:
                         data = json.loads(line)
-                        message = {
-                            "type": "TRANSCRIPTION_UPDATE",
-                            "payload": {"task_id": task_id, **data}
-                        }
-                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                        # JULES' FIX: 只轉發 'segment' 類型的訊息以避免非預期的 UI 元素
+                        if data.get("type") == "segment":
+                            message = {
+                                "type": "TRANSCRIPTION_UPDATE",
+                                "payload": {"task_id": task_id, **data}
+                            }
+                            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
                     except json.JSONDecodeError:
                         log.warning(f"[執行緒] 無法解析來自 transcriber 的 JSON 行: {line}")
 
@@ -644,105 +821,154 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
 
 def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
-    """在一個單獨的執行緒中執行 YouTube 處理流程。"""
+    """在一個單獨的執行緒中執行 YouTube 處理流程（已更新為彈性模式）。"""
     def _process_in_thread():
-        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始任務 ID: {task_id}")
+        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: {task_id}")
 
-        download_task_id = task_id
+        task_info = db_client.get_task_status(task_id)
+        if not task_info:
+            log.error(f"❌ [執行緒] 找不到起始任務 {task_id}")
+            return
+
+        task_type = task_info.get('type')
+        dependent_task_id = None # 初始化
 
         try:
-            # 1. 下載音訊
-            download_task_info = db_client.get_task_status(download_task_id)
-            if not download_task_info:
-                raise ValueError(f"找不到下載任務 {download_task_id}")
-
-            payload = json.loads(download_task_info['payload'])
+            # --- 步驟 1: 下載音訊 (所有 YouTube 任務都需要) ---
+            payload = json.loads(task_info['payload'])
             url = payload['url']
+            custom_filename = payload.get("custom_filename")
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": download_task_id, "status": "downloading", "message": f"正在下載: {url}"}
+                "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載: {url}", "task_type": task_type}
             }), loop)
 
-            tool_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
-            cmd = [sys.executable, tool_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
+            downloader_script = "tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "tools/youtube_downloader.py"
+            cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
+            if custom_filename:
+                cmd_dl.extend(["--custom-filename", custom_filename])
 
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+            proc_env = os.environ.copy()
+            process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
 
             last_line = ""
-            if process.stdout:
-                for line in iter(process.stdout.readline, ''):
+            if process_dl.stdout:
+                for line in iter(process_dl.stdout.readline, ''):
                     line = line.strip()
-                    if line:
-                        last_line = line
-                        # Optional: broadcast progress if the tool supports it
-                        try:
-                            progress_data = json.loads(line)
-                            if progress_data.get("type") == "progress":
-                                asyncio.run_coroutine_threadsafe(manager.broadcast_json({"type": "YOUTUBE_DOWNLOAD_PROGRESS", "payload": progress_data}), loop)
-                        except json.JSONDecodeError:
-                            pass # Ignore non-json lines
+                    if line: last_line = line
 
-            process.wait()
-            if process.returncode != 0:
-                stderr_output = process.stderr.read() if process.stderr else "N/A"
-                raise RuntimeError(f"YouTube downloader failed with exit code {process.returncode}: {stderr_output}")
+            process_dl.wait()
+            if process_dl.returncode != 0:
+                stderr_output = process_dl.stderr.read() if process_dl.stderr else "下載器未提供錯誤訊息。"
+                raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
 
             download_result = json.loads(last_line)
-            # JULES: 修正此處的鍵名，根據 downloader 工具的實際輸出，應為 'output_path'
             audio_file_path = download_result['output_path']
-            video_title = download_result.get('video_title', '無標題影片') # 從下載結果中獲取標題
-
-            db_client.update_task_status(download_task_id, 'completed', json.dumps(download_result))
+            video_title = download_result.get('video_title', '無標題影片')
             log.info(f"✅ [執行緒] YouTube 音訊下載完成: {audio_file_path}")
 
-            # 2. 觸發 AI 處理
-            # 找到依賴此下載任務的處理任務
-            dependent_task_id = db_client.find_dependent_task(download_task_id)
+            # --- 步驟 2: 根據任務類型決定下一步 ---
+            if task_type == 'youtube_download_only':
+                db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+                log.info(f"✅ [執行緒] '僅下載音訊' 任務 {task_id} 完成。")
+                asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                    "type": "YOUTUBE_STATUS",
+                    "payload": {"task_id": task_id, "status": "completed", "result": download_result, "task_type": "download_only"}
+                }), loop)
+                return
+
+            # --- 步驟 3: 執行 Gemini AI 分析 (完整流程) ---
+            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+
+            dependent_task_id = db_client.find_dependent_task(task_id)
             if not dependent_task_id:
-                raise ValueError(f"找不到依賴於 {download_task_id} 的處理任務")
+                raise ValueError(f"找不到依賴於下載任務 {task_id} 的 gemini_process 任務")
 
             process_task_info = db_client.get_task_status(dependent_task_id)
             process_payload = json.loads(process_task_info['payload'])
-            model = process_payload['model']
 
-            # 通知前端開始處理
+            # 從 payload 讀取新的彈性參數
+            model = process_payload['model']
+            tasks_to_run = process_payload.get('tasks', 'summary,transcript')
+            output_format = process_payload.get('output_format', 'html')
+
+            log.info(f"執行 Gemini 分析，任務: '{tasks_to_run}', 格式: '{output_format}'")
+
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析..."}
+                "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析...", "task_type": "gemini_process"}
             }), loop)
 
-            tool_script = "tools/mock_gemini_processor.py" if IS_MOCK_MODE else "tools/gemini_processor.py"
-            # JULES: 確保傳遞給工具的 output_dir 是相對於專案根目錄的
+            processor_script = "tools/mock_gemini_processor.py" if IS_MOCK_MODE else "tools/gemini_processor.py"
             report_output_dir = ROOT_DIR / "transcripts"
             report_output_dir.mkdir(exist_ok=True)
 
-            cmd = [
-                sys.executable,
-                tool_script,
+            # 建構包含新參數的指令
+            cmd_process = [
+                sys.executable, processor_script,
+                "--command=process",
                 "--audio-file", audio_file_path,
                 "--model", model,
                 "--output-dir", str(report_output_dir),
-                "--video-title", video_title  # 將標題傳遞給處理器
+                "--video-title", video_title,
+                "--tasks", tasks_to_run,
+                "--output-format", output_format
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
-            process_result = json.loads(result.stdout)
+            # JULES'S REFACTOR: Use Popen to stream progress updates from stderr
+            proc_env = os.environ.copy()
+            process_gemini = subprocess.Popen(
+                cmd_process,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                env=proc_env
+            )
 
+            # Stream progress from stderr
+            if process_gemini.stderr:
+                for line in iter(process_gemini.stderr.readline, ''):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        # We expect progress updates to be JSON
+                        progress_data = json.loads(line)
+                        if progress_data.get("type") == "progress":
+                            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                                "type": "YOUTUBE_STATUS",
+                                "payload": {
+                                    "task_id": dependent_task_id,
+                                    "status": "processing",
+                                    "message": progress_data.get("detail", "AI 分析中..."),
+                                    "task_type": "gemini_process",
+                                    "progress_code": progress_data.get("status") # e.g., "uploading"
+                                }
+                            }), loop)
+                    except json.JSONDecodeError:
+                        # It might just be a regular log line, we can ignore it for broadcast
+                        log.debug(f"[stderr from gemini_processor]: {line}")
+
+            # Wait for the process to finish and get the final result from stdout
+            stdout_output, _ = process_gemini.communicate()
+            if process_gemini.returncode != 0:
+                raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+
+            process_result = json.loads(stdout_output)
             db_client.update_task_status(dependent_task_id, 'completed', json.dumps(process_result))
-            report_path = process_result.get("pdf_report_path") or process_result.get("html_report_path")
-            log.info(f"✅ [執行緒] Gemini AI 處理完成。報告位於: {report_path}")
+            log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
-            # 發送最終完成訊息
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "completed", "result": process_result}
+                "payload": {"task_id": dependent_task_id, "status": "completed", "result": process_result, "task_type": "gemini_process"}
             }), loop)
 
         except Exception as e:
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
             # 確定要更新哪個任務為失敗狀態
-            failed_task_id = 'dependent_task_id' if 'dependent_task_id' in locals() else download_task_id
+            failed_task_id = dependent_task_id if dependent_task_id else task_id
             db_client.update_task_status(failed_task_id, 'failed', json.dumps({"error": str(e)}))
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
@@ -751,6 +977,27 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
 
     thread = threading.Thread(target=_process_in_thread)
     thread.start()
+
+
+@app.get("/api/debug/latest_frontend_action_log")
+async def get_latest_frontend_action_log():
+    """
+    [僅供測試] 獲取最新的前端操作日誌。
+    用於 E2E 測試，以驗證日誌是否已成功寫入資料庫。
+    """
+    try:
+        # 我們只關心來自 'frontend_action' logger 的日誌
+        logs = db_client.get_system_logs(sources=['frontend_action'])
+        if not logs:
+            # 如果沒有日誌，返回一個清晰的空回應，而不是 404
+            return JSONResponse(content={"latest_log": None}, status_code=200)
+
+        # get_system_logs 按時間戳升序排序，所以最後一個就是最新的
+        latest_log = logs[-1]
+        return JSONResponse(content={"latest_log": latest_log})
+    except Exception as e:
+        log.error(f"❌ 查詢最新前端日誌時出錯: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="查詢最新前端日誌時發生內部錯誤")
 
 
 @app.websocket("/api/ws")
@@ -796,6 +1043,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         model_size = task_payload.get("model_size", "tiny")
                         language = task_payload.get("language")
                         beam_size = task_payload.get("beam_size", 5)
+                        original_filename = task_payload.get("original_filename") # JULES'S FIX
                     except (json.JSONDecodeError, KeyError) as e:
                         await manager.broadcast_json({"type": "ERROR", "payload": f"解析任務 {task_id} 的 payload 失敗: {e}"})
                         continue
@@ -803,9 +1051,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     if not file_path:
                         await manager.broadcast_json({"type": "ERROR", "payload": "任務 payload 中缺少檔案路徑"})
                     else:
-                        log.info(f"收到開始轉錄 '{file_path}' 的請求 (來自任務 {task_id})。")
+                        display_name = original_filename or file_path
+                        log.info(f"收到開始轉錄 '{display_name}' 的請求 (來自任務 {task_id})。")
                         loop = asyncio.get_running_loop()
-                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop)
+                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop, original_filename=original_filename)
 
                 elif msg_type == "START_YOUTUBE_PROCESSING":
                     task_id = payload.get("task_id") # This is the download_task_id
@@ -890,8 +1139,8 @@ if __name__ == "__main__":
     # JULES: 移除此處的資料庫初始化呼叫。
     # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
 
-    # 設定資料庫日誌
-    setup_database_logging()
+    # JULES'S FIX: The database logging is now set up via the app's lifespan event.
+    # setup_database_logging() is no longer needed here.
 
     log.info("🚀 啟動 API 伺服器 (v3)...")
     log.info(f"請在瀏覽器中開啟 http://127.0.0.1:{args.port}")
