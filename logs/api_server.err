@@ -1,493 +1,212 @@
-2025-08-12 00:24:48,143 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:24:48,143 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:24:48,228 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:24:48,229 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [4427]
+2025-08-12 07:56:12,152 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 07:56:12,152 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 07:56:12,305 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 07:56:12,306 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [7186]
 INFO:     Waiting for application startup.
-2025-08-12 00:24:48,283 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:24:48,286 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 07:56:12,392 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 07:56:12,401 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:40496 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:24:49,300 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
-INFO:     connection open
-2025-08-12 00:24:49,303 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "2680ed28-14cd-4289-b242-ffcc9e81d1c6"}}
-2025-08-12 00:24:49,305 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 2680ed28-14cd-4289-b242-ffcc9e81d1c6)。
-2025-08-12 00:24:49,306 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 2680ed28-14cd-4289-b242-ffcc9e81d1c6
-2025-08-12 00:24:49,307 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:24:49,310 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:24:49,313 - api_server - INFO - ✅ 回傳任務 2680ed28-14cd-4289-b242-ffcc9e81d1c6 的狀態: pending
-INFO:     connection closed
-2025-08-12 00:24:50,086 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:24:49,856 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:24:50,036 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
-Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:24:49,856 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:24:50,036 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
-
-2025-08-12 00:24:54,320 - api_server - INFO - ✅ 回傳任務 2680ed28-14cd-4289-b242-ffcc9e81d1c6 的狀態: failed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [4427]
-2025-08-12 00:25:59,483 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:25:59,483 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:25:59,551 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:25:59,551 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [5471]
+INFO:     Finished server process [7186]
+2025-08-12 07:57:04,806 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 07:57:04,806 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 07:57:04,884 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 07:57:04,884 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [7570]
 INFO:     Waiting for application startup.
-2025-08-12 00:25:59,585 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:25:59,588 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 07:57:04,923 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 07:57:04,929 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:42780 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:25:59,728 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:36404 - "WebSocket /api/ws" [accepted]
+2025-08-12 07:57:05,925 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:25:59,731 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "879e2319-b30d-4009-8d0f-a0d4b67beec2"}}
-2025-08-12 00:25:59,733 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 879e2319-b30d-4009-8d0f-a0d4b67beec2)。
-2025-08-12 00:25:59,734 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 879e2319-b30d-4009-8d0f-a0d4b67beec2
-2025-08-12 00:25:59,735 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:25:59,738 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:25:59,741 - api_server - INFO - ✅ 回傳任務 879e2319-b30d-4009-8d0f-a0d4b67beec2 的狀態: pending
+2025-08-12 07:57:05,930 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "c7d3a445-a445-41ba-83ff-e8f9d1380906"}}
+2025-08-12 07:57:05,932 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: c7d3a445-a445-41ba-83ff-e8f9d1380906)。
+2025-08-12 07:57:05,935 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: c7d3a445-a445-41ba-83ff-e8f9d1380906
+2025-08-12 07:57:05,936 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 07:57:05,942 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 07:57:05,947 - api_server - INFO - ✅ 回傳任務 c7d3a445-a445-41ba-83ff-e8f9d1380906 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:26:00,279 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:26:00,087 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:26:00,232 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 07:57:06,240 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 07:57:06,252 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 07:57:08,141 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:26:00,087 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:26:00,232 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 891, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:26:04,748 - api_server - INFO - ✅ 回傳任務 879e2319-b30d-4009-8d0f-a0d4b67beec2 的狀態: failed
+2025-08-12 07:57:10,956 - api_server - INFO - ✅ 回傳任務 c7d3a445-a445-41ba-83ff-e8f9d1380906 的狀態: completed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [5471]
-2025-08-12 00:26:32,213 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:26:32,213 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:26:32,280 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:26:32,280 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [5885]
+INFO:     Finished server process [7570]
+2025-08-12 07:57:42,596 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 07:57:42,597 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 07:57:42,681 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 07:57:42,681 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [7898]
 INFO:     Waiting for application startup.
-2025-08-12 00:26:32,313 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:26:32,316 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 07:57:42,723 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 07:57:42,729 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:38482 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:26:32,430 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:36676 - "WebSocket /api/ws" [accepted]
+2025-08-12 07:57:43,747 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:26:32,432 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "780b9711-fffa-4386-ab15-b246ed352a8d"}}
-2025-08-12 00:26:32,433 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 780b9711-fffa-4386-ab15-b246ed352a8d)。
-2025-08-12 00:26:32,435 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 780b9711-fffa-4386-ab15-b246ed352a8d
-2025-08-12 00:26:32,436 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:26:32,438 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:26:32,442 - api_server - INFO - ✅ 回傳任務 780b9711-fffa-4386-ab15-b246ed352a8d 的狀態: pending
+2025-08-12 07:57:43,751 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "f27a157c-6bac-4d4e-bac6-a09ac9c5234c"}}
+2025-08-12 07:57:43,753 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: f27a157c-6bac-4d4e-bac6-a09ac9c5234c)。
+2025-08-12 07:57:43,755 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: f27a157c-6bac-4d4e-bac6-a09ac9c5234c
+2025-08-12 07:57:43,756 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 07:57:43,758 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 07:57:43,762 - api_server - INFO - ✅ 回傳任務 f27a157c-6bac-4d4e-bac6-a09ac9c5234c 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:26:32,964 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:26:32,786 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:26:32,919 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 07:57:43,946 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 07:57:43,955 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 07:57:45,160 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:26:32,786 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:26:32,919 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 891, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:26:37,449 - api_server - INFO - ✅ 回傳任務 780b9711-fffa-4386-ab15-b246ed352a8d 的狀態: failed
+2025-08-12 07:57:48,770 - api_server - INFO - ✅ 回傳任務 f27a157c-6bac-4d4e-bac6-a09ac9c5234c 的狀態: completed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [5885]
-2025-08-12 00:27:17,404 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:27:17,404 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:27:17,472 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:27:17,472 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [6363]
+INFO:     Finished server process [7898]
+2025-08-12 07:58:53,461 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 07:58:53,461 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 07:58:53,539 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 07:58:53,539 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [8446]
 INFO:     Waiting for application startup.
-2025-08-12 00:27:17,506 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:27:17,509 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 07:58:53,581 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 07:58:53,586 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:41234 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:27:17,648 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:46188 - "WebSocket /api/ws" [accepted]
+2025-08-12 07:58:54,600 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:27:17,651 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "ed3c7530-751c-4653-bfbd-75706b9c5326"}}
-2025-08-12 00:27:17,652 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: ed3c7530-751c-4653-bfbd-75706b9c5326)。
-2025-08-12 00:27:17,654 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: ed3c7530-751c-4653-bfbd-75706b9c5326
-2025-08-12 00:27:17,655 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:27:17,658 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:27:17,661 - api_server - INFO - ✅ 回傳任務 ed3c7530-751c-4653-bfbd-75706b9c5326 的狀態: pending
+2025-08-12 07:58:54,607 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "75db1ee9-fb63-4127-a9ac-f03bb70df5e1"}}
+2025-08-12 07:58:54,610 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 75db1ee9-fb63-4127-a9ac-f03bb70df5e1)。
+2025-08-12 07:58:54,613 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: 75db1ee9-fb63-4127-a9ac-f03bb70df5e1
+2025-08-12 07:58:54,616 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 07:58:54,622 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 07:58:54,627 - api_server - INFO - ✅ 回傳任務 75db1ee9-fb63-4127-a9ac-f03bb70df5e1 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:27:18,190 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:27:18,011 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:27:18,143 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 07:58:54,843 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 07:58:54,854 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 07:58:56,214 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:27:18,011 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:27:18,143 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 891, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:27:22,667 - api_server - INFO - ✅ 回傳任務 ed3c7530-751c-4653-bfbd-75706b9c5326 的狀態: failed
+2025-08-12 07:58:59,637 - api_server - INFO - ✅ 回傳任務 75db1ee9-fb63-4127-a9ac-f03bb70df5e1 的狀態: completed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [6363]
-2025-08-12 00:29:12,283 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:29:12,283 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:29:12,352 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:29:12,353 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [9685]
+INFO:     Finished server process [8446]
+2025-08-12 07:59:38,380 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 07:59:38,380 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 07:59:38,456 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 07:59:38,456 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [8778]
 INFO:     Waiting for application startup.
-2025-08-12 00:29:12,390 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:29:12,395 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 07:59:38,494 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 07:59:38,499 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:57142 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:29:12,495 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:42266 - "WebSocket /api/ws" [accepted]
+2025-08-12 07:59:39,522 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:29:12,498 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "3ed56948-0215-4e16-9d31-6bd0ae6103a1"}}
-2025-08-12 00:29:12,500 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 3ed56948-0215-4e16-9d31-6bd0ae6103a1)。
-2025-08-12 00:29:12,502 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 3ed56948-0215-4e16-9d31-6bd0ae6103a1
-2025-08-12 00:29:12,503 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:29:12,505 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:29:12,508 - api_server - INFO - ✅ 回傳任務 3ed56948-0215-4e16-9d31-6bd0ae6103a1 的狀態: pending
+2025-08-12 07:59:39,527 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "5fe2e17f-a4d5-47b7-a455-fa7b1921dafd"}}
+2025-08-12 07:59:39,529 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 5fe2e17f-a4d5-47b7-a455-fa7b1921dafd)。
+2025-08-12 07:59:39,531 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: 5fe2e17f-a4d5-47b7-a455-fa7b1921dafd
+2025-08-12 07:59:39,532 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 07:59:39,537 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 07:59:39,542 - api_server - INFO - ✅ 回傳任務 fe281860-43f1-4685-a5fc-7b2a8323b499 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:29:13,067 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:29:12,868 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:29:13,020 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 07:59:39,748 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 07:59:39,758 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 07:59:40,943 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:29:12,868 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:29:13,020 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 891, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:29:17,515 - api_server - INFO - ✅ 回傳任務 3ed56948-0215-4e16-9d31-6bd0ae6103a1 的狀態: failed
+2025-08-12 07:59:44,551 - api_server - INFO - ✅ 回傳任務 fe281860-43f1-4685-a5fc-7b2a8323b499 的狀態: failed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [9685]
-2025-08-12 00:30:21,321 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:30:21,321 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:30:21,400 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:30:21,401 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [10490]
+INFO:     Finished server process [8778]
+2025-08-12 08:00:13,759 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 08:00:13,759 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 08:00:13,835 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 08:00:13,835 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [9167]
 INFO:     Waiting for application startup.
-2025-08-12 00:30:21,442 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:30:21,446 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 08:00:13,876 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 08:00:13,881 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:54110 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:30:21,533 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:39896 - "WebSocket /api/ws" [accepted]
+2025-08-12 08:00:14,884 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:30:21,536 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "74553973-3033-459b-bff2-9c38204cc005"}}
-2025-08-12 00:30:21,537 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 74553973-3033-459b-bff2-9c38204cc005)。
-2025-08-12 00:30:21,539 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 74553973-3033-459b-bff2-9c38204cc005
-2025-08-12 00:30:21,540 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:30:21,543 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:30:21,545 - api_server - INFO - ✅ 回傳任務 74553973-3033-459b-bff2-9c38204cc005 的狀態: pending
+2025-08-12 08:00:14,890 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "6509f377-dfda-4a1a-9997-97645a383531"}}
+2025-08-12 08:00:14,893 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 6509f377-dfda-4a1a-9997-97645a383531)。
+2025-08-12 08:00:14,896 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: 6509f377-dfda-4a1a-9997-97645a383531
+2025-08-12 08:00:14,897 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 08:00:14,901 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 08:00:14,906 - api_server - INFO - ✅ 回傳任務 468af73e-8c5b-466a-8163-d83e2f7e7f39 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:30:22,156 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:30:21,906 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:30:22,105 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 08:00:15,106 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 08:00:15,115 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 08:00:16,398 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:30:21,906 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:30:22,105 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 891, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:30:26,552 - api_server - INFO - ✅ 回傳任務 74553973-3033-459b-bff2-9c38204cc005 的狀態: failed
+2025-08-12 08:00:19,916 - api_server - INFO - ✅ 回傳任務 468af73e-8c5b-466a-8163-d83e2f7e7f39 的狀態: failed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [10490]
-2025-08-12 00:31:08,209 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:31:08,209 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:31:08,278 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:31:08,279 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [11316]
+INFO:     Finished server process [9167]
+2025-08-12 08:01:01,933 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
+2025-08-12 08:01:01,933 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
+2025-08-12 08:01:02,067 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
+2025-08-12 08:01:02,067 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
+INFO:     Started server process [9585]
 INFO:     Waiting for application startup.
-2025-08-12 00:31:08,314 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:31:08,317 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
+2025-08-12 08:01:02,140 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
+2025-08-12 08:01:02,148 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:57344 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:31:08,435 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
+INFO:     127.0.0.1:38168 - "WebSocket /api/ws" [accepted]
+2025-08-12 08:01:02,495 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
 INFO:     connection open
-2025-08-12 00:31:08,438 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "e4324e06-834b-43ef-9a50-39c212004a31"}}
-2025-08-12 00:31:08,439 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: e4324e06-834b-43ef-9a50-39c212004a31)。
-2025-08-12 00:31:08,441 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: e4324e06-834b-43ef-9a50-39c212004a31
-2025-08-12 00:31:08,442 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:31:08,444 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:31:08,448 - api_server - INFO - ✅ 回傳任務 e4324e06-834b-43ef-9a50-39c212004a31 的狀態: pending
+2025-08-12 08:01:02,500 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "23716551-9683-4f56-963c-8a177120080d"}}
+2025-08-12 08:01:02,503 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 23716551-9683-4f56-963c-8a177120080d)。
+2025-08-12 08:01:02,506 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: 23716551-9683-4f56-963c-8a177120080d
+2025-08-12 08:01:02,507 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
+2025-08-12 08:01:02,514 - api_server - INFO - WebSocket 用戶端已離線。
+2025-08-12 08:01:02,520 - api_server - INFO - ✅ 回傳任務 24409176-460f-453c-8177-e3b7ac41ba26 的狀態: pending
 INFO:     connection closed
-2025-08-12 00:31:08,997 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:31:08,795 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:31:08,949 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+2025-08-12 08:01:02,925 - api_server - INFO - ✅ [執行緒] YouTube 音訊下載完成: /app/uploads/dummy_audio.wav
+2025-08-12 08:01:02,939 - api_server - INFO - 執行 Gemini 分析，任務: 'summary,transcript', 格式: 'html'
+2025-08-12 08:01:04,831 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:31:08,795 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=LdeC_0G0E1g
-2025-08-12 00:31:08,949 - youtube_downloader_tool - ERROR - ❌ Video not available or URL is invalid: LdeC_0G0E1g is unavailable
+  File "/app/api_server.py", line 894, in _process_in_thread
+    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+RuntimeError: Gemini processor failed with exit code 1. Stderr: {"type": "result", "status": "failed", "error": "GOOGLE_API_KEY environment variable not set."}
 
-2025-08-12 00:31:13,455 - api_server - INFO - ✅ 回傳任務 e4324e06-834b-43ef-9a50-39c212004a31 的狀態: failed
+2025-08-12 08:01:07,530 - api_server - INFO - ✅ 回傳任務 24409176-460f-453c-8177-e3b7ac41ba26 的狀態: failed
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [11316]
-2025-08-12 00:32:21,888 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:32:21,888 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:32:21,957 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:32:21,957 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [12084]
-INFO:     Waiting for application startup.
-2025-08-12 00:32:21,991 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:32:21,995 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:60554 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:32:22,121 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
-INFO:     connection open
-2025-08-12 00:32:22,124 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "0ba91120-f685-493d-96ab-6d791aba763b"}}
-2025-08-12 00:32:22,125 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 0ba91120-f685-493d-96ab-6d791aba763b)。
-2025-08-12 00:32:22,127 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 0ba91120-f685-493d-96ab-6d791aba763b
-2025-08-12 00:32:22,128 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:32:22,130 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:32:22,133 - api_server - INFO - ✅ 回傳任務 0ba91120-f685-493d-96ab-6d791aba763b 的狀態: pending
-INFO:     connection closed
-2025-08-12 00:32:23,159 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:32:22,488 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw
-2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - 🎬 Video Title: Me at the zoo
-2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - ⏱️ Duration: 19 seconds
-2025-08-12 00:32:22,713 - youtube_downloader_tool - INFO - ⏳ Starting download to /app/uploads/Me_at_the_zoo.mp4...
-2025-08-12 00:32:23,100 - youtube_downloader_tool - CRITICAL - ❌ An unexpected error occurred during download: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/tools/youtube_downloader.py", line 103, in download_audio
-    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py", line 398, in download
-    for chunk in request.stream(
-                 ^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 154, in stream
-    response = _execute_request(
-               ^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 35, in _execute_request
-    return urlopen(request, timeout=timeout)  # nosec
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 215, in urlopen
-    return opener.open(url, data, timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 553, in error
-    result = self._call_chain(*args)
-             ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 745, in http_error_302
-    return self.parent.open(new, timeout=req.timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 559, in error
-    return self._call_chain(*args)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 639, in http_error_default
-    raise HTTPError(req.full_url, code, msg, hdrs, fp)
-urllib.error.HTTPError: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:32:22,488 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw
-2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - 🎬 Video Title: Me at the zoo
-2025-08-12 00:32:22,712 - youtube_downloader_tool - INFO - ⏱️ Duration: 19 seconds
-2025-08-12 00:32:22,713 - youtube_downloader_tool - INFO - ⏳ Starting download to /app/uploads/Me_at_the_zoo.mp4...
-2025-08-12 00:32:23,100 - youtube_downloader_tool - CRITICAL - ❌ An unexpected error occurred during download: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/tools/youtube_downloader.py", line 103, in download_audio
-    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py", line 398, in download
-    for chunk in request.stream(
-                 ^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 154, in stream
-    response = _execute_request(
-               ^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 35, in _execute_request
-    return urlopen(request, timeout=timeout)  # nosec
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 215, in urlopen
-    return opener.open(url, data, timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 553, in error
-    result = self._call_chain(*args)
-             ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 745, in http_error_302
-    return self.parent.open(new, timeout=req.timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 559, in error
-    return self._call_chain(*args)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 639, in http_error_default
-    raise HTTPError(req.full_url, code, msg, hdrs, fp)
-urllib.error.HTTPError: HTTP Error 403: Forbidden
-
-2025-08-12 00:32:27,139 - api_server - INFO - ✅ 回傳任務 0ba91120-f685-493d-96ab-6d791aba763b 的狀態: failed
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [12084]
-2025-08-12 00:32:51,691 - DBClient - INFO - 正在建立一個新的 DBClient 實例...
-2025-08-12 00:32:51,691 - DBClient - INFO - 使用硬編碼的 DB Manager 埠號: 49999
-2025-08-12 00:32:51,806 - api_server - INFO - 🚀 啟動 API 伺服器 (v3)...
-2025-08-12 00:32:51,806 - api_server - INFO - 請在瀏覽器中開啟 http://127.0.0.1:42649
-INFO:     Started server process [12314]
-INFO:     Waiting for application startup.
-2025-08-12 00:32:51,867 - api_server - INFO - 資料庫日誌處理器設定完成 (source: api_server)。
-2025-08-12 00:32:51,872 - api_server - INFO - 資料庫日誌處理器已透過 lifespan 事件設定。
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:42649 (Press CTRL+C to quit)
-INFO:     127.0.0.1:44488 - "WebSocket /api/ws" [accepted]
-2025-08-12 00:32:52,453 - api_server - INFO - 新用戶端連線。目前共 1 個連線。
-INFO:     connection open
-2025-08-12 00:32:52,457 - api_server - INFO - 從 WebSocket 收到訊息: {"type": "START_YOUTUBE_PROCESSING", "payload": {"task_id": "1dd37db7-7966-40bd-9f31-068b025c22b9"}}
-2025-08-12 00:32:52,459 - api_server - INFO - 收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: 1dd37db7-7966-40bd-9f31-068b025c22b9)。
-2025-08-12 00:32:52,463 - api_server - INFO - 🧵 [執行緒] 開始處理 YouTube 任務，ID: 1dd37db7-7966-40bd-9f31-068b025c22b9
-2025-08-12 00:32:52,465 - api_server - INFO - 一個用戶端離線。目前共 0 個連線。
-2025-08-12 00:32:52,472 - api_server - INFO - WebSocket 用戶端已離線。
-2025-08-12 00:32:52,479 - api_server - INFO - ✅ 回傳任務 1dd37db7-7966-40bd-9f31-068b025c22b9 的狀態: pending
-INFO:     connection closed
-2025-08-12 00:32:53,737 - api_server - ERROR - ❌ [執行緒] YouTube 處理鏈中發生錯誤: YouTube downloader failed: 2025-08-12 00:32:53,067 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw
-2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - 🎬 Video Title: Me at the zoo
-2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - ⏱️ Duration: 19 seconds
-2025-08-12 00:32:53,290 - youtube_downloader_tool - INFO - ⏳ Starting download to /app/uploads/Me_at_the_zoo.mp4...
-2025-08-12 00:32:53,674 - youtube_downloader_tool - CRITICAL - ❌ An unexpected error occurred during download: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/tools/youtube_downloader.py", line 103, in download_audio
-    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py", line 398, in download
-    for chunk in request.stream(
-                 ^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 154, in stream
-    response = _execute_request(
-               ^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 35, in _execute_request
-    return urlopen(request, timeout=timeout)  # nosec
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 215, in urlopen
-    return opener.open(url, data, timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 553, in error
-    result = self._call_chain(*args)
-             ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 745, in http_error_302
-    return self.parent.open(new, timeout=req.timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 559, in error
-    return self._call_chain(*args)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 639, in http_error_default
-    raise HTTPError(req.full_url, code, msg, hdrs, fp)
-urllib.error.HTTPError: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/api_server.py", line 752, in _process_in_thread
-    raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
-RuntimeError: YouTube downloader failed: 2025-08-12 00:32:53,067 - youtube_downloader_tool - INFO - 🔗 Connecting to YouTube: https://www.youtube.com/watch?v=jNQXAC9IVRw
-2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - 🎬 Video Title: Me at the zoo
-2025-08-12 00:32:53,289 - youtube_downloader_tool - INFO - ⏱️ Duration: 19 seconds
-2025-08-12 00:32:53,290 - youtube_downloader_tool - INFO - ⏳ Starting download to /app/uploads/Me_at_the_zoo.mp4...
-2025-08-12 00:32:53,674 - youtube_downloader_tool - CRITICAL - ❌ An unexpected error occurred during download: HTTP Error 403: Forbidden
-Traceback (most recent call last):
-  File "/app/tools/youtube_downloader.py", line 103, in download_audio
-    downloaded_path = audio_stream.download(output_path=str(output_dir), filename=final_filename)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/streams.py", line 398, in download
-    for chunk in request.stream(
-                 ^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 154, in stream
-    response = _execute_request(
-               ^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/pytubefix/request.py", line 35, in _execute_request
-    return urlopen(request, timeout=timeout)  # nosec
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 215, in urlopen
-    return opener.open(url, data, timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 553, in error
-    result = self._call_chain(*args)
-             ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 745, in http_error_302
-    return self.parent.open(new, timeout=req.timeout)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 521, in open
-    response = meth(req, response)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 630, in http_response
-    response = self.parent.error(
-               ^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 559, in error
-    return self._call_chain(*args)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 492, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/urllib/request.py", line 639, in http_error_default
-    raise HTTPError(req.full_url, code, msg, hdrs, fp)
-urllib.error.HTTPError: HTTP Error 403: Forbidden
-
-2025-08-12 00:32:57,488 - api_server - INFO - ✅ 回傳任務 1dd37db7-7966-40bd-9f31-068b025c22b9 的狀態: failed
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [12314]
+INFO:     Finished server process [9585]

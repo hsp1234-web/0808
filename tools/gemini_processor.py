@@ -10,12 +10,13 @@ import time
 from pathlib import Path
 
 # --- 日誌設定 ---
-# 設定日誌記錄器，確保所有輸出都進入 stdout，以便父程序擷取
+# JULES'S FIX: Redirect all logging to stderr to keep stdout clean for the final JSON result.
+# This is crucial to prevent JSONDecodeError in the parent process (api_server.py).
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    # 強制使用 sys.stdout，避免日誌記錄到 stderr
-    stream=sys.stdout
+    # 將日誌和進度訊息導向標準錯誤流
+    stream=sys.stderr
 )
 log = logging.getLogger('gemini_processor_tool')
 
@@ -34,7 +35,10 @@ def sanitize_filename(title: str, max_len: int = 60) -> str:
     return title[:max_len]
 
 def print_progress(status: str, detail: str, extra_data: dict = None):
-    """以標準 JSON 格式輸出進度到 stdout。"""
+    """
+    JULES'S FIX: 以標準 JSON 格式輸出進度到 stderr。
+    這確保了 stdout 保持乾淨，只用於傳遞最終結果。
+    """
     progress_data = {
         "type": "progress",
         "status": status,
@@ -42,7 +46,8 @@ def print_progress(status: str, detail: str, extra_data: dict = None):
     }
     if extra_data:
         progress_data.update(extra_data)
-    print(json.dumps(progress_data), flush=True)
+    # 將進度訊息輸出到 stderr
+    print(json.dumps(progress_data), file=sys.stderr, flush=True)
 
 # --- 提示詞管理 ---
 # 取得此檔案所在的目錄，並建立 prompts.json 的路徑
@@ -141,7 +146,10 @@ def upload_to_gemini(genai_module, audio_path: Path, display_filename: str):
         raise
 
 def get_summary_and_transcript(genai_module, gemini_file_resource, model_api_name: str, video_title: str, original_filename: str):
-    """使用 Gemini 模型生成摘要與逐字稿。"""
+    """
+    使用 Gemini 模型生成摘要與逐字稿。
+    JULES'S UPDATE: Now returns the full response object for token counting.
+    """
     log.info(f"🤖 Requesting summary and transcript from model '{model_api_name}'...")
     print_progress("generating_transcript", "AI 正在生成摘要與逐字稿...")
     prompt = ALL_PROMPTS['get_summary_and_transcript'].format(original_filename=original_filename, video_title=video_title)
@@ -162,13 +170,16 @@ def get_summary_and_transcript(genai_module, gemini_file_resource, model_api_nam
 
         log.info("✅ Successfully generated summary and transcript.")
         print_progress("transcript_generated", "摘要與逐字稿生成完畢。")
-        return summary_text, transcript_text
+        return summary_text, transcript_text, response
     except Exception as e:
         log.critical(f"🔴 Failed to get summary/transcript from Gemini: {e}", exc_info=True)
         raise
 
 def generate_html_report(genai_module, summary_text: str, transcript_text: str, model_api_name: str, video_title: str):
-    """使用 Gemini 模型生成 HTML 報告。"""
+    """
+    使用 Gemini 模型生成 HTML 報告。
+    JULES'S UPDATE: Now returns the full response object for token counting.
+    """
     log.info(f"🎨 Requesting HTML report from model '{model_api_name}'...")
     print_progress("generating_html", "AI 正在美化格式並生成 HTML 報告...")
     prompt = ALL_PROMPTS['format_as_html'].format(
@@ -192,7 +203,7 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
 
         log.info("✅ Successfully generated HTML report.")
         print_progress("html_generated", "HTML 報告生成完畢。")
-        return generated_html.strip()
+        return generated_html.strip(), response
     except Exception as e:
         log.critical(f"🔴 Failed to generate HTML report from Gemini: {e}", exc_info=True)
         raise
@@ -200,7 +211,11 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
 def process_audio_file(audio_path: Path, model: str, video_title: str, output_dir: Path, tasks: str, output_format: str):
     """
     全新的彈性處理流程，根據傳入的 tasks 和 output_format 執行操作。
+    JULES'S UPDATE: Added timing and token counting.
     """
+    start_time = time.time()
+    total_tokens_used = 0
+
     # 延遲導入，使其只在需要時才導入
     try:
         import google.generativeai as genai
@@ -224,10 +239,18 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         model_instance = genai.GenerativeModel(model)
 
         # 3. 執行 AI 任務
-        # 為了效率，如果同時需要摘要和逐字稿，使用單一 prompt
+        def get_token_count(response):
+            """Helper to safely get token count from a response."""
+            try:
+                return response.usage_metadata.total_token_count
+            except (AttributeError, ValueError):
+                return 0
+
         if "summary" in task_list and "transcript" in task_list:
             log.info("執行任務: 摘要與逐字稿 (合併執行)")
-            summary, transcript = get_summary_and_transcript(genai, gemini_file_resource, model, video_title, audio_path.name)
+            # This function needs to be updated to return the response object
+            summary, transcript, response = get_summary_and_transcript(genai, gemini_file_resource, model, video_title, audio_path.name)
+            total_tokens_used += get_token_count(response)
             results['summary'] = summary
             results['transcript'] = transcript
         else:
@@ -235,6 +258,7 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
                 log.info("執行任務: 僅摘要")
                 prompt = ALL_PROMPTS['get_summary_only'].format(original_filename=audio_path.name, video_title=video_title)
                 response = model_instance.generate_content([prompt, gemini_file_resource], request_options={'timeout': 1800})
+                total_tokens_used += get_token_count(response)
                 results['summary'] = response.text.strip()
                 log.info("✅ 摘要完成")
 
@@ -242,16 +266,17 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
                 log.info("執行任務: 僅逐字稿")
                 prompt = ALL_PROMPTS['get_transcript_only'].format(original_filename=audio_path.name, video_title=video_title)
                 response = model_instance.generate_content([prompt, gemini_file_resource], request_options={'timeout': 3600})
+                total_tokens_used += get_token_count(response)
                 results['transcript'] = response.text.strip()
                 log.info("✅ 逐字稿完成")
 
         if "translate" in task_list:
             log.info("執行任務: 翻譯")
-            # 優先翻譯逐字稿，如果沒有，則翻譯摘要
             text_to_translate = results.get('transcript', results.get('summary', ''))
             if text_to_translate:
                 prompt = ALL_PROMPTS['translate_text'].format(text_to_translate=text_to_translate)
                 response = model_instance.generate_content(prompt, request_options={'timeout': 1800})
+                total_tokens_used += get_token_count(response)
                 results['translation'] = response.text.strip()
                 log.info("✅ 翻譯完成")
             else:
@@ -261,15 +286,15 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         sanitized_title = sanitize_filename(video_title)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         final_filename_base = f"{sanitized_title}_{timestamp}_AI_Report"
-
         output_path = None
+
         if output_format == 'html':
             log.info("生成 HTML 格式報告...")
-            # 確保即使只有部分內容，也能生成報告
             summary_content = results.get('summary', '無摘要')
             transcript_content = results.get('transcript', '無逐字稿')
-            html_content = generate_html_report(genai, summary_content, transcript_content, model, video_title)
-
+            # This function also needs to be updated to return the response
+            html_content, response = generate_html_report(genai, summary_content, transcript_content, model, video_title)
+            total_tokens_used += get_token_count(response)
             output_path = output_dir / f"{final_filename_base}.html"
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(html_content)
@@ -284,7 +309,6 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
                 output_content += f"--- 詳細逐字稿 ---\n{results['transcript']}\n\n"
             if 'translation' in results:
                 output_content += f"--- 英文翻譯 ---\n{results['translation']}\n\n"
-
             output_path = output_dir / f"{final_filename_base}.txt"
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(output_content)
@@ -292,12 +316,16 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         else:
              raise ValueError(f"不支援的輸出格式: {output_format}")
 
+        processing_duration = time.time() - start_time
+
         # 5. 輸出最終結果
         final_result = {
             "type": "result",
             "status": "completed",
-            "output_path": str(output_path), # 回傳最終生成的檔案路徑
-            "video_title": video_title
+            "output_path": str(output_path),
+            "video_title": video_title,
+            "total_tokens_used": total_tokens_used,
+            "processing_duration_seconds": round(processing_duration, 2)
         }
         print(json.dumps(final_result), flush=True)
 
@@ -306,7 +334,6 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         if gemini_file_resource:
             log.info(f"🗑️ Cleaning up Gemini file: {gemini_file_resource.name}")
             try:
-                # 增加重試機制
                 for attempt in range(3):
                     try:
                         genai.delete_file(gemini_file_resource.name)
