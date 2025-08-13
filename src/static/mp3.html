@@ -1225,7 +1225,9 @@
                 const extension = outputPath.substring(outputPath.lastIndexOf('.'));
                 const isVideo = extension === '.mp4';
                 const isAudio = ['.mp3', '.m4a', '.wav', '.flac'].includes(extension);
-                const isReport = ['.html', '.txt'].includes(extension) && !outputPath.endsWith(`${taskId}.txt`);
+                const isReport = extension === '.html';
+                // JULES'S FIX (2025-08-13): Add a specific check for local transcription results.
+                const isTranscriptionResult = extension === '.txt' && outputPath.includes('/transcripts/');
 
                 const filenameSpan = taskElement.querySelector('.task-filename');
                 const originalFilename = filenameSpan ? filenameSpan.textContent : '';
@@ -1239,14 +1241,16 @@
                 downloadBtn.download = `${baseName}${extension}`;
                 downloadBtn.addEventListener('click', (e) => logAction('click-download-task', taskId));
 
-                if (isReport) {
+                if (isReport || isTranscriptionResult) {
                     const previewBtn = document.createElement('a');
                     previewBtn.href = '#';
                     previewBtn.className = 'btn-preview';
                     previewBtn.textContent = '預覽';
                     previewBtn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const fileType = extension === '.html' ? 'text/html' : 'text/plain';
+                        const fileType = isReport ? 'text/html' : 'text/plain';
+                        const action = isReport ? 'click-yt-report-preview' : 'click-preview-transcript';
+                        logAction(action, taskId);
                         openPreviewModal(outputPath, `${baseName}${extension}`, fileType, taskId);
                     });
                     buttonGroup.appendChild(previewBtn);
@@ -1269,33 +1273,27 @@
                         });
                         buttonGroup.appendChild(previewBtn);
                     } else if (isAudio) {
-                        // --- JULES'S FIX: Add the missing "Preview" button for audio files ---
                         const previewBtn = document.createElement('a');
-                        // The href points to this same page, but with a query parameter.
-                        // The target='_blank' is crucial for opening in a new tab.
                         previewBtn.href = `/static/mp3.html?file=${encodeURIComponent(outputPath)}`;
                         previewBtn.className = 'btn-preview';
                         previewBtn.textContent = '預覽';
                         previewBtn.target = '_blank';
                         previewBtn.addEventListener('click', (e) => {
-                            // We don't prevent default, we want the link to open.
-                            // We just log the action.
                             logAction('click-preview-audio', taskId);
                         });
                         buttonGroup.appendChild(previewBtn);
 
                         const sendToWhisperBtn = document.createElement('a');
                         sendToWhisperBtn.href = '#';
-                        // Use a different style to distinguish from preview
                         sendToWhisperBtn.className = 'btn-preview';
-                        sendToWhisperBtn.style.backgroundColor = '#17a2b8'; // Teal color
+                        sendToWhisperBtn.style.backgroundColor = '#17a2b8';
                         sendToWhisperBtn.textContent = '送至轉錄區';
                         sendToWhisperBtn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             logAction('click-send-to-whisper', taskId);
                             sendToWhisperBtn.textContent = '處理中...';
                             try {
-                                const response = await fetch(outputPath); // Fetch from the public URL
+                                const response = await fetch(outputPath);
                                 if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
                                 const audioBlob = await response.blob();
                                 const currentFilename = taskElement.querySelector('.task-filename').textContent.split('(')[0].trim();
@@ -1658,7 +1656,9 @@
                     logAction('click-yt-report-preview', taskId);
                     const fileType = extension === '.html' ? 'text/html' : 'text/plain';
                     const filename = `${videoTitle.replace(/ /g, '_')}_report${extension}`;
-                    openPreviewModal(taskId, filename, fileType);
+                    // JULES'S FIX (2025-08-13): 傳遞正確的 'outputPath' 給預覽彈窗，
+                    // 而不是 'taskId'。同時也將 taskId 傳入以供下載按鈕使用。
+                    openPreviewModal(outputPath, filename, fileType, taskId);
                 };
 
                 const downloadBtn = document.createElement('a');
@@ -1884,13 +1884,17 @@
 
             // JULES'S NEW FEATURE: Load task history on page load
             const dispatchStatusUpdate = (task) => {
+                // JULES'S FIX (2025-08-13): The backend /api/tasks endpoint already parses
+                // the payload and result fields into objects. Calling JSON.parse here again
+                // on an object leads to the "[object Object]" error on page reload.
+                // We now simply merge the already-parsed objects.
                 const payload = {
-                    ...JSON.parse(task.payload || '{}'),
-                    ...JSON.parse(task.result || '{}'),
+                    ...(task.payload || {}),
+                    ...(task.result || {}),
                     task_id: task.id,
                     status: task.status,
                     task_type: task.type,
-                    filename: (JSON.parse(task.payload || '{}')).original_filename
+                    filename: (task.payload || {}).original_filename
                 };
 
                 // Manually move task element if it's completed but in ongoing list

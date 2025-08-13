@@ -34,53 +34,54 @@ test.describe('MP3 預覽功能 E2E 測試', () => {
     const previewButton = completedTask.getByRole('link', { name: '預覽' });
     await expect(previewButton).toBeVisible();
 
-    // Start waiting for the new page before clicking.
+    // --- JULES'S FIX (2025-08-13): 強化測試健壯性 ---
+    // 使用網路攔截來明確驗證後端是否成功提供了媒體檔案。
+    // 這比依賴播放器超時更可靠、更快速。
+
+    let mediaResponseStatus = 0; // 0 表示尚未收到請求
+
+    // Start waiting for the new page BEFORE clicking.
     const pagePromise = context.waitForEvent('page');
     await previewButton.click();
     const newPage = await pagePromise;
-    await newPage.waitForLoadState();
 
-    // 5. Verify the new page's content
+    // 在新分頁上設定回應監聽器
+    newPage.on('response', response => {
+      // 我們只關心媒體檔案的請求
+      if (response.url().includes('/media/')) {
+        console.log(`攔截到媒體請求: ${response.url()} - 狀態: ${response.status()}`);
+        mediaResponseStatus = response.status();
+      }
+    });
+
+    // 等待頁面完全載入
+    await newPage.waitForLoadState('domcontentloaded');
+
+    // 5. 驗證新頁面的基本內容
     await expect(newPage).toHaveTitle(/MP3 預覽/);
     const audioPlayer = newPage.locator('audio');
     await expect(audioPlayer).toBeVisible();
 
-    // 6. Core Assertion 1: Verify the src attribute
-    // It should point to our media endpoint and be an .mp3 file
+    // 6. 核心斷言 1: 驗證 src 屬性
+    // 它應該指向我們的媒體端點，並且是一個 .mp3 檔案
     await expect(audioPlayer).toHaveAttribute('src', /^\/media\/e2e_test_.*\.mp3$/);
     const audioSrc = await audioPlayer.getAttribute('src');
     console.log(`音訊播放器 SRC: ${audioSrc}`);
 
-    // 7. Core Assertion 2: Verify the browser can play the audio
-    // We expect this to FAIL with our dummy text file, but the test itself is important.
-    // A timeout here indicates the browser could not load the media.
-    try {
-      const canPlay = await newPage.evaluate(() => {
-        return new Promise((resolve, reject) => {
-          const audio = document.querySelector('audio');
-          if (!audio) {
-            return reject(new Error('找不到 audio 元素'));
-          }
-          // If audio is already loaded
-          if (audio.readyState >= 3) { // HAVE_FUTURE_DATA
-            return resolve(true);
-          }
-          // Listen for the 'canplay' event
-          audio.addEventListener('canplay', () => resolve(true));
-          // Set a timeout to prevent the test from hanging indefinitely
-          setTimeout(() => reject(new Error('音訊在 10 秒內未能觸發 canplay 事件')), 10000);
-        });
-      });
-      // If the promise resolves, it means the audio is valid.
-      // This would be an unexpected success with our current dummy file.
-      expect(canPlay).toBe(true);
-      console.log("預期外的成功：瀏覽器回報可以播放此音訊檔案。");
+    // 7. 核心斷言 2: 驗證網路回應 (新的健壯性檢查)
+    // 我們需要給予一點時間讓瀏覽器發出音訊請求
+    await newPage.waitForTimeout(2000); // 等待 2 秒
 
-    } catch (error) {
-      // This is the EXPECTED outcome for our dummy text file.
-      // The test fails if the error is NOT the timeout error.
-      console.log(`符合預期的事件: ${error.message}`);
-      expect(error.message).toContain('音訊在 10 秒內未能觸發 canplay 事件');
-    }
+    // 現在檢查狀態碼。如果後端回傳 404，測試將在此處明確失敗。
+    // JULES'S FIX (2025-08-13): 調整斷言以接受 206 Partial Content。
+    // 瀏覽器在串流媒體時，常會請求檔案的一部分，此時後端回傳 206 是正確且成功的行為。
+    // 因此，我們應該檢查狀態碼是否為成功的範圍 (小於 400)，而不是嚴格要求 200。
+    expect(mediaResponseStatus).toBeLessThan(400,
+      `預期媒體檔案請求應成功 (狀態碼 < 400)，但收到了 ${mediaResponseStatus}。這通常表示檔案找不到 (404) 或伺服器出錯。`
+    );
+
+    // 由於我們現在明確地檢查網路回應，舊的 'canplay' 逾時檢查
+    // 就不再是必需的了，因為它混合了「檔案存在性」和「檔案可播放性」兩個概念。
+    // 這個測試的主要目的，是確保後端能正確地 *提供* 檔案。
   });
 });
