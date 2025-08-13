@@ -10,15 +10,10 @@ export class TaskList {
     constructor(element) {
         this.container = element;
 
-        // 步驟 2：加入靜態的假資料作為初始狀態
+        // 步驟 3：將初始狀態設為空，等待從 API 載入
         this.state = {
-            ongoing: [
-                { id: 'task-1', filename: 'podcast_episode_1.mp3', status: '轉錄中 (35%)...' }
-            ],
-            completed: [
-                { id: 'task-2', filename: 'meeting_notes.wav', status: '✅ 完成' },
-                { id: 'task-3', filename: 'lecture_audio.m4a', status: '❌ 失敗' }
-            ]
+            ongoing: [],
+            completed: []
         };
     }
 
@@ -72,17 +67,51 @@ export class TaskList {
     }
 
     /**
+     * 從 API 載入任務歷史紀錄，並更新狀態與 UI。
+     */
+    async loadTaskHistory() {
+        const ongoingTasksContainer = this.container.querySelector('#ongoing-tasks');
+        const completedTasksContainer = this.container.querySelector('#completed-tasks');
+
+        try {
+            const response = await fetch('/api/tasks');
+            if (!response.ok) {
+                throw new Error(`無法獲取任務歷史： ${response.statusText}`);
+            }
+            const tasks = await response.json();
+
+            // 將任務分類
+            const ongoing = [];
+            const completed = [];
+            tasks.forEach(task => {
+                // 這裡我們假設 'completed' 和 'failed' 是最終狀態
+                if (task.status === 'completed' || task.status === 'failed') {
+                    completed.push(task);
+                } else {
+                    ongoing.push(task);
+                }
+            });
+
+            // 更新內部狀態
+            this.state.ongoing = ongoing;
+            this.state.completed = completed;
+
+            // 重新渲染列表
+            this._renderTaskList(this.state.ongoing, ongoingTasksContainer, '暫無執行中任務');
+            this._renderTaskList(this.state.completed, completedTasksContainer, '尚無完成的任務');
+
+        } catch (error) {
+            console.error('載入任務歷史時發生錯誤:', error);
+            ongoingTasksContainer.innerHTML = `<p style="color: red;">載入進行中任務失敗。</p>`;
+            completedTasksContainer.innerHTML = `<p style="color: red;">載入已完成任務失敗。</p>`;
+        }
+    }
+
+    /**
      * 初始化組件。
      */
     init() {
         this.render();
-
-        // 取得渲染後的列表容器
-        const ongoingTasksContainer = this.container.querySelector('#ongoing-tasks');
-        const completedTasksContainer = this.container.querySelector('#completed-tasks');
-
-        // 使用靜態資料來渲染列表
-        this._renderTaskList(this.state.ongoing, ongoingTasksContainer, '暫無執行中任務');
-        this._renderTaskList(this.state.completed, completedTasksContainer, '尚無完成的任務');
+        this.loadTaskHistory();
     }
 }
