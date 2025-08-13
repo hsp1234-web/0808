@@ -814,10 +814,35 @@
             // --- 全域狀態變數 ---
             let uploadedFiles = [];
             let socket;
-            const taskElements = new Map();
+            // const taskElements = new Map(); // REMOVED by Jules's refactor
             const modelStatus = {};
             let currentFontSize = 100;
-            let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
+            let isInitialized = false;
+
+            // =================================================================
+            // JULES'S REFACTOR: START of State Management and Rendering
+            // =================================================================
+            const state = {
+                files: [],
+                tasks: [],
+            };
+
+            function renderFileBrowser() {
+                // To be implemented
+            }
+
+            function renderTaskLists() {
+                // To be implemented
+            }
+
+            function render() {
+                console.log("JULES: Main render function called.");
+                renderFileBrowser();
+                renderTaskLists();
+            }
+            // =================================================================
+            // JULES'S REFACTOR: END of State Management and Rendering
+            // =================================================================
 
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
