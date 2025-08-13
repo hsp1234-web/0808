@@ -1269,9 +1269,26 @@
                         });
                         buttonGroup.appendChild(previewBtn);
                     } else if (isAudio) {
+                        // --- JULES'S FIX: Add the missing "Preview" button for audio files ---
+                        const previewBtn = document.createElement('a');
+                        // The href points to this same page, but with a query parameter.
+                        // The target='_blank' is crucial for opening in a new tab.
+                        previewBtn.href = `/static/mp3.html?file=${encodeURIComponent(outputPath)}`;
+                        previewBtn.className = 'btn-preview';
+                        previewBtn.textContent = '預覽';
+                        previewBtn.target = '_blank';
+                        previewBtn.addEventListener('click', (e) => {
+                            // We don't prevent default, we want the link to open.
+                            // We just log the action.
+                            logAction('click-preview-audio', taskId);
+                        });
+                        buttonGroup.appendChild(previewBtn);
+
                         const sendToWhisperBtn = document.createElement('a');
                         sendToWhisperBtn.href = '#';
+                        // Use a different style to distinguish from preview
                         sendToWhisperBtn.className = 'btn-preview';
+                        sendToWhisperBtn.style.backgroundColor = '#17a2b8'; // Teal color
                         sendToWhisperBtn.textContent = '送至轉錄區';
                         sendToWhisperBtn.addEventListener('click', async (e) => {
                             e.preventDefault();
@@ -2044,6 +2061,59 @@
                 });
             }
         });
+    </script>
+
+    <script>
+        // --- MP3 預覽頁面邏輯 ---
+        // 這段腳本在頁面載入時執行，以檢查這是否是一個預覽頁面。
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const audioFileUrl = urlParams.get('file');
+
+            if (audioFileUrl) {
+                // 這是一個預覽頁面。
+                // 1. 隱藏主應用程式容器。
+                const appContainer = document.getElementById('app');
+                if (appContainer) {
+                    appContainer.style.display = 'none';
+                }
+
+                // 2. 設定文件標題。
+                document.title = 'MP3 預覽';
+
+                // 3. 建立並注入音訊播放器 UI。
+                const playerContainer = document.createElement('div');
+                playerContainer.style.cssText = `
+                    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                    display: flex; flex-direction: column; justify-content: center; align-items: center;
+                    background-color: #2c3e50; color: white; font-family: sans-serif;
+                `;
+
+                const title = document.createElement('h1');
+                title.textContent = '音訊預覽';
+                title.style.marginBottom = '20px';
+
+                const audioPlayer = document.createElement('audio');
+                audioPlayer.controls = true;
+                audioPlayer.autoplay = true;
+                audioPlayer.src = decodeURIComponent(audioFileUrl);
+                audioPlayer.style.width = '80%';
+                audioPlayer.style.maxWidth = '600px';
+
+                const filePathText = document.createElement('p');
+                filePathText.textContent = `來源: ${decodeURIComponent(audioFileUrl)}`;
+                filePathText.style.marginTop = '20px';
+                filePathText.style.fontSize = '0.9em';
+                filePathText.style.color = '#bdc3c7';
+
+                playerContainer.appendChild(title);
+                playerContainer.appendChild(audioPlayer);
+                playerContainer.appendChild(filePathText);
+
+                document.body.appendChild(playerContainer);
+                document.body.style.margin = '0';
+            }
+        })();
     </script>
 </body>
 </html>
