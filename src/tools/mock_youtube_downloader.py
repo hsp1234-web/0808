@@ -12,7 +12,8 @@ def main():
     parser = argparse.ArgumentParser(description="模擬 YouTube 音訊下載。")
     parser.add_argument("--url", required=True, help="要處理的 YouTube URL。")
     parser.add_argument("--output-dir", required=True, help="儲存輸出檔案的目錄。")
-    args = parser.parse_args()
+    # JULES'S FIX: 使用 parse_known_args() 來避免因未知的參數（如 --download-type）而崩潰。
+    args, _ = parser.parse_known_args()
 
     try:
         # 模擬下載進度 (JULES'S FIX: Print progress to stderr)

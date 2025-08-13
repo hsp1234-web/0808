@@ -112,7 +112,8 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
         sys.executable,
         expected_tool_path,
         "--url", TEST_URL,
-        "--output-dir", str(api_server.UPLOADS_DIR)
+            "--output-dir", str(api_server.UPLOADS_DIR),
+            "--download-type", "audio" # JULES'S FIX: The test was outdated
     ]
     mock_subprocess.assert_called_once_with(
         expected_cmd,
@@ -139,7 +140,7 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
             "payload": {
                 "task_id": TEST_TASK_ID,
                 "status": "downloading",
-                "message": f"正在下載: {TEST_URL}",
+                    "message": f"正在下載 (audio): {TEST_URL}", # JULES'S FIX: Test was outdated
                 "task_type": "youtube_download_only"
             }
         }),

@@ -135,14 +135,18 @@ def main():
                 pytest_args.insert(0, arg)
 
         log.info(f"傳遞給 pytest 的參數: {pytest_args}")
-        # 使用 pytest.ExitCode.OK 來進行比較，更具可讀性
-        exit_code = pytest.main(pytest_args)
+        # JULES'S FIX: 呼叫 pytest 作為子程序，而不是匯入它。
+        # 這可以更可靠地確保 pytest 在一個乾淨的環境中運行，並能正確地
+        # 識別出透過 'pip install -e .' 安裝的 'src' 目錄。
+        pytest_cmd = [sys.executable, "-m", "pytest"] + pytest_args
+        result = subprocess.run(pytest_cmd)
+        exit_code = result.returncode
 
         # Pytest 的一些結束代碼 (如 5) 表示沒有收集到測試，這在某些情況下是正常的
-        if exit_code not in [pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED]:
+        if exit_code not in [0, 5]: # 0 = OK, 5 = No tests collected
             log.error(f"Pytest 以結束代碼 {exit_code} 結束，表示有測試失敗。")
         else:
-            log.info("✅ 所有測試皆通過。")
+            log.info("✅ 所有測試皆通過或未找到測試。")
 
     finally:
         log.info("--- 正在準備關閉服務 (Teardown) ---")
