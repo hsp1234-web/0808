@@ -60,3 +60,6 @@ config.json
 
 # Screenshots (often generated during E2E tests)
 *.png
+
+# Generated config files
+circus.ini

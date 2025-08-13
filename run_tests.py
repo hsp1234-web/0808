@@ -97,6 +97,15 @@ def main():
         import requests
         import pytest
 
+        log.info("--- 正在動態生成 circus.ini 設定檔 ---")
+        template_path = Path("circus.ini.template")
+        config_path = Path("circus.ini")
+        template_content = template_path.read_text(encoding='utf-8')
+        # 將預留位置 %%PYTHON_EXEC%% 替換為當前 Python 直譯器的絕對路徑
+        config_content = template_content.replace("%%PYTHON_EXEC%%", sys.executable)
+        config_path.write_text(config_content, encoding='utf-8')
+        log.info(f"✅ circus.ini 已根據 {sys.executable} 動態生成。")
+
         log.info("--- 正在啟動 Circus 來管理後端服務 ---")
         circus_cmd = [sys.executable, "-m", "circus.circusd", "circus.ini"]
         circus_proc = subprocess.Popen(circus_cmd, text=True, encoding='utf-8')

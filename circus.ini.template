@@ -6,7 +6,7 @@ stats_endpoint = tcp://127.0.0.1:5557
 httpd = False
 
 [watcher:db_manager]
-cmd = /home/jules/.pyenv/versions/3.12.11/bin/python src/db/manager.py
+cmd = %%PYTHON_EXEC%% src/db/manager.py
 working_dir = /app
 stdout_stream.class = FileStream
 stdout_stream.filename = /app/logs/db_manager.log
@@ -16,7 +16,7 @@ autostart = True
 restart_on_error = True
 
 [watcher:api_server]
-cmd = /home/jules/.pyenv/versions/3.12.11/bin/python src/api_server.py --port 42649
+cmd = %%PYTHON_EXEC%% src/api_server.py --port 42649
 env.API_MODE = mock
 working_dir = /app
 stdout_stream.class = FileStream
