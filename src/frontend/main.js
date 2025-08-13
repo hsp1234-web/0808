@@ -1,11 +1,11 @@
-import { FileBrowser } from './components/FileBrowser.js';
-import { TaskList } from './components/TaskList.js';
+import { YouTubeReporter } from './components/YouTubeReporter.js';
+import { apiService } from './ApiService.js';
 
 /**
  * 應用程式主進入點
  */
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM 已載入，開始初始化應用程式。');
+    console.log('DOM 已載入，開始初始化應用程式 (v2 - 組件化)。');
 
     const appContainer = document.getElementById('app');
     if (!appContainer) {
@@ -13,14 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // --- 全域輔助函式 (從 mp3.html 遷移) ---
+    // 清空容器，為組件化渲染做準備
+    appContainer.innerHTML = '';
 
+    // --- 全域輔助函式 ---
     const statusMessageArea = document.getElementById('status-message-area');
     const statusMessageText = document.getElementById('status-message-text');
 
-    /**
-     * 顯示一個帶有顏色和自動隱藏功能的狀態訊息。
-     */
     const showStatusMessage = (message, isError = false, duration = 5000) => {
         if (!statusMessageArea || !statusMessageText) {
             console.log(`Status (${isError ? 'ERROR' : 'INFO'}): ${message}`);
@@ -34,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (duration > 0) {
             setTimeout(() => {
-                // 僅當訊息未被更新時才隱藏
                 if (statusMessageText.textContent === message) {
                     statusMessageArea.style.display = 'none';
                 }
@@ -42,80 +40,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    /**
-     * 開啟預覽彈窗的邏輯 (目前為 placeholder)。
-     * 註：完整的 Modal 實作較為複雜，暫時省略以專注於核心遷移。
-     */
     const openPreviewModal = (previewUrl, filename, fileType, taskId) => {
-        console.log(`請求開啟預覽: ${filename} (URL: ${previewUrl}, Type: ${fileType}, TaskID: ${taskId})`);
-        // 由於完整的 Modal HTML/CSS/JS 尚未遷移，此處使用 alert 作為暫時替代方案。
+        console.log(`請求開啟預覽: ${filename}`);
         alert(`預覽功能觸發成功！\n\n檔案: ${filename}\n類型: ${fileType}\n路徑: ${previewUrl}`);
     };
 
+    const logAction = (action, value = null) => {
+        const message = value !== null ? `${action}: ${value}` : action;
+        console.log(`Logging action: ${message}`);
+        fetch('/api/log/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: message })
+        }).catch(err => console.error('logAction failed:', err));
+    };
 
-    // --- 初始化組件 ---
-
-    // 檔案總管 (保持不變)
-    const fileBrowserContainer = document.createElement('div');
-    appContainer.appendChild(fileBrowserContainer);
-    const fileBrowser = new FileBrowser(fileBrowserContainer);
-    fileBrowser.init();
-
-    // 間距
-    const spacer = document.createElement('div');
-    spacer.style.height = '24px';
-    appContainer.appendChild(spacer);
-
-    // 任務列表 (傳入相依性)
-    const taskListContainer = document.createElement('div');
-    appContainer.appendChild(taskListContainer);
-    const taskList = new TaskList(taskListContainer, {
-        showStatusMessage,
-        openPreviewModal
-    });
-    taskList.init();
-
-
-    // --- WebSocket 邏輯 (從 mp3.html 遷移) ---
-    let socket;
-
-    const handleWebSocketMessage = (message) => {
-        console.log(`[WebSocket Received]:`, message);
-        const { type, payload } = message;
-
-        // 將與任務相關的訊息分派給 TaskList 組件
-        const taskRelatedTypes = [
-            'TRANSCRIPTION_STATUS',
-            'TRANSCRIPTION_UPDATE',
-            'YOUTUBE_STATUS',
-            'DOWNLOAD_STATUS'
-        ];
-
-        if (taskRelatedTypes.includes(type)) {
-             if (payload && payload.task_id) {
-                taskList.handleTaskUpdate(payload);
-             } else if (type === 'DOWNLOAD_STATUS' && payload && payload.model) {
-                // 模型下載狀態可以由其他組件處理，暫時僅記錄
-                console.log(`模型下載狀態: ${payload.model} - ${payload.status}`);
-             }
+    // 簡易的任務管理器 (未來可擴充)
+    const taskManager = {
+        startTask(task) {
+            console.log('Task Manager: 收到啟動任務請求', task);
+            // 在此處可以將任務新增到一個全域狀態，並觸發 WebSocket 訊息
+            // 為了專注於遷移 YouTube 組件，暫時只做日誌輸出
         }
-        // 未來可以在此處處理其他類型的全域訊息
     };
 
-    const setupWebSocket = () => {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
-        socket = new WebSocket(wsUrl);
 
-        socket.onopen = () => console.log('WebSocket 連線成功 (新架構)');
-        socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
-        socket.onclose = () => {
-            console.log('WebSocket 連線已關閉，3 秒後嘗試重連...');
-            setTimeout(setupWebSocket, 3000);
-        };
-        socket.onerror = (error) => console.error('WebSocket 發生錯誤:', error);
-    };
+    // --- 初始化 YouTube Reporter 組件 ---
+    const youtubeReporterContainer = document.createElement('div');
+    appContainer.appendChild(youtubeReporterContainer);
 
-    // 啟動 WebSocket
-    setupWebSocket();
+    const youtubeReporter = new YouTubeReporter(youtubeReporterContainer, {
+        api: apiService,
+        showStatusMessage,
+        openPreviewModal,
+        logAction,
+        taskManager
+    });
+    youtubeReporter.init();
+
+    // WebSocket 邏輯暫時保留，但目前沒有組件會監聽它
+    // setupWebSocket();
 });

@@ -125,14 +125,21 @@ app.add_middleware(
 UPLOADS_DIR = ROOT_DIR / "uploads"
 # 靜態檔案目錄
 STATIC_DIR = ROOT_DIR / "src" / "static"
+# JULES: 新增前端目錄變數
+FRONTEND_DIR = ROOT_DIR / "src" / "frontend"
 
 # 確保目錄存在
 UPLOADS_DIR.mkdir(exist_ok=True)
 if not STATIC_DIR.exists():
     log.warning(f"靜態檔案目錄 {STATIC_DIR} 不存在，前端頁面可能無法載入。")
 else:
+    # JULES: 將打包後的 JS 掛載到 /dist 路徑
+    dist_path = STATIC_DIR / "dist"
+    if dist_path.exists():
+        app.mount("/dist", StaticFiles(directory=dist_path), name="dist")
+
+    # 掛載整個 static 目錄以提供如 prompts.html 等其他資源
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
 
 # JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
 from urllib.parse import unquote
@@ -181,11 +188,11 @@ def convert_to_media_url(absolute_path_str: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend(request: Request):
-    """根端點，提供前端操作介面。"""
-    html_file_path = STATIC_DIR / "mp3.html"
+    """根端點，提供新的重構後前端介面。"""
+    html_file_path = FRONTEND_DIR / "index.html"
     if not html_file_path.is_file():
         log.error(f"找不到前端檔案: {html_file_path}")
-        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (mp3.html)")
+        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (index.html)")
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
