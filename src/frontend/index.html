@@ -4,14 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音訊轉錄儀 (重構版)</title>
-    <!-- 未來可以在此處加入 CSS -->
+    <style>
+        /* Basic styles from mp3.html needed for components to render correctly */
+        :root {
+            --bg-color: #F8F9FA; --text-color: #202124; --card-bg-color: rgba(255, 255, 255, 0.85);
+            --card-border-color: #e0e0e0; --button-bg-color: #007bff; --button-hover-bg-color: #0056b3;
+            --success-color: #28a745; --status-yellow: #ffc107;
+        }
+        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; }
+        .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; gap: 24px; }
+        .card { border: 1px solid var(--card-border-color); border-radius: 12px; padding: 24px; background-color: var(--card-bg-color); }
+        .grid-2-col { display: grid; grid-template-columns: 1fr; gap: 24px; }
+        @media (min-width: 768px) { .grid-2-col { grid-template-columns: 1fr 1fr; } }
+        h1 { font-size: 1.8em; }
+        h2 { font-size: 1.3em; font-weight: 600; }
+        .task-list { min-height: 60px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .task-item { padding: 12px; border-radius: 8px; background-color: #f9f9f9; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .task-filename { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px; }
+        .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
+        .task-status.status-downloading { color: #007bff; }
+        .task-status.status-processing { color: #fd7e14; }
+        .task-status.status-completed { color: #28a745; }
+        .task-status.status-failed { color: #dc3545; font-weight: bold; }
+        .task-actions { display: flex; gap: 8px; }
+        .task-actions a { text-decoration: none; padding: 5px 12px; border-radius: 6px; color: white; font-size: 0.9em; display: inline-block; border: none; }
+        .btn-preview { background-color: var(--button-bg-color); }
+        .btn-download { background-color: var(--success-color); }
+    </style>
 </head>
 <body>
-    <h1>新的前端架構</h1>
-    <p>這裡是新架構的進入點。組件將會被載入到下面的 div 中。</p>
-    <div id="app">
-        <!-- JavaScript 組件將會渲染到此處 -->
+    <div class="container">
+        <h1>音訊轉錄儀 (重構版)</h1>
+
+        <!-- Global Status Message Area -->
+        <div id="status-message-area" class="card" style="display: none; padding: 12px; border-width: 2px;">
+            <p id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></p>
+        </div>
+
+        <div id="app">
+            <!-- JavaScript components will be rendered here -->
+        </div>
     </div>
+
+    <!-- The full modal is complex, so we will omit it from this refactor for now.
+         A placeholder in JS will handle the preview calls. -->
+
     <script type="module" src="main.js"></script>
 </body>
 </html>
