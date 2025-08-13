@@ -433,10 +433,21 @@ async def download_transcript(task_id: str):
         if not output_filename:
             raise HTTPException(status_code=500, detail="任務結果中未包含有效的檔案路徑。")
 
-        file_path = Path(output_filename)
+        # JULES'S FIX 2025-08-14: 將 URL 路徑轉換回檔案系統絕對路徑
+        # 資料庫中儲存的是像 /media/reports/report.html 這樣的 URL，
+        # 我們需要將其轉換回像 /app/uploads/reports/report.html 這樣的絕對檔案系統路徑。
+        if output_filename.startswith('/media/'):
+            # 移除 '/media/' 前綴並與上傳目錄合併
+            relative_path = output_filename.lstrip('/media/')
+            file_path = UPLOADS_DIR / relative_path
+        else:
+            # 作為備用，如果路徑不是 /media/ 開頭，則假設它是一個絕對路徑
+            # 這可以保持對舊資料格式的相容性
+            file_path = Path(output_filename)
+
         if not file_path.is_file():
-            log.error(f"❌ 轉錄檔案不存在: {file_path}")
-            raise HTTPException(status_code=404, detail="轉錄檔案遺失或無法讀取。")
+            log.error(f"❌ 檔案系統中的檔案不存在: {file_path}")
+            raise HTTPException(status_code=404, detail="檔案遺失或無法讀取。")
 
         # 提供檔案下載
         from fastapi.responses import FileResponse
