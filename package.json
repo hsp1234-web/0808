@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "build": "bun build ./src/frontend/main.js --outdir ./dist"
+  },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
     "@types/bun": "latest",
