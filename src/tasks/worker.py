@@ -9,12 +9,14 @@ import requests
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
-# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# 因為此檔案現在位於 src/tasks/ 中，所以根目錄是其上上層目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
 # sys.path.insert(0, str(ROOT_DIR))
 
-from db import database
+# JULES'S REFACTOR: Use the database client instead of direct access
+# from db import database
+from db.client import get_client
 
 # --- 日誌設定 ---
 logging.basicConfig(
@@ -39,6 +41,9 @@ def setup_database_logging():
 TOOLS_DIR = ROOT_DIR / "src" / "tools"
 TRANSCRIPTS_DIR = ROOT_DIR / "transcripts"
 
+# --- DB 客戶端 ---
+db_client = get_client()
+
 def process_download_task(task: dict, use_mock: bool):
     """處理模型下載任務。"""
     task_id = task['task_id']
@@ -50,7 +55,7 @@ def process_download_task(task: dict, use_mock: bool):
     if use_mock:
         log.info("(模擬) 假裝下載模型...")
         time.sleep(3)
-        database.update_task_status(task_id, 'completed', json.dumps({"message": "模型已成功下載 (模擬)"}))
+        db_client.update_task_status(task_id, 'completed', json.dumps({"message": "模型已成功下載 (模擬)"}))
         return
 
     # 真實模式下，呼叫工具的 download 命令
@@ -63,16 +68,16 @@ def process_download_task(task: dict, use_mock: bool):
     for line in process.stdout:
         try:
             progress_data = json.loads(line)
-            database.update_task_progress(task_id, progress_data.get("progress", 0), progress_data.get("log", ""))
+            db_client.update_task_progress(task_id, progress_data.get("progress", 0), progress_data.get("log", ""))
         except json.JSONDecodeError:
             log.info(f"[下載工具 stdout] {line.strip()}")
 
     process.wait()
     if process.returncode == 0:
-        database.update_task_status(task_id, 'completed', json.dumps({"message": f"模型 {model_size} 已成功下載"}))
+        db_client.update_task_status(task_id, 'completed', json.dumps({"message": f"模型 {model_size} 已成功下載"}))
     else:
         log.error(f"❌ 下載模型 {model_size} 失敗。")
-        database.update_task_status(task_id, 'failed', json.dumps({"error": f"下載模型 {model_size} 失敗"}))
+        db_client.update_task_status(task_id, 'failed', json.dumps({"error": f"下載模型 {model_size} 失敗"}))
 
 
 def process_transcription_task(task: dict, use_mock: bool):
@@ -138,7 +143,7 @@ def process_transcription_task(task: dict, use_mock: bool):
                 text = progress_data.get("text")
                 if progress is not None:
                     log.info(f"📈 任務 {task_id} 進度: {progress}% - {text[:30]}...")
-                    database.update_task_progress(task_id, progress, text)
+                    db_client.update_task_progress(task_id, progress, text)
             except json.JSONDecodeError:
                 # 不是 JSON 格式的日誌，直接印出
                 log.info(f"[工具 stdout] {line.strip()}")
@@ -155,7 +160,7 @@ def process_transcription_task(task: dict, use_mock: bool):
                 "transcript_path": str(output_file), # 新增此行，為下載 API 提供路徑
                 "tool_stdout": "".join(full_stdout),
             })
-            database.update_task_status(task_id, 'completed', final_result)
+            db_client.update_task_status(task_id, 'completed', final_result)
             log.info(f"✅ 任務 {task_id} 狀態已更新至資料庫。")
 
             # 步驟 6: 通知 API Server 任務已完成，以便廣播給前端
@@ -184,11 +189,11 @@ def process_transcription_task(task: dict, use_mock: bool):
                 "tool_stdout": "".join(full_stdout),
                 "tool_stderr": "".join(full_stderr)
             })
-            database.update_task_status(task_id, 'failed', final_result)
+            db_client.update_task_status(task_id, 'failed', final_result)
 
     except Exception as e:
         log.critical(f"💥 處理任務 {task_id} 時發生未預期的嚴重錯誤: {e}", exc_info=True)
-        database.update_task_status(task_id, 'failed', json.dumps({"error": str(e)}))
+        db_client.update_task_status(task_id, 'failed', json.dumps({"error": str(e)}))
 
 
 def process_task(task: dict, use_mock: bool):
@@ -202,7 +207,7 @@ def process_task(task: dict, use_mock: bool):
         process_transcription_task(task, use_mock)
     else:
         log.error(f"❌ 未知的任務類型: '{task_type}' (Task ID: {task['task_id']})")
-        database.update_task_status(task['task_id'], 'failed', json.dumps({"error": f"未知的任務類型: {task_type}"}))
+        db_client.update_task_status(task['task_id'], 'failed', json.dumps({"error": f"未知的任務類型: {task_type}"}))
 
 def main_loop(use_mock: bool, poll_interval: int):
     """
@@ -211,7 +216,7 @@ def main_loop(use_mock: bool, poll_interval: int):
     log.info(f"🤖 Worker 已啟動。模式: {'模擬 (Mock)' if use_mock else '真實 (Real)'}。查詢間隔: {poll_interval} 秒。")
     try:
         while True:
-            task = database.fetch_and_lock_task()
+            task = db_client.fetch_and_lock_task()
             if task:
                 process_task(task, use_mock)
             else:
@@ -238,8 +243,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # 在啟動主迴圈之前，先確保資料庫已初始化
-    database.initialize_database()
+    # JULES'S REFACTOR: The worker no longer initializes the database directly.
+    # The db_manager service is responsible for this.
+    # database.initialize_database()
 
     # 然後設定日誌
     setup_database_logging()

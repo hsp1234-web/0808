@@ -69,6 +69,31 @@ ALL_PROMPTS = load_prompts()
 
 import google.generativeai as genai
 
+# 問題四：定義錯誤轉譯對照表
+GEMINI_ERROR_MAP = {
+    "SAFETY": "處理失敗：內容可能涉及安全或敏感議題。",
+    "RECITATION": "處理失敗：內容可能引用了受版權保護的資料。",
+    "OTHER": "處理失敗：因未知的模型內部原因終止。"
+}
+
+def get_error_message_from_response(response):
+    """從 Gemini API 回應中解析出使用者易於理解的錯誤訊息。"""
+    try:
+        # 優先檢查是否有明確的阻擋原因
+        if response.prompt_feedback.block_reason:
+            reason = response.prompt_feedback.block_reason.name
+            return GEMINI_ERROR_MAP.get(reason, f"請求被未知原因阻擋: {reason}")
+
+        # 接著檢查候選內容的完成原因是否正常
+        candidate = response.candidates[0]
+        if candidate.finish_reason.name not in ("STOP", "MAX_TOKENS"):
+            reason = candidate.finish_reason.name
+            return GEMINI_ERROR_MAP.get(reason, f"處理異常終止: {reason}")
+    except (AttributeError, IndexError):
+        # 如果回應的結構不符合預期，則不進行處理
+        return None
+    return None
+
 # --- 核心 Gemini 處理函式 ---
 
 def list_models():
@@ -211,45 +236,42 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
 def process_audio_file(audio_path: Path, model: str, video_title: str, output_dir: Path, tasks: str, output_format: str):
     """
     全新的彈性處理流程，根據傳入的 tasks 和 output_format 執行操作。
-    JULES'S UPDATE: Added timing and token counting.
+    JULES'S UPDATE: Added timing, token counting, and robust error handling.
     """
     start_time = time.time()
     total_tokens_used = 0
 
-    # 延遲導入，使其只在需要時才導入
     try:
         import google.generativeai as genai
     except ImportError:
         log.critical("🔴 Necessary library (google-generativeai) not installed.")
         raise
 
-    # 1. 設定 API 金鑰
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError("GOOGLE_API_KEY environment variable not set.")
     genai.configure(api_key=api_key)
 
     task_list = [t.strip() for t in tasks.lower().split(',') if t.strip()]
-    results = {}  # 用於儲存各個任務的結果
+    results = {}
 
     gemini_file_resource = None
     try:
-        # 2. 上傳檔案 (所有任務都需要)
         gemini_file_resource = upload_to_gemini(genai, audio_path, audio_path.name)
         model_instance = genai.GenerativeModel(model)
 
-        # 3. 執行 AI 任務
         def get_token_count(response):
-            """Helper to safely get token count from a response."""
             try:
                 return response.usage_metadata.total_token_count
             except (AttributeError, ValueError):
                 return 0
 
+        # --- 執行 AI 任務 ---
         if "summary" in task_list and "transcript" in task_list:
             log.info("執行任務: 摘要與逐字稿 (合併執行)")
-            # This function needs to be updated to return the response object
             summary, transcript, response = get_summary_and_transcript(genai, gemini_file_resource, model, video_title, audio_path.name)
+            error_msg = get_error_message_from_response(response)
+            if error_msg: raise ValueError(error_msg)
             total_tokens_used += get_token_count(response)
             results['summary'] = summary
             results['transcript'] = transcript
@@ -258,6 +280,8 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
                 log.info("執行任務: 僅摘要")
                 prompt = ALL_PROMPTS['get_summary_only'].format(original_filename=audio_path.name, video_title=video_title)
                 response = model_instance.generate_content([prompt, gemini_file_resource], request_options={'timeout': 1800})
+                error_msg = get_error_message_from_response(response)
+                if error_msg: raise ValueError(error_msg)
                 total_tokens_used += get_token_count(response)
                 results['summary'] = response.text.strip()
                 log.info("✅ 摘要完成")
@@ -266,6 +290,8 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
                 log.info("執行任務: 僅逐字稿")
                 prompt = ALL_PROMPTS['get_transcript_only'].format(original_filename=audio_path.name, video_title=video_title)
                 response = model_instance.generate_content([prompt, gemini_file_resource], request_options={'timeout': 3600})
+                error_msg = get_error_message_from_response(response)
+                if error_msg: raise ValueError(error_msg)
                 total_tokens_used += get_token_count(response)
                 results['transcript'] = response.text.strip()
                 log.info("✅ 逐字稿完成")
@@ -276,13 +302,15 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
             if text_to_translate:
                 prompt = ALL_PROMPTS['translate_text'].format(text_to_translate=text_to_translate)
                 response = model_instance.generate_content(prompt, request_options={'timeout': 1800})
+                error_msg = get_error_message_from_response(response)
+                if error_msg: raise ValueError(error_msg)
                 total_tokens_used += get_token_count(response)
                 results['translation'] = response.text.strip()
                 log.info("✅ 翻譯完成")
             else:
                 log.warning("⚠️ 無法執行翻譯，因為沒有可供翻譯的內容。")
 
-        # 4. 根據輸出格式，組合並儲存檔案
+        # --- 格式化與儲存 ---
         sanitized_title = sanitize_filename(video_title)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         final_filename_base = f"{sanitized_title}_{timestamp}_AI_Report"
@@ -292,8 +320,9 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
             log.info("生成 HTML 格式報告...")
             summary_content = results.get('summary', '無摘要')
             transcript_content = results.get('transcript', '無逐字稿')
-            # This function also needs to be updated to return the response
             html_content, response = generate_html_report(genai, summary_content, transcript_content, model, video_title)
+            error_msg = get_error_message_from_response(response)
+            if error_msg: raise ValueError(error_msg)
             total_tokens_used += get_token_count(response)
             output_path = output_dir / f"{final_filename_base}.html"
             with open(output_path, "w", encoding="utf-8") as f:
@@ -318,7 +347,6 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
         processing_duration = time.time() - start_time
 
-        # 5. 輸出最終結果
         final_result = {
             "type": "result",
             "status": "completed",
@@ -329,8 +357,15 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         }
         print(json.dumps(final_result), flush=True)
 
+    except ValueError as e:
+        # 捕捉我們自訂的、易於理解的錯誤
+        log.error(f"❌ Gemini 處理失敗: {e}")
+        raise # 重新拋出，由主 exce-pt 區塊處理 JSON 輸出
+    except Exception as e:
+        log.critical(f"🔴 處理流程中發生未預期的嚴重錯誤: {e}", exc_info=True)
+        raise
+
     finally:
-        # 6. 清理 Gemini 雲端檔案
         if gemini_file_resource:
             log.info(f"🗑️ Cleaning up Gemini file: {gemini_file_resource.name}")
             try:

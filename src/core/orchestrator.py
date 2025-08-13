@@ -18,8 +18,8 @@ if sys.platform != 'win32':
 # --- 時區設定結束 ---
 
 # 將專案根目錄加入 sys.path
-# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# 因為此檔案現在位於 src/core/ 中，所以根目錄是其上上層目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
 # sys.path.insert(0, str(ROOT_DIR))
 
@@ -190,7 +190,7 @@ def main():
             api_port = find_free_port()
             log.info(f"找到一個隨機的空閒埠號: {api_port}")
 
-        api_server_cmd = [sys.executable, "src/api_server.py", "--port", str(api_port)]
+        api_server_cmd = [sys.executable, "src/api/api_server.py", "--port", str(api_port)]
         if args.mock:
             api_server_cmd.append("--mock")
         log.info(f"🔧 正在啟動 API 伺服器: {' '.join(api_server_cmd)}")

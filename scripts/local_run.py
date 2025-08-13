@@ -26,7 +26,7 @@ def cleanup_stale_processes():
     import psutil
     log.info("--- 正在檢查並清理舊的程序 ---")
     # 新增 'circusd' 到清理列表
-    stale_process_names = ["circusd", "src/api_server.py", "src/db/manager.py"]
+    stale_process_names = ["circusd", "src/api/api_server.py", "src/db/manager.py"]
     cleaned_count = 0
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
@@ -50,12 +50,9 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     # 安裝所有 Python 依賴
-    requirements_files = ["src/requirements-server.txt", "src/requirements-worker.txt"]
-    log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
-    uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
-    for req_file in requirements_files:
-        if Path(req_file).is_file():
-            uv_command.extend(["-r", req_file])
+    requirements_file = "requirements.txt"
+    log.info(f"正在使用 uv 安裝依賴: {requirements_file}...")
+    uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", requirements_file]
     subprocess.check_call(uv_command)
     log.info("✅ 所有 Python 依賴都已成功安裝。")
 

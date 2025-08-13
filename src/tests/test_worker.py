@@ -1,102 +1,116 @@
-import unittest
-import uuid
+# tests/test_worker.py
+import pytest
 import json
-from pathlib import Path
-import shutil
-import os
+import subprocess
+from unittest.mock import MagicMock, patch, call, ANY
 
-import worker
-from db import database
+# 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
+# pytest 會自動將 src 目錄下的模組視為頂層模組。
+from tasks import worker
 
-class TestWorker(unittest.TestCase):
+# --- 測試資料 ---
+TEST_TASK_ID = "test-transcribe-task-456"
+MOCK_AUDIO_FILE = "/path/to/mock_audio.wav"
+
+@pytest.fixture
+def mock_db_client(mocker):
+    """提供一個模擬的 db_client，用於隔離資料庫操作。"""
+    client = MagicMock()
+
+    # 模擬 fetch_and_lock_task 的行為
+    # 第一次呼叫回傳一個任務，第二次呼叫回傳 None 以便迴圈結束
+    mock_task_payload = json.dumps({
+        "input_file": MOCK_AUDIO_FILE,
+        "model_size": "tiny",
+        "language": "en"
+    })
+    mock_task = {
+        "task_id": TEST_TASK_ID,
+        "payload": mock_task_payload,
+        "type": "transcribe"
+    }
+    client.fetch_and_lock_task.side_effect = [mock_task, None]
+
+    # 使用 mocker.patch 來取代 worker 模組中的 db_client
+    mocker.patch('tasks.worker.db_client', new=client)
+    return client
+
+@pytest.fixture
+def mock_subprocess(mocker):
+    """提供一個模擬的 subprocess.Popen，用於隔離外部腳本呼叫。"""
+    process_mock = MagicMock()
+    # 模擬 stdout 的輸出 (來自 mock_transcriber.py 的假輸出)
+    mock_output_line = json.dumps({
+        "type": "segment", "start": 0, "end": 2, "text": "這是模擬的轉錄文字。"
+    })
+    process_mock.stdout.readline.side_effect = [f"{mock_output_line}\n", ""]
+    process_mock.wait.return_value = None
+    process_mock.returncode = 0
+    # 我們需要一個假的 stderr，即使它是空的
+    process_mock.stderr.readline.side_effect = [""]
+
+
+    popen_mock = mocker.patch('subprocess.Popen', return_value=process_mock)
+    return popen_mock
+
+@pytest.fixture
+def mock_requests(mocker):
+    """提供一個模擬的 requests.post，用於隔離對 API server 的通知。"""
+    post_mock = mocker.patch('requests.post')
+    return post_mock
+
+@pytest.fixture
+def mock_file_io(mocker):
+    """模擬檔案系統操作，例如 Path.exists 和 read_text。"""
+    # 模擬 input_file.exists()
+    mocker.patch('pathlib.Path.exists', return_value=True)
+    # 模擬 output_file.read_text()
+    mocker.patch('pathlib.Path.read_text', return_value="這是模擬的轉錄文字。")
+    # 模擬 mkdir
+    mocker.patch('pathlib.Path.mkdir')
+
+
+def test_worker_main_loop_full_workflow(
+    mock_db_client, mock_subprocess, mock_requests, mock_file_io
+):
     """
-    測試 worker.py 的核心功能，特別是基於資料庫的任務處理流程。
+    測試 worker 的 main_loop 在一個完整的轉錄任務流程中的行為。
     """
+    # --- 1. 執行 ---
+    # 呼叫主迴圈。因為 fetch_and_lock_task 被 mock 成第二次回傳 None，
+    # 這個迴圈只會執行一次，然後就會退出。
+    # 我們也傳遞一個非常短的輪詢間隔，以加速測試。
+    worker.main_loop(use_mock=True, poll_interval=0.01)
 
-    def setUp(self):
-        """設定一個乾淨的測試環境。"""
-        self.test_id = uuid.uuid4().hex[:8]
-        self.root_dir = Path("/tmp") / f"phoenix_test_{self.test_id}"
+    # --- 2. 斷言 ---
+    # 2a. 斷言資料庫互動
+    # 檢查是否嘗試獲取任務
+    mock_db_client.fetch_and_lock_task.assert_called()
+    # 檢查任務狀態是否被更新為 'completed'
+    # 我們需要檢查最後一次呼叫，因為可能會有進度更新
+    final_status_call = mock_db_client.update_task_status.call_args
+    assert final_status_call.args[0] == TEST_TASK_ID
+    assert final_status_call.args[1] == 'completed'
+    # 檢查結果是否包含正確的 transcript
+    result_json = json.loads(final_status_call.args[2])
+    assert result_json['transcript'] == "這是模擬的轉錄文字。"
 
-        # 1. 設定路徑
-        self.db_path = self.root_dir / "db"
-        self.db_file = self.db_path / "queue.db"
-        self.transcripts_dir = self.root_dir / "transcripts"
-        self.mock_audio_dir = self.root_dir / "mock_audio"
+    # 2b. 斷言子程序呼叫
+    # 檢查是否正確地呼叫了 mock_transcriber.py
+    call_args, call_kwargs = mock_subprocess.call_args
+    command_list = call_args[0]
+    assert "mock_transcriber.py" in command_list[1]
+    # JULES'S FIX: The order of arguments is not guaranteed, so check for presence instead of index.
+    assert any(arg.startswith('--audio_file=') for arg in command_list)
+    assert any(arg.startswith('--output_file=') for arg in command_list)
 
-        # 2. 建立目錄
-        self.db_path.mkdir(parents=True, exist_ok=True)
-        self.transcripts_dir.mkdir(exist_ok=True)
-        self.mock_audio_dir.mkdir(exist_ok=True)
-
-        # 3. Monkeypatch 資料庫和路徑常數，使其指向我們的測試目錄
-        #    這樣可以隔離測試，避免影響開發環境中的真實資料
-        self.original_db_file = database.DB_FILE
-        self.original_transcripts_dir = worker.TRANSCRIPTS_DIR
-        database.DB_FILE = self.db_file
-        worker.TRANSCRIPTS_DIR = self.transcripts_dir
-
-        # 4. 初始化資料庫
-        database.initialize_database()
-
-        # 5. 建立一個假的音訊檔案
-        self.mock_audio_file = self.mock_audio_dir / "test_audio.wav"
-        self.mock_audio_file.touch()
-
-    def tearDown(self):
-        """清理測試環境。"""
-        # 還原 monkeypatched 的常數
-        database.DB_FILE = self.original_db_file
-        worker.TRANSCRIPTS_DIR = self.original_transcripts_dir
-
-        # 刪除測試目錄
-        if self.root_dir.exists():
-            shutil.rmtree(self.root_dir)
-
-    def test_mock_transcription_workflow(self):
-        """
-        測試一個完整的模擬轉錄任務流程：
-        1. 在資料庫中建立一個任務。
-        2. 直接呼叫 worker 的處理函式。
-        3. 驗證資料庫中的狀態和檔案系統中的結果。
-        """
-        # 1. 準備任務
-        task_id = f"task_{uuid.uuid4().hex}"
-        payload = {
-            "input_file": str(self.mock_audio_file),
-            "model_size": "tiny",
-            "language": "en"
-        }
-
-        # 為了讓測試更貼近真實情況，我們將任務加入資料庫
-        # 但為了測試的原子性，我們不依賴 `fetch_and_lock_task`
-        # 而是手動建立一個 task 物件傳給處理函式
-        add_success = database.add_task(task_id, json.dumps(payload))
-        self.assertTrue(add_success, "任務應成功加入資料庫")
-
-        # 建立一個與 worker 從資料庫中讀取時結構相同的 task dict
-        task_to_process = {
-            "task_id": task_id,
-            "payload": json.dumps(payload),
-            "type": "transcribe"
-        }
-
-        # 2. 執行處理函式 (使用模擬模式)
-        worker.process_transcription_task(task_to_process, use_mock=True)
-
-        # 3. 驗證結果
-        # 3a. 驗證資料庫狀態
-        final_status = database.get_task_status(task_id)
-        self.assertIsNotNone(final_status, "應能在資料庫中找到任務狀態")
-        self.assertEqual(final_status["status"], "completed", "任務狀態應為 'completed'")
-
-        # 3b. 驗證結果檔案
-        expected_output_file = self.transcripts_dir / f"{task_id}.txt"
-        self.assertTrue(expected_output_file.exists(), "結果檔案應在 transcripts 目錄中被建立")
-
-        content = expected_output_file.read_text(encoding='utf-8')
-        # 驗證內容是否符合 mock_transcriber.py 的實際輸出
-        self.assertIn("歡迎使用鳳凰音訊轉錄儀", content, "結果檔案的內容應為模擬的中文轉錄文字")
-
-if __name__ == '__main__':
-    unittest.main()
+    # 2c. 斷言 API 通知
+    # 檢查是否向 API server 發送了 POST 請求
+    mock_requests.assert_called_once()
+    # 檢查請求的 URL 和 payload
+    request_args, request_kwargs = mock_requests.call_args
+    assert request_args[0] == "http://127.0.0.1:42649/api/internal/notify_task_update"
+    sent_payload = request_kwargs['json']
+    assert sent_payload['task_id'] == TEST_TASK_ID
+    assert sent_payload['status'] == 'completed'
+    assert sent_payload['result']['transcript'] == "這是模擬的轉錄文字。"

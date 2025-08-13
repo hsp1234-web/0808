@@ -187,10 +187,11 @@ class ServerManager:
 
             self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
 
-            # 動態將下載的專案路徑加入 sys.path，以便導入其模組
-            project_path_str = str(project_path.resolve())
-            if project_path_str not in sys.path:
-                sys.path.insert(0, project_path_str)
+            # 動態將下載專案的 src 目錄加入 sys.path，以符合新架構
+            project_src_path = project_path / "src"
+            project_src_path_str = str(project_src_path.resolve())
+            if project_src_path_str not in sys.path:
+                sys.path.insert(0, project_src_path_str)
 
             from db.database import initialize_database, add_system_log
             initialize_database()
@@ -217,7 +218,7 @@ class ServerManager:
 
             # 2. 立刻啟動核心協調器，讓 API 服務上線
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            orchestrator_script_path = project_path / "src" / "orchestrator.py"
+            orchestrator_script_path = project_path / "src" / "core" / "orchestrator.py"
             if not orchestrator_script_path.is_file():
                 self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path}")
                 return

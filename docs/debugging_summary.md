@@ -38,7 +38,7 @@
 
 *   **問題 2.1:** 兩個測試檔案 (`e2e_prompts_page.spec.js`, `e2e_youtube_refactor.spec.js`) 因讀取 `orchestrator.log` 失敗而崩潰。
     *   **症狀:** `ENOENT: no such file or directory, open 'orchestrator.log'` 錯誤。
-    *   **診斷:** 測試腳本硬性依賴一個由 `orchestrator.py` 產生的日誌檔來獲取伺服器 URL，但 Playwright 的標準測試流程是透過 `run_for_playwright.py` 啟動服務，此過程不會執行 `orchestrator.py`。
+    *   **診斷:** 測試腳本硬性依賴一個由 `src/core/orchestrator.py` 產生的日誌檔來獲取伺服器 URL，但 Playwright 的標準測試流程是透過 `run_for_playwright.py` 啟動服務，此過程不會執行 `src/core/orchestrator.py`。
     *   **行動 (✅ 有效):** 修改這兩個測試檔，移除讀取日誌的邏輯，改為使用固定的測試伺服器 URL (`http://127.0.0.1:42649`)。
     *   **結果:** 這兩個測試成功通過。
 

@@ -10,9 +10,9 @@
 
 我們提供兩種主要的執行方式：一個用於本地開發與端對端測試，另一個專為在 Google Colab 中部署而設計。
 
-### 方式一：自動化後端整合測試 (`local_run.py`)
+### 方式一：自動化後端整合測試 (`scripts/local_run.py`)
 
-`local_run.py` 是一個**自動化的整合測試腳本**，主要用於驗證後端的核心功能。它會啟動所有服務，提交一個測試任務，並在任務完成後自動關閉。
+`scripts/local_run.py` 是一個**自動化的整合測試腳本**，主要用於驗證後端的核心功能。它會啟動所有服務，提交一個測試任務，並在任務完成後自動關閉。
 
 **此方式適用於**：
 *   快速驗證後端修改是否引發問題。
@@ -21,34 +21,45 @@
 **如何使用**:
 ```bash
 # 如果您有 Google API 金鑰，請將其設定在環境中以測試完整流程
-python local_run.py
+python scripts/local_run.py
 ```
 當腳本顯示「所有驗證均已通過！」或「任務正確地以 'failed' 狀態結束」（在沒有 API 金鑰的情況下）時，即表示後端功能運作正常。
 
-### 方式二：啟動後端服務 (用於 UI 測試或手動操作)
+### 方式二：啟動開發與測試伺服器 (`scripts/run_for_playwright.py`)
 
-如果您需要一個**持續運行的後端服務**來進行前端開發、手動測試或執行 Playwright UI 測試，請使用 `circus` 直接啟動服務。
+此為**進行本地開發、手動測試或執行 Playwright UI 測試的建議方式**。該腳本會自動處理環境設定、啟動所有必要的後端服務，並確保測試環境的乾淨與一致。
 
 **此方式適用於**：
-*   本地端開啟 `static/mp3.html` 進行手動功能測試。
-*   執行 Playwright 端對端 UI 測試。
+*   前端開發：啟動後端服務後，可直接在瀏覽器中開啟 `src/static/mp3.html` 進行開發與調試。
+*   執行 Playwright E2E 測試。
 
 **如何使用**:
 ```bash
-# (首次執行前) 確保 logs 目錄存在
+# 此腳本會自動安裝依賴、清理舊日誌與資料庫，並啟動所有服務
+python scripts/run_for_playwright.py
+```
+服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。使用 `Ctrl+C` 來終止所有服務。
+
+### (替代方式) 方式三：使用 Circus 進行部署
+
+如果您需要一個更接近生產環境的、由程序管理器守護的持續運行服務，可以使用 `circus`。
+
+**如何使用**:
+```bash
+# (首次執行前) 複製範本並確保 logs 目錄存在
+cp config/circus.ini.template config/circus.ini
 mkdir -p logs
 
 # 啟動所有後端服務
-python -m circus.circusd circus.ini
+python -m circus.circusd config/circus.ini
 
-# 完成測試後，可使用以下指令關閉服務
+# 完成後，可使用以下指令關閉服務
 python -m circus.circusctl quit
 ```
-服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。
 
-### 方式三：在 Google Colab 中部署 (`colab.py`)
+### 方式四：在 Google Colab 中部署 (`scripts/colab.py`)
 
-`colab.py` 是專為在 Google Colab 環境中一鍵部署和運行本專案而設計的啟動器。它會處理 Git 倉庫的複製、環境設定，並利用 Colab 的代理功能生成一個公開的訪問連結。
+`scripts/colab.py` 是專為在 Google Colab 環境中一鍵部署和運行本專案而設計的啟動器。它會處理 Git 倉庫的複製、環境設定，並利用 Colab 的代理功能生成一個公開的訪問連結。
 
 **如何使用**:
 1.  在 Google Colab 中開啟一個新的筆記本。
@@ -67,18 +78,29 @@ python -m circus.circusctl quit
 *   [x] **測試穩定**：`local_run.py` 後端整合測試運作正常。前端 UI 測試採用 Playwright (`/tests` 目錄下的 `.spec.js` 檔案)，可有效驗證 `mp3.html` 的各項功能。
 
 ---
-## 📁 檔案結構 (摘要)
+## 📁 檔案結構 (新版)
 
 ```
-/
-|-- api_server.py        # Web 伺服器 (FastAPI)
-|-- orchestrator.py      # 系統協調器
-|-- local_run.py         # [主要] 本地端對端測試腳本
-|-- colab.py             # Google Colab 部署腳本
-|
-|-- static/              # 前端資源 (mp3.html)
-|-- db/                  # 資料庫模組
-|-- tools/               # 核心工具 (轉錄、下載、AI處理)
-|-- tests/               # Playwright 等測試碼
-`-- README.md            # 本文件
+hsp1234-web/
+├── .github/              # CI/CD 工作流程
+├── .vscode/              # VS Code 編輯器設定
+├── build/                # 建置後的產出物
+├── config/               # 所有環境設定檔 (circus.ini)
+├── docs/                 # 專案文件
+├── logs/                 # 執行時產生的日誌檔案
+├── scripts/              # 各類輔助腳本 (部署、測試啟動器)
+├── src/                  # 主要應用程式原始碼
+│   ├── api/              # API 伺服器 (api_server.py)
+│   ├── core/             # 核心商業邏輯 (orchestrator.py)
+│   ├── db/               # 資料庫相關模組
+│   ├── static/           # 靜態檔案 (HTML, CSS, 前端 JS)
+│   ├── tasks/            # 背景任務/Worker (worker.py)
+│   ├── tests/            # 所有測試檔案 (單元測試、E2E 測試)
+│   └── tools/            # 專案使用的工具模組
+├── .gitignore            # Git 忽略清單
+├── package.json          # Node.js 專案依賴
+├── playwright.config.js  # Playwright E2E 測試設定
+├── pyproject.toml        # Python 專案設定
+├── requirements.txt      # Python 專案依賴
+└── README.md             # 專案主說明文件
 ```

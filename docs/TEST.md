@@ -48,8 +48,8 @@
 ### **問題 5：測試伺服器埠號不固定**
 *   **狀況描述**: 即使使用 `local_run.py` 成功啟動了伺服器，但它每次都會監聽一個隨機埠號，而 Playwright 測試卻寫死了一個固定的埠號（`42649`），導致無法連接。
 *   **解決方案**:
-    1.  **改造 `orchestrator.py`**: 我為其新增了一個 `--port` 命令列參數，允許外部腳本指定一個固定的埠號。
-    2.  **建立 E2E 專用啟動器**: 我建立了 `run_for_playwright.py`，這是一個 `local_run.py` 的簡化版。它只負責啟動服務並保持運行，同時在啟動 `orchestrator.py` 時傳入 `--port 42649`，確保了埠號的固定。
+    1.  **改造 `src/core/orchestrator.py`**: 我為其新增了一個 `--port` 命令列參數，允許外部腳本指定一個固定的埠號。
+    2.  **建立 E2E 專用啟動器**: 我建立了 `run_for_playwright.py`，這是一個 `local_run.py` 的簡化版。它只負責啟動服務並保持運行，同時在啟動 `src/core/orchestrator.py` 時傳入 `--port 42649`，確保了埠號的固定。
 
 ---
 

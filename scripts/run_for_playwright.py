@@ -18,7 +18,7 @@ log = logging.getLogger('playwright_runner')
 
 def install_dependencies():
     log.info("--- 正在安裝 Python 依賴 ---")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "src/requirements-server.txt", "-r", "src/requirements-worker.txt"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"])
     log.info("✅ Python 依賴安裝成功。")
     log.info("--- 正在安裝 Node.js 依賴 ---")
     subprocess.check_call(["bun", "install"])
@@ -52,6 +52,9 @@ def main():
         env['FORCE_MOCK_TRANSCRIBER'] = 'true'
         # The server itself runs in "real" mode to allow real YT/Gemini calls
         env['API_MODE'] = 'mock'
+        # JULES'S FIX: 設定 PYTHONPATH，以便子程序可以找到 'db' 和 'tools' 等模組
+        src_path = str(Path(__file__).resolve().parent.parent / "src")
+        env['PYTHONPATH'] = src_path
 
         # 清理日誌和上傳檔案
         log_dir = Path("logs")
@@ -96,7 +99,7 @@ def main():
         log_files['api_stdout'] = api_stdout_file
         log_files['api_stderr'] = api_stderr_file
         api_proc = subprocess.Popen(
-            [sys.executable, "src/api_server.py", "--port", "42649"],
+            [sys.executable, "src/api/api_server.py", "--port", "42649"],
             env=env,
             stdout=api_stdout_file,
             stderr=api_stderr_file
