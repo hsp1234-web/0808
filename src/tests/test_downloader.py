@@ -224,4 +224,5 @@ def test_mock_youtube_downloader_script(tmp_path):
 
     # 斷言檔案內容
     content = output_path.read_text(encoding='utf-8')
-    assert content == "這是一個模擬的音訊檔案。"
+    # JULES'S FIX: 使用 .strip() 來移除潛在的尾隨換行符，使斷言更可靠
+    assert content.strip() == "這是一個模擬的音訊檔案。"

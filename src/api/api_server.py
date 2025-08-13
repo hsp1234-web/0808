@@ -177,6 +177,78 @@ def convert_to_media_url(absolute_path_str: str) -> str:
         return absolute_path_str
 
 
+def reconcile_tasks_with_filesystem():
+    """
+    掃描 uploads 資料夾，將資料庫記錄與實際存在的檔案進行比對，
+    並為那些在磁碟上存在但資料庫中遺失的「失孤」檔案補建紀錄。
+    """
+    try:
+        log.info("--- 開始執行檔案系統與資料庫的校準 ---")
+        db_tasks = db_client.get_all_tasks()
+
+        # 1. 建立一個已知檔案路徑的集合，以便快速查找
+        known_paths = set()
+        for task in db_tasks:
+            result = task.get("result")
+            if not result:
+                continue
+            try:
+                # JULES'S FIX: 確保 result 是字典
+                result_data = json.loads(result) if isinstance(result, str) else result
+
+                path_keys = ["output_path", "transcript_path", "html_report_path", "pdf_report_path"]
+                for key in path_keys:
+                    url_path = result_data.get(key)
+                    if url_path and url_path.startswith('/media/'):
+                        relative_path = url_path.lstrip('/media/')
+                        fs_path = UPLOADS_DIR / relative_path
+                        known_paths.add(str(fs_path.resolve()))
+                        break
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        # 2. 掃描 uploads 資料夾下的所有檔案
+        found_files = [p for p in UPLOADS_DIR.rglob('*') if p.is_file() and not p.name.startswith('.')]
+        reconciled_count = 0
+
+        for file_path in found_files:
+            if str(file_path.resolve()) not in known_paths:
+                log.warning(f"發現失孤檔案，準備補建紀錄: {file_path}")
+
+                task_id = file_path.stem
+                original_filename = file_path.name
+                file_url = convert_to_media_url(str(file_path))
+
+                task_type = "unknown"
+                if "transcript" in file_path.parts:
+                    task_type = "transcribe"
+                elif "report" in file_path.parts:
+                    task_type = "gemini_process"
+                elif file_path.suffix in ['.mp3', '.m4a', '.mp4', '.wav', '.flac']:
+                    task_type = "youtube_download_only"
+
+                payload = json.dumps({"original_filename": original_filename, "reconciled": True})
+                result = json.dumps({"output_path": file_url, "video_title": original_filename, "reconciled": True})
+
+                # 首先新增任務，如果 task_id 已存在，它會失敗，這是預期行為
+                if db_client.add_task(task_id, payload, task_type=task_type):
+                    db_client.update_task_status(task_id, 'completed', result)
+                    reconciled_count += 1
+                else:
+                    log.warning(f"補建任務 {task_id} 時失敗 (可能已存在)，跳過。")
+
+        if reconciled_count > 0:
+            log.info(f"✅ 校準完成，共補建了 {reconciled_count} 筆遺失的任務紀錄。")
+        else:
+            log.info("✅ 校準完成，未發現失孤檔案。")
+
+        return db_client.get_all_tasks()
+
+    except Exception as e:
+        log.error(f"❌ 執行檔案系統校準時發生嚴重錯誤: {e}", exc_info=True)
+        return db_client.get_all_tasks() if 'db_tasks' in locals() else []
+
+
 # --- API 端點 ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -370,22 +442,23 @@ async def get_system_stats():
 @app.get("/api/tasks")
 async def get_all_tasks_endpoint():
     """
-    獲取所有任務的列表，用於前端展示。
+    獲取所有任務的列表，並在回傳前執行與檔案系統的校準，
+    以補全可能因意外而遺失的資料庫紀錄。
     """
-    tasks = db_client.get_all_tasks()
+    tasks = reconcile_tasks_with_filesystem()
     # 嘗試解析 payload 和 result 中的 JSON 字串
     for task in tasks:
         try:
-            if task.get("payload"):
+            if task.get("payload") and isinstance(task["payload"], str):
                 task["payload"] = json.loads(task["payload"])
         except (json.JSONDecodeError, TypeError):
-            log.warning(f"任務 {task.get('task_id')} 的 payload 不是有效的 JSON。")
+            log.warning(f"任務 {task.get('id')} 的 payload 不是有效的 JSON。")
             pass # 保持原樣
         try:
-            if task.get("result"):
+            if task.get("result") and isinstance(task["result"], str):
                 task["result"] = json.loads(task["result"])
         except (json.JSONDecodeError, TypeError):
-            log.warning(f"任務 {task.get('task_id')} 的 result 不是有效的 JSON。")
+            log.warning(f"任務 {task.get('id')} 的 result 不是有效的 JSON。")
             pass # 保持原樣
     return JSONResponse(content=tasks)
 
@@ -433,10 +506,21 @@ async def download_transcript(task_id: str):
         if not output_filename:
             raise HTTPException(status_code=500, detail="任務結果中未包含有效的檔案路徑。")
 
-        file_path = Path(output_filename)
+        # JULES'S FIX 2025-08-14: 將 URL 路徑轉換回檔案系統絕對路徑
+        # 資料庫中儲存的是像 /media/reports/report.html 這樣的 URL，
+        # 我們需要將其轉換回像 /app/uploads/reports/report.html 這樣的絕對檔案系統路徑。
+        if output_filename.startswith('/media/'):
+            # 移除 '/media/' 前綴並與上傳目錄合併
+            relative_path = output_filename.lstrip('/media/')
+            file_path = UPLOADS_DIR / relative_path
+        else:
+            # 作為備用，如果路徑不是 /media/ 開頭，則假設它是一個絕對路徑
+            # 這可以保持對舊資料格式的相容性
+            file_path = Path(output_filename)
+
         if not file_path.is_file():
-            log.error(f"❌ 轉錄檔案不存在: {file_path}")
-            raise HTTPException(status_code=404, detail="轉錄檔案遺失或無法讀取。")
+            log.error(f"❌ 檔案系統中的檔案不存在: {file_path}")
+            raise HTTPException(status_code=404, detail="檔案遺失或無法讀取。")
 
         # 提供檔案下載
         from fastapi.responses import FileResponse
