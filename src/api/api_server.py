@@ -177,78 +177,6 @@ def convert_to_media_url(absolute_path_str: str) -> str:
         return absolute_path_str
 
 
-def reconcile_tasks_with_filesystem():
-    """
-    掃描 uploads 資料夾，將資料庫記錄與實際存在的檔案進行比對，
-    並為那些在磁碟上存在但資料庫中遺失的「失孤」檔案補建紀錄。
-    """
-    try:
-        log.info("--- 開始執行檔案系統與資料庫的校準 ---")
-        db_tasks = db_client.get_all_tasks()
-
-        # 1. 建立一個已知檔案路徑的集合，以便快速查找
-        known_paths = set()
-        for task in db_tasks:
-            result = task.get("result")
-            if not result:
-                continue
-            try:
-                # JULES'S FIX: 確保 result 是字典
-                result_data = json.loads(result) if isinstance(result, str) else result
-
-                path_keys = ["output_path", "transcript_path", "html_report_path", "pdf_report_path"]
-                for key in path_keys:
-                    url_path = result_data.get(key)
-                    if url_path and url_path.startswith('/media/'):
-                        relative_path = url_path.lstrip('/media/')
-                        fs_path = UPLOADS_DIR / relative_path
-                        known_paths.add(str(fs_path.resolve()))
-                        break
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-        # 2. 掃描 uploads 資料夾下的所有檔案
-        found_files = [p for p in UPLOADS_DIR.rglob('*') if p.is_file() and not p.name.startswith('.')]
-        reconciled_count = 0
-
-        for file_path in found_files:
-            if str(file_path.resolve()) not in known_paths:
-                log.warning(f"發現失孤檔案，準備補建紀錄: {file_path}")
-
-                task_id = file_path.stem
-                original_filename = file_path.name
-                file_url = convert_to_media_url(str(file_path))
-
-                task_type = "unknown"
-                if "transcript" in file_path.parts:
-                    task_type = "transcribe"
-                elif "report" in file_path.parts:
-                    task_type = "gemini_process"
-                elif file_path.suffix in ['.mp3', '.m4a', '.mp4', '.wav', '.flac']:
-                    task_type = "youtube_download_only"
-
-                payload = json.dumps({"original_filename": original_filename, "reconciled": True})
-                result = json.dumps({"output_path": file_url, "video_title": original_filename, "reconciled": True})
-
-                # 首先新增任務，如果 task_id 已存在，它會失敗，這是預期行為
-                if db_client.add_task(task_id, payload, task_type=task_type):
-                    db_client.update_task_status(task_id, 'completed', result)
-                    reconciled_count += 1
-                else:
-                    log.warning(f"補建任務 {task_id} 時失敗 (可能已存在)，跳過。")
-
-        if reconciled_count > 0:
-            log.info(f"✅ 校準完成，共補建了 {reconciled_count} 筆遺失的任務紀錄。")
-        else:
-            log.info("✅ 校準完成，未發現失孤檔案。")
-
-        return db_client.get_all_tasks()
-
-    except Exception as e:
-        log.error(f"❌ 執行檔案系統校準時發生嚴重錯誤: {e}", exc_info=True)
-        return db_client.get_all_tasks() if 'db_tasks' in locals() else []
-
-
 # --- API 端點 ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -442,23 +370,22 @@ async def get_system_stats():
 @app.get("/api/tasks")
 async def get_all_tasks_endpoint():
     """
-    獲取所有任務的列表，並在回傳前執行與檔案系統的校準，
-    以補全可能因意外而遺失的資料庫紀錄。
+    獲取所有任務的列表，用於前端展示。
     """
-    tasks = reconcile_tasks_with_filesystem()
+    tasks = db_client.get_all_tasks()
     # 嘗試解析 payload 和 result 中的 JSON 字串
     for task in tasks:
         try:
-            if task.get("payload") and isinstance(task["payload"], str):
+            if task.get("payload"):
                 task["payload"] = json.loads(task["payload"])
         except (json.JSONDecodeError, TypeError):
-            log.warning(f"任務 {task.get('id')} 的 payload 不是有效的 JSON。")
+            log.warning(f"任務 {task.get('task_id')} 的 payload 不是有效的 JSON。")
             pass # 保持原樣
         try:
-            if task.get("result") and isinstance(task["result"], str):
+            if task.get("result"):
                 task["result"] = json.loads(task["result"])
         except (json.JSONDecodeError, TypeError):
-            log.warning(f"任務 {task.get('id')} 的 result 不是有效的 JSON。")
+            log.warning(f"任務 {task.get('task_id')} 的 result 不是有效的 JSON。")
             pass # 保持原樣
     return JSONResponse(content=tasks)
 
@@ -1244,6 +1171,87 @@ async def websocket_endpoint(websocket: WebSocket):
 async def health_check():
     """提供一個簡單的健康檢查端點。"""
     return {"status": "ok", "message": "API Server is running."}
+
+
+@app.get("/api/list_files")
+async def list_files_endpoint():
+    """
+    掃描 uploads 目錄並回傳所有檔案和資料夾的列表。
+    """
+    try:
+        if not UPLOADS_DIR.is_dir():
+            log.warning(f"Uploads directory not found at: {UPLOADS_DIR}")
+            return JSONResponse(content=[])
+
+        files_list = []
+        for item in sorted(UPLOADS_DIR.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
+            try:
+                stat = item.stat()
+                file_info = {
+                    "name": item.name,
+                    "path": convert_to_media_url(str(item)),
+                    "type": "dir" if item.is_dir() else "file",
+                    "size": stat.st_size,
+                    "modified_time": stat.st_mtime
+                }
+                # 我們不想在列表中顯示 cookies.txt
+                if item.name == "cookies.txt":
+                    continue
+                files_list.append(file_info)
+            except FileNotFoundError:
+                # 檔案可能在迭代過程中被刪除
+                log.warning(f"在掃描目錄時找不到檔案: {item.name}")
+                continue
+
+        return JSONResponse(content=files_list)
+    except Exception as e:
+        log.error(f"❌ 列出檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="無法列出檔案。")
+
+
+@app.post("/api/delete_file", status_code=200)
+async def delete_file_endpoint(request: Request):
+    """
+    從 uploads 目錄中刪除指定的檔案。
+    """
+    try:
+        data = await request.json()
+        file_path_url = data.get("path")
+        if not file_path_url:
+            raise HTTPException(status_code=400, detail="請求中未提供檔案路徑。")
+
+        # 安全性第一：將 URL 路徑轉換為檔案系統路徑並進行驗證
+        if not file_path_url.startswith('/media/'):
+            raise HTTPException(status_code=400, detail="無效的檔案路徑格式。")
+
+        relative_path = file_path_url[len('/media/'):]
+        # 使用 os.path.normpath 清理路徑 (例如 ../)
+        safe_relative_path = os.path.normpath(relative_path)
+
+        # 建立完整的絕對路徑
+        full_path = UPLOADS_DIR.joinpath(safe_relative_path)
+
+        # 最終、也是最重要的安全檢查：確保解析後的路徑仍在 UPLOADS_DIR 內
+        if not str(full_path.resolve()).startswith(str(UPLOADS_DIR.resolve())):
+            log.critical(f"🚨🚨🚨 偵測到路徑遍歷攻擊嘗試！企圖刪除: {full_path.resolve()}")
+            raise HTTPException(status_code=403, detail="禁止存取：不允許刪除指定位置的檔案。")
+
+        if full_path.is_file():
+            full_path.unlink()
+            log.info(f"🗑️ 已成功刪除檔案: {full_path}")
+            return {"status": "success", "message": f"檔案 {full_path.name} 已被刪除。"}
+        elif full_path.is_dir():
+            # 為了安全起見，目前不實作遞迴刪除資料夾的功能
+            raise HTTPException(status_code=400, detail="目前不支援刪除資料夾。")
+        else:
+            raise HTTPException(status_code=404, detail="找不到指定的檔案。")
+
+    except Exception as e:
+        log.error(f"❌ 刪除檔案時發生錯誤: {e}", exc_info=True)
+        # 避免在正式回應中洩漏過多細節
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail="刪除檔案時發生伺服器內部錯誤。")
 
 
 @app.post("/api/internal/notify_task_update", status_code=200)

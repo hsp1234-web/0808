@@ -582,6 +582,17 @@
             </div>
         </div>
 
+        <!-- JULES: 新增的檔案總管 -->
+        <div id="file-browser-card" class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <h2>📁 檔案總管 (Uploads)</h2>
+                <button id="reload-file-browser-btn" style="padding: 8px 16px;">🔄 重新整理</button>
+            </div>
+            <div id="file-browser-list" class="task-list" style="margin-top: 16px; max-height: 500px;">
+                <p id="file-browser-loading-msg">正在載入檔案列表...</p>
+            </div>
+        </div>
+
         <!-- 任務儀表板 -->
         <div class="grid-2-col">
             <div class="card">
@@ -794,6 +805,11 @@
             const copyLogsBtn = document.getElementById('copy-logs-btn');
             const logLevelCheckboxes = document.querySelectorAll('input[name="log-level"]');
             const logSourceCheckboxes = document.querySelectorAll('input[name="log-source"]');
+
+            // --- JULES: 檔案總管元素 ---
+            const fileBrowserList = document.getElementById('file-browser-list');
+            const reloadFileBrowserBtn = document.getElementById('reload-file-browser-btn');
+
 
             // --- 全域狀態變數 ---
             let uploadedFiles = [];
@@ -1934,6 +1950,198 @@
             setupWebSocket();
             loadTaskHistory();
             updateFileDisplay();
+            loadFileBrowser(); // JULES: 新增的檔案總管載入函式
+
+            // --- JULES: 檔案總管邏輯 ---
+            const getFileBrowserIcon = (file) => {
+                if (file.type === 'dir') return '📁';
+                const extension = file.name.split('.').pop().toLowerCase();
+                const iconMap = {
+                    'mp3': '🎵', 'wav': '🎵', 'm4a': '🎵', 'flac': '🎵', 'ogg': '🎵',
+                    'mp4': '🎥', 'mov': '🎥', 'avi': '🎥', 'mkv': '🎥',
+                    'txt': '📝', 'json': '📝', 'log': '📝',
+                    'html': '📄', 'pdf': '📄',
+                    'zip': '📦', 'gz': '📦', 'rar': '📦',
+                };
+                return iconMap[extension] || '❓';
+            };
+
+            const formatFileSize = (bytes) => {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+
+            const loadFileBrowser = async () => {
+                logAction('load-file-browser');
+                if (!fileBrowserList) return;
+                fileBrowserList.innerHTML = '<p id="file-browser-loading-msg">正在載入檔案列表...</p>';
+
+                try {
+                    const response = await fetch('/api/list_files');
+                    if (!response.ok) {
+                        throw new Error(`伺服器錯誤: ${response.status} ${response.statusText}`);
+                    }
+                    const files = await response.json();
+                    console.log('File Browser API response:', JSON.stringify(files, null, 2));
+
+                    fileBrowserList.innerHTML = ''; // 清空讀取中訊息
+
+                    if (files.length === 0) {
+                        fileBrowserList.innerHTML = '<p>Uploads 資料夾是空的。</p>';
+                        return;
+                    }
+
+                    files.forEach(file => {
+                        const item = document.createElement('div');
+                        item.className = 'task-item';
+                        item.dataset.filePath = file.path; // 將路徑存在 dataset 中供後續使用
+
+                        const fileInfoHtml = `
+                            <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
+                                <span style="font-size: 1.8em;">${getFileBrowserIcon(file)}</span>
+                                <div style="overflow: hidden;">
+                                    <strong class="task-filename" title="${file.name}">${file.name}</strong>
+                                    <small style="display: block; color: #666; font-size: 0.85em;">
+                                        ${formatFileSize(file.size)} | ${new Date(file.modified_time * 1000).toLocaleString()}
+                                    </small>
+                                </div>
+                            </div>
+                        `;
+
+                        const actionsContainer = document.createElement('div');
+                        actionsContainer.className = 'task-actions';
+                        actionsContainer.style.flexShrink = '0';
+
+                        // --- 建立按鈕 ---
+                        const downloadBtn = document.createElement('a');
+                        downloadBtn.href = file.path;
+                        downloadBtn.textContent = '下載';
+                        downloadBtn.className = 'btn-download';
+                        downloadBtn.download = file.name;
+                        downloadBtn.addEventListener('click', (e) => {
+                            e.stopPropagation(); // 避免觸發其他事件
+                            logAction('click-file-browser-download', file.name);
+                        });
+
+                        const deleteBtn = document.createElement('a');
+                        deleteBtn.href = '#';
+                        deleteBtn.textContent = '刪除';
+                        deleteBtn.className = 'btn-rename'; // 使用黃色風格
+                        deleteBtn.style.backgroundColor = '#dc3545'; // 紅色
+                        deleteBtn.style.color = 'white';
+                        deleteBtn.addEventListener('click', async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            logAction('click-file-browser-delete', file.name);
+                            if (confirm(`您確定要永久刪除檔案 "${file.name}" 嗎？此操作無法復原。`)) {
+                                try {
+                                    const response = await fetch('/api/delete_file', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ path: file.path })
+                                    });
+                                    const result = await response.json();
+                                    if (!response.ok) {
+                                        throw new Error(result.detail || '刪除失敗');
+                                    }
+                                    showStatusMessage(result.message || '檔案刪除成功！', false);
+                                    // 從 UI 中移除該項目
+                                    item.remove();
+                                } catch (error) {
+                                    console.error('刪除檔案時發生錯誤:', error);
+                                    showStatusMessage(`錯誤: ${error.message}`, true);
+                                }
+                            }
+                        });
+
+                        actionsContainer.appendChild(downloadBtn);
+                        actionsContainer.appendChild(deleteBtn);
+
+                        // --- 根據檔案類型加入特定按鈕 ---
+                        const extension = file.name.split('.').pop().toLowerCase();
+                        const isAudio = ['mp3', 'wav', 'm4a', 'flac', 'ogg'].includes(extension);
+
+                        if (isAudio) {
+                            const sendToWhisperBtn = document.createElement('a');
+                            sendToWhisperBtn.href = '#';
+                            sendToWhisperBtn.textContent = '送去轉錄';
+                            sendToWhisperBtn.className = 'btn-preview'; // 藍色風格
+                            sendToWhisperBtn.style.backgroundColor = '#17a2b8'; // 青色
+                            sendToWhisperBtn.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                logAction('click-file-browser-send-to-whisper', file.name);
+                                sendToWhisperBtn.textContent = '處理中...';
+                                sendToWhisperBtn.disabled = true;
+                                try {
+                                    const response = await fetch(file.path);
+                                    if (!response.ok) throw new Error('無法從伺服器獲取檔案');
+                                    const blob = await response.blob();
+                                    const audioFile = new File([blob], file.name, { type: blob.type });
+
+                                    if (!uploadedFiles.some(f => f.name === audioFile.name)) {
+                                        uploadedFiles.push(audioFile);
+                                    }
+                                    document.querySelector('.tab-button[data-tab="local-file-tab"]').click();
+                                    updateFileDisplay();
+                                    showStatusMessage(`檔案 "${file.name}" 已成功加入到「本機檔案轉錄」分頁！`, false);
+                                } catch (error) {
+                                    console.error('傳送至轉錄區時發生錯誤:', error);
+                                    showStatusMessage(`錯誤: ${error.message}`, true);
+                                } finally {
+                                    sendToWhisperBtn.textContent = '送去轉錄';
+                                    sendToWhisperBtn.disabled = false;
+                                }
+                            });
+                            actionsContainer.prepend(sendToWhisperBtn); // 加到最前面
+                        }
+
+
+                        // --- JULES: Refactor DOM creation to be more robust ---
+                        // 1. Create the left-hand side info container
+                        const infoContainer = document.createElement('div');
+                        infoContainer.style.cssText = 'display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;';
+
+                        const iconSpan = document.createElement('span');
+                        iconSpan.style.fontSize = '1.8em';
+                        iconSpan.textContent = getFileBrowserIcon(file);
+
+                        const textContainer = document.createElement('div');
+                        textContainer.style.overflow = 'hidden';
+
+                        const nameStrong = document.createElement('strong');
+                        nameStrong.className = 'task-filename';
+                        nameStrong.title = file.name;
+                        nameStrong.textContent = file.name;
+
+                        const detailsSmall = document.createElement('small');
+                        detailsSmall.style.cssText = 'display: block; color: #666; font-size: 0.85em;';
+                        detailsSmall.textContent = `${formatFileSize(file.size)} | ${new Date(file.modified_time * 1000).toLocaleString()}`;
+
+                        textContainer.appendChild(nameStrong);
+                        textContainer.appendChild(detailsSmall);
+
+                        infoContainer.appendChild(iconSpan);
+                        infoContainer.appendChild(textContainer);
+
+                        // 2. Append info container and actions container to the main item
+                        item.appendChild(infoContainer);
+                        item.appendChild(actionsContainer);
+
+                        fileBrowserList.appendChild(item);
+                    });
+
+                } catch (error) {
+                    console.error('載入檔案總管時發生錯誤:', error);
+                    fileBrowserList.innerHTML = `<p style="color: red;">無法載入檔案列表: ${error.message}</p>`;
+                }
+            };
+
+            reloadFileBrowserBtn.addEventListener('click', loadFileBrowser);
+
 
             // --- 日誌檢視器邏輯 ---
             fetchLogsBtn.addEventListener('click', async () => {
