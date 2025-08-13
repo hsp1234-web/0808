@@ -187,6 +187,24 @@ class ServerManager:
 
             self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
 
+            # JULES'S FIX (2025-08-12): src-layout 結構下的標準作法
+            # 執行 `pip install -e .` 來讓 `src` 目錄下的模組可以被正確匯入
+            self._log_manager.log("INFO", "正在以可編輯模式安裝專案，以修復模組路徑...")
+            install_command = [sys.executable, "-m", "pip", "install", "-e", "."]
+            install_result = subprocess.run(
+                install_command,
+                cwd=str(project_path), # 在專案根目錄下執行
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            if install_result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"以可編輯模式安裝專案失敗:\n{install_result.stderr}");
+                return
+            self._log_manager.log("SUCCESS", "✅ 專案可編輯模式安裝完成。")
+
+
             # 動態將下載的專案路徑加入 sys.path，以便導入其模組
             project_path_str = str(project_path.resolve())
             if project_path_str not in sys.path:
