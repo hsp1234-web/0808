@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch, mock_open, call, ANY
 
 # 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
 # pytest 會自動將 src 目錄下的模組視為頂層模組。
-import api_server
+from api import api_server
 
 # --- 測試設定 ---
 TEST_TASK_ID = "test-youtube-task-123"
@@ -31,7 +31,7 @@ def mock_db_client(mocker):
     }
 
     # 使用 mocker.patch 來取代 api_server 模組中的 db_client
-    mocker.patch('api_server.db_client', new=client)
+    mocker.patch('api.api_server.db_client', new=client)
     return client
 
 @pytest.fixture
@@ -71,10 +71,10 @@ def mock_websocket_manager(mocker):
 
     # 我們仍然需要 patch asyncio.run_coroutine_threadsafe，因為它會被呼叫，
     # 但我們不再需要檢查它的呼叫，而是檢查 manager_mock 的方法呼叫。
-    mocker.patch('asyncio.run_coroutine_threadsafe')
+    mocker.patch('api.api_server.asyncio.run_coroutine_threadsafe')
 
     # 將模擬的 manager patch 到 api_server 模組中
-    mocker.patch('api_server.manager', new=manager_mock)
+    mocker.patch('api.api_server.manager', new=manager_mock)
 
     # 回傳 manager_mock 以便在測試中進行斷言
     return manager_mock
@@ -104,13 +104,13 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
 
     # 斷言子程序被正確呼叫
     # JULES'S FIX (2025-08-12): 修正因 src-layout 重構導致的路徑問題
-    # api_server.py 中硬編碼了 'src/tools/...' 的路徑，測試需要與之匹配
+    # api_server.py 現在使用 ROOT_DIR 來建構絕對路徑
     tool_name = "mock_youtube_downloader.py" if api_server.IS_MOCK_MODE else "youtube_downloader.py"
-    expected_tool_path = f"src/tools/{tool_name}"
+    expected_tool_path = api_server.ROOT_DIR / "src" / "tools" / tool_name
 
     expected_cmd = [
         sys.executable,
-        expected_tool_path,
+        str(expected_tool_path),
         "--url", TEST_URL,
         "--output-dir", str(api_server.UPLOADS_DIR),
         "--download-type", "audio"  # JULES: 修正測試案例，使其與 api_server 的實際呼叫保持一致

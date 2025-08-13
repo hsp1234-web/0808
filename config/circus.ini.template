@@ -16,7 +16,7 @@ autostart = True
 restart_on_error = True
 
 [watcher:api_server]
-cmd = %%PYTHON_EXEC%% src/api_server.py --port 42649
+cmd = %%PYTHON_EXEC%% src/api/api_server.py --port 42649
 env.API_MODE = mock
 working_dir = /app
 stdout_stream.class = FileStream

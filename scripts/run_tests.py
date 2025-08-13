@@ -26,15 +26,10 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     # 安裝所有 Python 依賴
-    # JULES'S FIX: By default, only install server requirements for lightweight tests.
-    # The worker requirements should only be installed for full E2E tests not covered here.
-    requirements_files = ["src/requirements-server.txt"]
-    log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
+    requirements_file = "requirements.txt"
+    log.info(f"正在使用 uv 安裝依賴: {requirements_file}...")
     # 使用 -q 來減少不必要的輸出
-    uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
-    for req_file in requirements_files:
-        if Path(req_file).is_file():
-            uv_command.extend(["-r", req_file])
+    uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", requirements_file]
 
     # 最關鍵的一步：以可編輯模式安裝目前的專案
     # 這會讓 pytest 和其他工具能夠正確地找到 src 目錄下的模組
@@ -51,7 +46,7 @@ def cleanup_stale_processes():
     import psutil
     log.info("--- 正在檢查並清理舊的程序 ---")
     # 注意：'circusd' 也被加入到清理列表，以處理未正常關閉的 circus 管理器
-    stale_process_names = ["circusd", "api_server.py", "db/manager.py"]
+    stale_process_names = ["circusd", "src/api/api_server.py", "src/db/manager.py"]
     cleaned_count = 0
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
@@ -98,16 +93,16 @@ def main():
         import pytest
 
         log.info("--- 正在動態生成 circus.ini 設定檔 ---")
-        template_path = Path("circus.ini.template")
-        config_path = Path("circus.ini")
+        template_path = Path("config/circus.ini.template")
+        config_path = Path("config/circus.ini")
         template_content = template_path.read_text(encoding='utf-8')
         # 將預留位置 %%PYTHON_EXEC%% 替換為當前 Python 直譯器的絕對路徑
         config_content = template_content.replace("%%PYTHON_EXEC%%", sys.executable)
         config_path.write_text(config_content, encoding='utf-8')
-        log.info(f"✅ circus.ini 已根據 {sys.executable} 動態生成。")
+        log.info(f"✅ config/circus.ini 已根據 {sys.executable} 動態生成。")
 
         log.info("--- 正在啟動 Circus 來管理後端服務 ---")
-        circus_cmd = [sys.executable, "-m", "circus.circusd", "circus.ini"]
+        circus_cmd = [sys.executable, "-m", "circus.circusd", "config/circus.ini"]
         circus_proc = subprocess.Popen(circus_cmd, text=True, encoding='utf-8')
         log.info(f"✅ Circusd 已啟動 (PID: {circus_proc.pid})。")
 

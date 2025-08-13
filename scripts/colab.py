@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "3.3.5" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "4.9.5" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -200,25 +200,26 @@ class ServerManager:
             # --- 啟動流程優化 (2025-08-11) ---
             # 採用「混合式安裝」策略，以最快速度讓伺服器上線
 
-            # 1. 安裝輕量的核心伺服器依賴 (使用 pip)
-            server_reqs_path = project_path / "src" / "requirements-server.txt"
-            if server_reqs_path.is_file():
-                self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
-                add_system_log("colab_setup", "INFO", "Installing server dependencies...")
-                pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(server_reqs_path)]
+            # 1. 安裝所有依賴
+            requirements_path = project_path / "requirements.txt"
+            if requirements_path.is_file():
+                self._log_manager.log("INFO", "步驟 1/3: 正在安裝所有 Python 依賴...")
+                add_system_log("colab_setup", "INFO", "Installing all Python dependencies...")
+                pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)]
                 install_result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
                 if install_result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"核心依賴安裝失敗:\n{install_result.stderr}")
-                    add_system_log("colab_setup", "CRITICAL", f"Server dependency installation failed: {install_result.stderr}")
+                    self._log_manager.log("CRITICAL", f"依賴安裝失敗:\n{install_result.stderr}")
+                    add_system_log("colab_setup", "CRITICAL", f"Dependency installation failed: {install_result.stderr}")
                     return
-                self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
-                add_system_log("colab_setup", "SUCCESS", "Server dependencies installed.")
+                self._log_manager.log("SUCCESS", "✅ 所有 Python 依賴安裝完成。")
+                add_system_log("colab_setup", "SUCCESS", "All dependencies installed.")
             else:
-                self._log_manager.log("WARN", "未找到 requirements-server.txt，跳過核心依賴安裝。")
+                self._log_manager.log("CRITICAL", f"未找到主要的 requirements.txt 檔案於: {requirements_path}")
+                return
 
             # 2. 立刻啟動核心協調器，讓 API 服務上線
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            orchestrator_script_path = project_path / "src" / "orchestrator.py"
+            orchestrator_script_path = project_path / "src" / "core" / "orchestrator.py"
             if not orchestrator_script_path.is_file():
                 self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path}")
                 return
@@ -240,7 +241,7 @@ class ServerManager:
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
             # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
             # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "src/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
@@ -295,15 +296,6 @@ class ServerManager:
             )
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
-            # 3. 在背景執行緒中安裝大型依賴 (使用 uv)
-            worker_reqs_path = project_path / "src" / "requirements-worker.txt"
-            background_install_thread = threading.Thread(
-                target=self._install_worker_deps,
-                args=(worker_reqs_path,),
-                daemon=True
-            )
-            background_install_thread.start()
-
             # ** 適配新架構: 監聽新的握手信號，並從中解析埠號 **
             # JULES' FIX (2025-08-10): 更新 정규표현식 以匹配 'PROXY_URL:' 格式
             port_pattern = re.compile(r"PROXY_URL: http://127.0.0.1:(\d+)")
@@ -344,35 +336,6 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", "協調器進程在就緒前已終止。")
         except Exception as e: self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally: self._stats['status'] = "⏹️ 已停止"
-
-    def _install_worker_deps(self, requirements_path: Path):
-        """在背景安裝大型 Worker 依賴項。"""
-        try:
-            self._log_manager.log("INFO", "步驟 3/3: [背景] 開始安裝大型任務依賴...")
-            if not requirements_path.is_file():
-                self._log_manager.log("WARN", f"[背景] 未找到 {requirements_path.name}，跳過大型依賴安裝。")
-                return
-
-            # 安裝 uv
-            self._log_manager.log("INFO", "[背景] 正在安裝 uv 加速器...")
-            pip_install_uv_cmd = [sys.executable, "-m", "pip", "install", "-q", "uv"]
-            uv_install_result = subprocess.run(pip_install_uv_cmd, check=False, capture_output=True, text=True, encoding='utf-8')
-            if uv_install_result.returncode != 0:
-                self._log_manager.log("ERROR", f"[背景] uv 安裝失敗:\n{uv_install_result.stderr}")
-                return
-            self._log_manager.log("INFO", "[背景] ✅ uv 安裝成功。")
-
-            # 使用 uv 安裝 worker 依賴
-            self._log_manager.log("INFO", "[背景] 正在使用 uv 加速安裝大型依賴...")
-            uv_pip_install_cmd = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(requirements_path)]
-            worker_install_result = subprocess.run(uv_pip_install_cmd, check=False, capture_output=True, text=True, encoding='utf-8')
-            if worker_install_result.returncode != 0:
-                self._log_manager.log("ERROR", f"[背景] 大型依賴安裝失敗:\n{worker_install_result.stderr}")
-                return
-
-            self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"[背景] 安裝執行緒發生未預期錯誤: {e}")
 
     def start(self): self._thread.start()
     def stop(self):

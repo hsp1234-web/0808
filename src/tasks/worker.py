@@ -9,8 +9,8 @@ import requests
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
-# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# 因為此檔案現在位於 src/tasks/ 中，所以根目錄是其上上層目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
 # sys.path.insert(0, str(ROOT_DIR))
 
