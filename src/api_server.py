@@ -402,6 +402,10 @@ async def download_transcript(task_id: str):
             media_type = 'application/pdf'
         elif ext == '.html':
             media_type = 'text/html'
+        elif ext == '.mp4':
+            media_type = 'video/mp4'
+        elif ext in ['.mp3', '.m4a', '.wav', '.flac']:
+            media_type = f'audio/{ext.strip(".")}'
         else:
             media_type = 'text/plain'
         return FileResponse(path=file_path, filename=file_path.name, media_type=media_type)
@@ -503,6 +507,27 @@ async def save_prompts(request: Request):
         raise HTTPException(status_code=500, detail=f"儲存提示詞檔案時發生伺服器內部錯誤: {e}")
 
 
+@app.post("/api/upload_cookies", status_code=200)
+async def upload_cookies_file(file: UploadFile = File(...)):
+    """
+    接收使用者上傳的 cookies.txt 檔案並儲存。
+    """
+    if "cookies.txt" not in file.filename.lower():
+        raise HTTPException(status_code=400, detail="檔案名稱必須是 'cookies.txt' 或包含該字樣。")
+
+    cookies_path = UPLOADS_DIR / "cookies.txt"
+    try:
+        with open(cookies_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        log.info(f"🍪 Cookies 檔案已儲存至: {cookies_path}")
+        return {"status": "success", "message": "Cookies 檔案上傳成功。"}
+    except Exception as e:
+        log.error(f"❌ 儲存 Cookies 檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"無法儲存 Cookies 檔案: {e}")
+    finally:
+        await file.close()
+
+
 # --- YouTube 功能相關 API ---
 
 @app.post("/api/youtube/validate_api_key")
@@ -598,6 +623,7 @@ async def process_youtube_urls(request: Request):
     tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
     output_format = payload.get("output_format", "html") # "html" or "txt"
     download_only = payload.get("download_only", False)
+    download_type = payload.get("download_type", "audio") # JULES'S NEW FEATURE
 
     if not requests_list:
         # 在加入相容性邏輯後，更新錯誤訊息
@@ -616,14 +642,16 @@ async def process_youtube_urls(request: Request):
         task_id = str(uuid.uuid4())
 
         if download_only:
-            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            # JULES'S NEW FEATURE: Pass download_type to payload
+            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
             db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
             tasks.append({"url": url, "task_id": task_id})
         else:
             download_task_id = task_id
             process_task_id = str(uuid.uuid4())
 
-            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            # JULES'S NEW FEATURE: Pass download_type to download payload
+            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
             # 將所有新參數存入 process 任務的 payload
             process_payload = {
                 "model": model,
@@ -837,23 +865,32 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             return
 
         task_type = task_info.get('type')
-        dependent_task_id = None # 初始化
+        dependent_task_id = None  # 初始化
 
         try:
-            # --- 步驟 1: 下載音訊 (所有 YouTube 任務都需要) ---
+            # --- 步驟 1: 下載媒體 (所有 YouTube 任務都需要) ---
             payload = json.loads(task_info['payload'])
             url = payload['url']
             custom_filename = payload.get("custom_filename")
+            # JULES'S NEW FEATURE: Get download_type from payload, default to audio
+            download_type = payload.get("download_type", "audio")
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載: {url}", "task_type": task_type}
+                "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載 ({download_type}): {url}", "task_type": task_type}
             }), loop)
 
             downloader_script = "src/tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "src/tools/youtube_downloader.py"
-            cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
+            # JULES'S NEW FEATURE: Pass download_type to script
+            cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR), "--download-type", download_type]
             if custom_filename:
                 cmd_dl.extend(["--custom-filename", custom_filename])
+
+            # JULES'S NEW FEATURE: Check for and use cookies file
+            cookies_path = UPLOADS_DIR / "cookies.txt"
+            if cookies_path.is_file():
+                log.info(f"發現 cookies.txt，將其用於下載。")
+                cmd_dl.extend(["--cookies-file", str(cookies_path)])
 
             proc_env = os.environ.copy()
             process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
@@ -867,17 +904,19 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             process_dl.wait()
             if process_dl.returncode != 0:
                 stderr_output = process_dl.stderr.read() if process_dl.stderr else "下載器未提供錯誤訊息。"
-                raise RuntimeError(f"YouTube downloader failed: {stderr_output}")
+                # JULES'S NEW FEATURE: Raise the actual output which contains the JSON error
+                raise RuntimeError(last_line or stderr_output)
 
             download_result = json.loads(last_line)
-            audio_file_path = download_result['output_path']
+            # JULES'S FIX: Use a more robust name for the downloaded file path variable
+            media_file_path = download_result['output_path']
             video_title = download_result.get('video_title', '無標題影片')
-            log.info(f"✅ [執行緒] YouTube 音訊下載完成: {audio_file_path}")
+            log.info(f"✅ [執行緒] YouTube 媒體下載完成: {media_file_path}")
 
             # --- 步驟 2: 根據任務類型決定下一步 ---
             if task_type == 'youtube_download_only':
                 db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
-                log.info(f"✅ [執行緒] '僅下載音訊' 任務 {task_id} 完成。")
+                log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
                 asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                     "type": "YOUTUBE_STATUS",
                     "payload": {"task_id": task_id, "status": "completed", "result": download_result, "task_type": "download_only"}
@@ -914,7 +953,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             cmd_process = [
                 sys.executable, processor_script,
                 "--command=process",
-                "--audio-file", audio_file_path,
+                "--audio-file", media_file_path, # Use the path from the download result
                 "--model", model,
                 "--output-dir", str(report_output_dir),
                 "--video-title", video_title,
@@ -975,10 +1014,25 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
             # 確定要更新哪個任務為失敗狀態
             failed_task_id = dependent_task_id if dependent_task_id else task_id
-            db_client.update_task_status(failed_task_id, 'failed', json.dumps({"error": str(e)}))
+
+            # JULES'S NEW FEATURE: Parse error message to find specific error code
+            error_payload = {"error": str(e)}
+            try:
+                # The error string from RuntimeError is now the JSON from the downloader
+                error_json = json.loads(str(e))
+                if isinstance(error_json, dict):
+                    error_payload["error"] = error_json.get("error", str(e))
+                    if error_json.get("error_code") == "AUTH_REQUIRED":
+                        # This is the special code we'll check for on the frontend
+                        error_payload["error_type"] = "AUTH_REQUIRED"
+            except (json.JSONDecodeError, TypeError):
+                # Error was not a JSON string, just use the string representation
+                pass
+
+            db_client.update_task_status(failed_task_id, 'failed', json.dumps(error_payload))
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": failed_task_id, "status": "failed", "error": str(e)}
+                "payload": {"task_id": failed_task_id, "status": "failed", **error_payload}
             }), loop)
 
     thread = threading.Thread(target=_process_in_thread)
