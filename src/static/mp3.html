@@ -1658,7 +1658,9 @@
                     logAction('click-yt-report-preview', taskId);
                     const fileType = extension === '.html' ? 'text/html' : 'text/plain';
                     const filename = `${videoTitle.replace(/ /g, '_')}_report${extension}`;
-                    openPreviewModal(taskId, filename, fileType);
+                    // JULES'S FIX (2025-08-13): 傳遞正確的 'outputPath' 給預覽彈窗，
+                    // 而不是 'taskId'。同時也將 taskId 傳入以供下載按鈕使用。
+                    openPreviewModal(outputPath, filename, fileType, taskId);
                 };
 
                 const downloadBtn = document.createElement('a');

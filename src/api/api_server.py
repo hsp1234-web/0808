@@ -132,8 +132,36 @@ if not STATIC_DIR.exists():
     log.warning(f"靜態檔案目錄 {STATIC_DIR} 不存在，前端頁面可能無法載入。")
 else:
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    # 問題二：掛載 uploads 目錄以提供媒體檔案服務
-    app.mount("/media", StaticFiles(directory=UPLOADS_DIR), name="media")
+    # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
+
+# JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
+from urllib.parse import unquote
+from fastapi.responses import FileResponse
+
+@app.get("/media/{file_path:path}")
+async def serve_media_files(file_path: str):
+    """
+    一個新的API端點，專門用來安全地提供媒體檔案。
+    它會手動處理URL解碼，以解決複雜檔名的問題。
+    """
+    try:
+        # URL 解碼，將 %20 轉為空格，處理中文等
+        decoded_path = unquote(file_path)
+        # 建立一個安全的路徑，避免路徑遍歷攻擊
+        safe_path = os.path.normpath(os.path.join(UPLOADS_DIR, decoded_path))
+
+        # 再次確認路徑是在 UPLOADS_DIR 下
+        if not safe_path.startswith(str(UPLOADS_DIR)):
+             raise HTTPException(status_code=403, detail="禁止存取。")
+
+        if os.path.exists(safe_path) and os.path.isfile(safe_path):
+            return FileResponse(safe_path)
+        else:
+            log.warning(f"請求的媒體檔案不存在: {safe_path}")
+            return JSONResponse(status_code=404, content={"detail": "File not found"})
+    except Exception as e:
+        log.error(f"服務媒體檔案時發生錯誤: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"detail": str(e)})
 
 
 def convert_to_media_url(absolute_path_str: str) -> str:
