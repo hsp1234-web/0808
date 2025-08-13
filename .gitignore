@@ -51,3 +51,12 @@ fake_audio.txt
 # Secrets
 secrets.json
 config.json
+
+# Python Packaging
+*.egg-info/
+
+# Log directory
+/logs/
+
+# Screenshots (often generated during E2E tests)
+*.png

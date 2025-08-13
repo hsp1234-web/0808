@@ -18,7 +18,8 @@ log = logging.getLogger('playwright_runner')
 
 def install_dependencies():
     log.info("--- 正在安裝 Python 依賴 ---")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "src/requirements-server.txt", "-r", "src/requirements-worker.txt"])
+    # JULES: 移除 worker 依賴，僅安裝伺服器依賴，以避免安裝 torch
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "src/requirements-server.txt"])
     log.info("✅ Python 依賴安裝成功。")
     log.info("--- 正在安裝 Node.js 依賴 ---")
     subprocess.check_call(["bun", "install"])

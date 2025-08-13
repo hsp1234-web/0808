@@ -26,7 +26,9 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     # 安裝所有 Python 依賴
-    requirements_files = ["src/requirements-server.txt", "src/requirements-worker.txt"]
+    # JULES'S FIX: By default, only install server requirements for lightweight tests.
+    # The worker requirements should only be installed for full E2E tests not covered here.
+    requirements_files = ["src/requirements-server.txt"]
     log.info(f"正在使用 uv 安裝依賴: {', '.join(requirements_files)}...")
     # 使用 -q 來減少不必要的輸出
     uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q"]
@@ -81,7 +83,8 @@ def main():
 
     # 步驟 1: 清理環境
     cleanup_stale_processes()
-    db_file = Path("db/queue.db")
+    # JULES'S FIX: Correct path for src-layout
+    db_file = Path("src/db/queue.db")
     if db_file.exists():
         log.info(f"--- 正在清理舊的資料庫檔案 ({db_file}) ---")
         db_file.unlink()
