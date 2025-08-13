@@ -510,6 +510,16 @@
                 </div>
                 <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
 
+                <!-- JULES'S NEW FEATURE: YouTube Cookies Upload -->
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee;">
+                    <h3 style="margin-bottom: 8px;">🍪 YouTube Cookies (選用)</h3>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <input type="file" id="cookies-file-input" accept=".txt" style="flex-grow: 1;">
+                        <button id="upload-cookies-btn">上傳 Cookies</button>
+                    </div>
+                    <small style="font-size: 0.8em; color: #666;">若下載失敗並提示需登入，請上傳從瀏覽器匯出的 `cookies.txt` 檔案。</small>
+                </div>
+
                 <!-- 區域 2: YouTube 影片處理 -->
                 <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
                 <fieldset id="youtube-controls-fieldset">
@@ -743,6 +753,8 @@
             const modalCopyLinkBtn = document.getElementById('modal-copy-link-btn');
 
             // --- YouTube 分頁元素 (升級版) ---
+            const cookiesFileInput = document.getElementById('cookies-file-input');
+            const uploadCookiesBtn = document.getElementById('upload-cookies-btn');
             const apiKeyInput = document.getElementById('api-key-input');
             const saveApiKeyBtn = document.getElementById('save-api-key-btn');
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
@@ -803,26 +815,45 @@
             const openPreviewModal = async (taskId, filename, fileType) => {
                 logAction('open-preview-modal', taskId);
                 const downloadUrl = `/api/download/${taskId}`;
+                const modalBody = document.querySelector('#preview-modal .modal-body');
 
                 modalTitle.textContent = `預覽: ${filename}`;
-                modalIframe.src = 'about:blank';
-                modalIframe.srcdoc = '<p style="text-align: center; margin-top: 20px;">正在載入預覽...</p>';
+                modalBody.innerHTML = '<p style="text-align: center; margin-top: 20px; font-style: italic;">正在載入預覽...</p>';
 
-                if (fileType === 'text/html') {
-                    modalIframe.src = downloadUrl;
-                    modalIframe.srcdoc = '';
-                } else if (fileType === 'text/plain') {
-                    try {
-                        const response = await fetch(downloadUrl);
-                        if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
-                        const textContent = await response.text();
-                        const escapedText = textContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                        modalIframe.srcdoc = `<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace; padding: 10px;">${escapedText}</pre>`;
-                    } catch (error) {
-                        modalIframe.srcdoc = `<p style="text-align: center; color: red;">預覽載入失敗: ${error.message}</p>`;
+                // JULES'S NEW FEATURE: Video Preview
+                if (fileType.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = downloadUrl;
+                    video.controls = true;
+                    video.autoplay = true;
+                    video.style.width = '100%';
+                    video.style.maxHeight = '75vh';
+                    video.style.borderRadius = '8px';
+                    modalBody.innerHTML = '';
+                    modalBody.appendChild(video);
+                } else if (fileType === 'text/html' || fileType === 'text/plain') {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.width = '100%';
+                    iframe.style.height = '75vh';
+                    iframe.style.border = 'none';
+
+                    if (fileType === 'text/html') {
+                        iframe.src = downloadUrl;
+                    } else { // text/plain
+                         try {
+                            const response = await fetch(downloadUrl);
+                            if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
+                            const textContent = await response.text();
+                            const escapedText = textContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                            iframe.srcdoc = `<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace; padding: 10px;">${escapedText}</pre>`;
+                        } catch (error) {
+                            iframe.srcdoc = `<p style="text-align: center; color: red;">預覽載入失敗: ${error.message}</p>`;
+                        }
                     }
+                    modalBody.innerHTML = '';
+                    modalBody.appendChild(iframe);
                 } else {
-                     modalIframe.srcdoc = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
+                     modalBody.innerHTML = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer" class="button-like">點此在新分頁中打開</a></p>`;
                 }
 
                 modalDownloadBtn.href = downloadUrl;
@@ -1106,7 +1137,14 @@
                 if (payload.status === 'completed') {
                     if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.innerHTML = '';
-                    let buttonGroup = createActionButtons(payload.task_id, 'audio/mpeg', '.mp3', 'download_only');
+
+                    // JULES'S NEW FEATURE: Determine preview type from result
+                    const result = payload.result || {};
+                    const downloadType = result.download_type || 'audio';
+                    const previewType = downloadType === 'video' ? 'video/mp4' : 'audio/mpeg';
+                    const extension = downloadType === 'video' ? '.mp4' : '.mp3';
+
+                    let buttonGroup = createActionButtons(payload.task_id, previewType, extension, 'download_only');
                     statusSpan.appendChild(buttonGroup);
 
                     const isDownloaderTask = taskElement.parentElement.id === 'downloader-tasks';
@@ -1155,7 +1193,13 @@
                         taskElement.appendChild(errorDetails);
                     }
                     // 填入錯誤訊息
-                    errorDetails.textContent = payload.error || '未提供具體錯誤訊息。';
+                    const errorMessage = payload.error || '未提供具體錯誤訊息。';
+                    errorDetails.textContent = errorMessage;
+
+                    // JULES'S NEW FEATURE: Show a prominent status message for auth errors
+                    if (errorMessage.includes("YouTube 需要登入驗證")) {
+                        showStatusMessage(errorMessage, true, 10000); // Show for 10 seconds
+                    }
                 }
             };
 
@@ -1178,7 +1222,7 @@
                 downloadBtn.href = `/api/download/${taskId}`;
                 downloadBtn.className = 'btn-download';
                 downloadBtn.textContent = '下載';
-                downloadBtn.download = `${baseName}.mp3`;
+                downloadBtn.download = `${baseName}${extension}`;
                 downloadBtn.addEventListener('click', (e) => {
                     logAction('click-download-task', taskId);
                 });
@@ -1522,6 +1566,36 @@
                     updateApiKeyUI('not_provided');
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
                 }
+
+                // JULES'S NEW FEATURE: Cookies Upload Logic
+                uploadCookiesBtn.addEventListener('click', async () => {
+                    logAction('click-upload-cookies');
+                    const file = cookiesFileInput.files[0];
+                    if (!file) {
+                        showStatusMessage('請先選擇一個 cookies.txt 檔案。', true);
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    try {
+                        const response = await fetch('/api/youtube/upload_cookies', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.detail || '上傳失敗');
+                        }
+                        showStatusMessage('Cookies 檔案上傳成功！', false);
+                        cookiesFileInput.value = ''; // Clear the input
+                    } catch (error) {
+                        console.error('Cookies 上傳失敗:', error);
+                        showStatusMessage(`錯誤: ${error.message}`, true);
+                    }
+                });
             };
 
             const addYoutubeReportToList = (payload) => {
@@ -1728,10 +1802,13 @@
                 }
                 // JULES'S FIX: The /api/youtube/process endpoint now expects a 'requests' object array.
                 const requests = urls.map(url => ({ url: url, filename: '' }));
+                const downloadType = document.querySelector('input[name="download-type"]:checked').value;
+                logAction('process-downloader-request', `type: ${downloadType}`); // Log the selected type
                 const payload = {
                     requests: requests,
                     download_only: true,
-                    model: null
+                    model: null,
+                    download_type: downloadType // JULES'S NEW FEATURE
                 };
                 startDownloadBtn.disabled = true;
                 startDownloadBtn.textContent = '正在建立任務...';

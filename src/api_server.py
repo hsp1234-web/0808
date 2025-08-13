@@ -365,9 +365,9 @@ async def get_system_logs_endpoint(
 
 
 @app.get("/api/download/{task_id}")
-async def download_transcript(task_id: str):
+async def download_task_result(task_id: str):
     """
-    根據任務 ID 下載轉錄結果檔案。
+    根據任務 ID 下載對應的結果檔案（音訊、影片、報告等）。
     """
     task = db_client.get_task_status(task_id)
     if not task:
@@ -398,7 +398,11 @@ async def download_transcript(task_id: str):
         # 提供檔案下載
         from fastapi.responses import FileResponse
         ext = file_path.suffix.lower()
-        if ext == '.pdf':
+        if ext == '.mp4':
+            media_type = 'video/mp4'
+        elif ext == '.mp3':
+            media_type = 'audio/mpeg'
+        elif ext == '.pdf':
             media_type = 'application/pdf'
         elif ext == '.html':
             media_type = 'text/html'
@@ -503,6 +507,22 @@ async def save_prompts(request: Request):
         raise HTTPException(status_code=500, detail=f"儲存提示詞檔案時發生伺服器內部錯誤: {e}")
 
 
+@app.post("/api/youtube/upload_cookies")
+async def upload_youtube_cookies(file: UploadFile = File(...)):
+    """接收並儲存 YouTube cookies 檔案。"""
+    cookies_path = UPLOADS_DIR / "cookies.txt"
+    try:
+        with open(cookies_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        log.info(f"🍪 YouTube cookies 檔案已儲存至: {cookies_path}")
+        return {"status": "success", "message": "Cookies 檔案上傳成功。"}
+    except Exception as e:
+        log.error(f"❌ 儲存 Cookies 檔案時發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"無法儲存 Cookies 檔案: {e}")
+    finally:
+        await file.close()
+
+
 # --- YouTube 功能相關 API ---
 
 @app.post("/api/youtube/validate_api_key")
@@ -598,6 +618,8 @@ async def process_youtube_urls(request: Request):
     tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
     output_format = payload.get("output_format", "html") # "html" or "txt"
     download_only = payload.get("download_only", False)
+    # JULES'S NEW FEATURE: Get download type from payload
+    download_type = payload.get("download_type", "audio")
 
     if not requests_list:
         # 在加入相容性邏輯後，更新錯誤訊息
@@ -616,14 +638,24 @@ async def process_youtube_urls(request: Request):
         task_id = str(uuid.uuid4())
 
         if download_only:
-            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            task_payload = {
+                "url": url,
+                "output_dir": str(UPLOADS_DIR),
+                "custom_filename": filename,
+                "download_type": download_type # Pass download type to task
+            }
             db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
-            tasks.append({"url": url, "task_id": task_id})
+            tasks.append({"url": url, "task_id": task_id, "download_type": download_type})
         else:
             download_task_id = task_id
             process_task_id = str(uuid.uuid4())
 
-            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename}
+            download_payload = {
+                "url": url,
+                "output_dir": str(UPLOADS_DIR),
+                "custom_filename": filename,
+                "download_type": download_type # Pass download type to task
+            }
             # 將所有新參數存入 process 任務的 payload
             process_payload = {
                 "model": model,
@@ -851,9 +883,22 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             }), loop)
 
             downloader_script = "src/tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "src/tools/youtube_downloader.py"
-            cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR)]
+
+            # JULES'S NEW FEATURE: Add download_type and cookies_path to command
+            download_type = payload.get("download_type", "audio")
+            cookies_path = UPLOADS_DIR / "cookies.txt"
+
+            cmd_dl = [
+                sys.executable, downloader_script,
+                "--url", url,
+                "--output-dir", str(UPLOADS_DIR),
+                "--download-type", download_type
+            ]
             if custom_filename:
                 cmd_dl.extend(["--custom-filename", custom_filename])
+
+            if cookies_path.exists():
+                cmd_dl.extend(["--cookies-path", str(cookies_path)])
 
             proc_env = os.environ.copy()
             process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
