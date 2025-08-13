@@ -24,44 +24,65 @@ export class TaskList {
     }
 
     /**
-     * 渲染組件的 HTML 骨架。
+     * 渲染組件的 HTML 骨架和內容。
+     * 這個方法會根據當前狀態重新繪製整個組件。
      */
     render() {
+        // 1. 建立 HTML 骨架
         this.container.innerHTML = `
             <div class="grid-2-col">
                 <div class="card">
                     <h2>🔄 進行中任務</h2>
-                    <div id="ongoing-tasks" class="task-list">
-                        <p id="no-ongoing-task-msg">暫無執行中任務</p>
-                    </div>
+                    <div id="ongoing-tasks" class="task-list"></div>
                 </div>
                 <div class="card">
                     <h2>✅ 已完成任務</h2>
-                    <div id="completed-tasks" class="task-list">
-                        <p id="no-completed-task-msg">尚無完成的任務</p>
-                    </div>
+                    <div id="completed-tasks" class="task-list"></div>
                 </div>
             </div>
         `;
-        // 渲染初始狀態
-        this._renderTaskList(this.state.ongoing, this.container.querySelector('#ongoing-tasks'), '暫無執行中任務');
-        this._renderTaskList(this.state.completed, this.container.querySelector('#completed-tasks'), '尚無完成的任務');
+
+        // 2. 根據狀態填充列表
+        this._renderTaskList(
+            this.state.ongoing,
+            this.container.querySelector('#ongoing-tasks'),
+            '暫無執行中任務',
+            'no-ongoing-task-msg'
+        );
+        this._renderTaskList(
+            this.state.completed,
+            this.container.querySelector('#completed-tasks'),
+            '尚無完成的任務',
+            'no-completed-task-msg'
+        );
     }
 
     /**
-     * 根據提供的資料和目標元素來渲染一個完整的任務列表。
+     * 根據提供的資料和目標元素來渲染一個任務列表（例如「進行中」或「已完成」）。
+     * @param {Array<object>} tasks - 要渲染的任務物件陣列。
+     * @param {HTMLElement} targetElement - 任務項目要被附加到的容器元素。
+     * @param {string} noTasksMessage - 當沒有任務時要顯示的訊息。
+     * @param {string} noTasksMessageId - "無任務" 訊息段落的 DOM ID。
      */
-    _renderTaskList(tasks, targetElement, noTasksMessage) {
+    _renderTaskList(tasks, targetElement, noTasksMessage, noTasksMessageId) {
         if (!targetElement) return;
 
-        targetElement.innerHTML = `<p>${noTasksMessage}</p>`;
-        if (tasks.length > 0) {
-            targetElement.innerHTML = ''; // 清空 "無任務" 訊息
+        // 清空現有內容
+        targetElement.innerHTML = '';
+
+        // 注意：這是一個簡化的方法，用於清除此重構中的任務元素。
+        // 在更複雜的應用中，您可能需要更精細地管理 taskElements Map。
+        this.taskElements.clear();
+
+        if (tasks && tasks.length > 0) {
             tasks.forEach(task => {
                 const taskElement = this._createTaskElement(task);
                 targetElement.appendChild(taskElement);
                 this.taskElements.set(task.id, taskElement);
             });
+        } else {
+            // 如果沒有任務，顯示對應的訊息
+            targetElement.innerHTML = `<p id="${noTasksMessageId}">${noTasksMessage}</p>`;
         }
     }
 
@@ -220,9 +241,9 @@ export class TaskList {
     /**
      * 初始化組件。
      */
-    init() {
+    async init() {
         this.render(); // 渲染骨架
-        this.loadTaskHistory();
+        await this.loadTaskHistory(); // 等待歷史紀錄載入並完成初次渲染
     }
 
     // --- Helper methods copied and adapted from mp3.html ---
