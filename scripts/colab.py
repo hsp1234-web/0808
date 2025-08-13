@@ -245,6 +245,16 @@ class ServerManager:
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
+
+            # --- JULES 於 2025-08-13 的修復：設定 PYTHONPATH ---
+            # 為了讓子程序 (orchestrator.py) 能夠找到 src 下的模組 (如 db, api)，
+            # 我們必須明確地將 src 目錄加入到子程序的 PYTHONPATH 中。
+            project_src_path_str = str((project_path / "src").resolve())
+            existing_python_path = process_env.get('PYTHONPATH', '')
+            process_env['PYTHONPATH'] = f"{project_src_path_str}{os.pathsep}{existing_python_path}"
+            self._log_manager.log("INFO", f"已為子程序設定 PYTHONPATH: {process_env['PYTHONPATH']}")
+            # --- PYTHONPATH 修復結束 ---
+
             google_api_key = None
             key_source = None
 
