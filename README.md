@@ -25,39 +25,28 @@ python scripts/local_run.py
 ```
 當腳本顯示「所有驗證均已通過！」或「任務正確地以 'failed' 狀態結束」（在沒有 API 金鑰的情況下）時，即表示後端功能運作正常。
 
-### 方式二：啟動開發與測試伺服器 (`scripts/run_for_playwright.py`)
+### 方式二：啟動後端服務 (用於 UI 測試或手動操作)
 
-此為**進行本地開發、手動測試或執行 Playwright UI 測試的建議方式**。該腳本會自動處理環境設定、啟動所有必要的後端服務，並確保測試環境的乾淨與一致。
+如果您需要一個**持續運行的後端服務**來進行前端開發、手動測試或執行 Playwright UI 測試，請使用 `circus` 直接啟動服務。
 
 **此方式適用於**：
-*   前端開發：啟動後端服務後，可直接在瀏覽器中開啟 `src/static/mp3.html` 進行開發與調試。
-*   執行 Playwright E2E 測試。
+*   本地端開啟 `src/static/mp3.html` 進行手動功能測試。
+*   執行 Playwright 端對端 UI 測試。
 
 **如何使用**:
 ```bash
-# 此腳本會自動安裝依賴、清理舊日誌與資料庫，並啟動所有服務
-python scripts/run_for_playwright.py
-```
-服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。使用 `Ctrl+C` 來終止所有服務。
-
-### (替代方式) 方式三：使用 Circus 進行部署
-
-如果您需要一個更接近生產環境的、由程序管理器守護的持續運行服務，可以使用 `circus`。
-
-**如何使用**:
-```bash
-# (首次執行前) 複製範本並確保 logs 目錄存在
-cp config/circus.ini.template config/circus.ini
+# (首次執行前) 確保 logs 目錄存在
 mkdir -p logs
 
 # 啟動所有後端服務
 python -m circus.circusd config/circus.ini
 
-# 完成後，可使用以下指令關閉服務
+# 完成測試後，可使用以下指令關閉服務
 python -m circus.circusctl quit
 ```
+服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。
 
-### 方式四：在 Google Colab 中部署 (`scripts/colab.py`)
+### 方式三：在 Google Colab 中部署 (`scripts/colab.py`)
 
 `scripts/colab.py` 是專為在 Google Colab 環境中一鍵部署和運行本專案而設計的啟動器。它會處理 Git 倉庫的複製、環境設定，並利用 Colab 的代理功能生成一個公開的訪問連結。
 

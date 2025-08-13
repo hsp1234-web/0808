@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 log = logging.getLogger(__name__)
 
 # --- 資料庫路徑設定 ---
-DB_FILE = Path(__file__).parent / "queue.db"
+DB_FILE = Path(__file__).parent / "tasks.db"
 
 def get_db_connection():
     """建立並回傳一個資料庫連線。"""
