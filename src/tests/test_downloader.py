@@ -3,6 +3,8 @@ import pytest
 import subprocess
 import json
 import sys
+import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open, call, ANY
 
 # 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
@@ -161,3 +163,65 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
     # 斷言資料庫任務狀態最終被更新為 'completed'
     final_db_update_call = call(TEST_TASK_ID, 'completed', json.dumps(final_download_result))
     mock_db_client.update_task_status.assert_has_calls([final_db_update_call])
+
+def test_mock_youtube_downloader_script(tmp_path):
+    """
+    直接測試 mock_youtube_downloader.py 腳本的行為。
+
+    這個測試驗證該腳本是否：
+    1. 成功執行並回傳退出碼 0。
+    2. 在 stdout 輸出一行有效的 JSON 結果。
+    3. JSON 結果中包含一個指向實際建立的檔案的 'output_path'。
+    4. 建立的檔案內容符合預期。
+    """
+    # --- 1. 準備 ---
+    test_url = "https://www.youtube.com/watch?v=mock_video_for_unit_test"
+    output_dir = tmp_path
+    tool_path = api_server.ROOT_DIR / "src" / "tools" / "mock_youtube_downloader.py"
+
+    cmd = [
+        sys.executable,
+        str(tool_path),
+        "--url", test_url,
+        "--output-dir", str(output_dir)
+    ]
+
+    # --- 2. 執行 ---
+    # 使用 subprocess.run 來執行腳本並等待其完成
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+
+    # --- 3. 斷言 ---
+    # 斷言腳本成功執行
+    assert result.returncode == 0, f"腳本執行失敗，stderr: {result.stderr}"
+
+    # 斷言 stdout 不是空的
+    assert result.stdout, "腳本沒有任何輸出到 stdout"
+
+    # 解析最後一行輸出，因為進度更新會輸出到 stderr
+    lines = result.stdout.strip().splitlines()
+    assert len(lines) > 0, "stdout 中沒有有效的輸出行"
+    last_line = lines[-1]
+
+    try:
+        output_json = json.loads(last_line)
+    except json.JSONDecodeError:
+        pytest.fail(f"無法將 stdout 的最後一行解析為 JSON: '{last_line}'")
+
+    # 斷言 JSON 內容
+    assert output_json.get("type") == "result"
+    assert output_json.get("status") == "completed"
+    assert "output_path" in output_json
+    assert "video_title" in output_json
+
+    # 斷言檔案確實被建立
+    output_path_str = output_json["output_path"]
+    assert isinstance(output_path_str, str)
+    assert output_path_str.endswith(".mp3")
+
+    output_path = Path(output_path_str)
+    assert output_path.exists(), f"腳本回報的路徑不存在: {output_path_str}"
+    assert output_path.is_file()
+
+    # 斷言檔案內容
+    content = output_path.read_text(encoding='utf-8')
+    assert content == "這是一個模擬的音訊檔案。"
