@@ -35,8 +35,8 @@ IS_MOCK_MODE = os.environ.get("API_MODE", "real") == "mock"
 
 # --- 路徑設定 ---
 # 以此檔案為基準，定義專案根目錄
-# 因為此檔案現在位於 src/ 中，所以根目錄是其父目錄的父目錄
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# 因為此檔案現在位於 src/api/ 中，所以根目錄是其上上層目錄
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 # --- 主日誌設定 ---
 # 主日誌器
@@ -167,11 +167,11 @@ def check_model_exists(model_size: str) -> bool:
     """
     # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
     force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
-    tool_script = "src/tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "src/tools/transcriber.py"
-    log.info(f"使用 '{tool_script}' 檢查模型 '{model_size}' 是否存在...")
+    tool_script_path = ROOT_DIR / "src" / "tools" / ("mock_transcriber.py" if IS_MOCK_MODE or force_mock else "transcriber.py")
+    log.info(f"使用 '{tool_script_path}' 檢查模型 '{model_size}' 是否存在...")
 
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
-    check_command = [sys.executable, tool_script, "--command=check", f"--model_size={model_size}"]
+    check_command = [sys.executable, str(tool_script_path), "--command=check", f"--model_size={model_size}"]
     try:
         # 在模擬模式下，mock_transcriber.py 會永遠回傳 "exists"
         result = subprocess.run(check_command, capture_output=True, text=True, check=True)
@@ -560,8 +560,8 @@ async def validate_api_key(request: Request):
             return {"valid": True}
 
         # 真實模式下，呼叫工具進行驗證
-        tool_script = "src/tools/gemini_processor.py"
-        cmd = [sys.executable, tool_script, "--command=validate_key"]
+        tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
+        cmd = [sys.executable, str(tool_script_path), "--command=validate_key"]
 
         # 將金鑰作為環境變數傳遞給子程序，更安全
         env = os.environ.copy()
@@ -606,8 +606,8 @@ async def get_youtube_models():
         if not os.environ.get("GOOGLE_API_KEY"):
              raise HTTPException(status_code=401, detail="後端尚未設定有效的 Google API 金鑰。")
 
-        tool_script = "src/tools/gemini_processor.py"
-        cmd = [sys.executable, tool_script, "--command=list_models"]
+        tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
+        cmd = [sys.executable, str(tool_script_path), "--command=list_models"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
         models = json.loads(result.stdout)
         return {"models": models}
@@ -697,8 +697,8 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
     def _download_in_thread():
         log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
         try:
-            tool_script = "src/tools/mock_transcriber.py" if IS_MOCK_MODE else "src/tools/transcriber.py"
-            cmd = [sys.executable, tool_script, "--command=download", f"--model_size={model_size}"]
+            tool_script_path = ROOT_DIR / "src" / "tools" / ("mock_transcriber.py" if IS_MOCK_MODE else "transcriber.py")
+            cmd = [sys.executable, str(tool_script_path), "--command=download", f"--model_size={model_size}"]
 
             process = subprocess.Popen(
                 cmd,
@@ -777,10 +777,10 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
         try:
             force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
-            tool_script = "src/tools/mock_transcriber.py" if IS_MOCK_MODE or force_mock else "src/tools/transcriber.py"
+            tool_script_path = ROOT_DIR / "src" / "tools" / ("mock_transcriber.py" if IS_MOCK_MODE or force_mock else "transcriber.py")
             cmd = [
                 sys.executable,
-                tool_script,
+                str(tool_script_path),
                 "--command=transcribe",
                 f"--audio_file={file_path}",
                 f"--output_file={output_file_path}", # 使用新的路徑
@@ -889,8 +889,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載 ({download_type}): {url}", "task_type": task_type}
             }), loop)
 
-            downloader_script = "src/tools/mock_youtube_downloader.py" if IS_MOCK_MODE else "src/tools/youtube_downloader.py"
-            cmd_dl = [sys.executable, downloader_script, "--url", url, "--output-dir", str(UPLOADS_DIR), "--download-type", download_type]
+            downloader_script_path = ROOT_DIR / "src" / "tools" / ("mock_youtube_downloader.py" if IS_MOCK_MODE else "youtube_downloader.py")
+            cmd_dl = [sys.executable, str(downloader_script_path), "--url", url, "--output-dir", str(UPLOADS_DIR), "--download-type", download_type]
             if custom_filename:
                 cmd_dl.extend(["--custom-filename", custom_filename])
 
@@ -946,13 +946,13 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析...", "task_type": "gemini_process"}
             }), loop)
 
-            processor_script = "src/tools/mock_gemini_processor.py" if IS_MOCK_MODE else "src/tools/gemini_processor.py"
+            processor_script_path = ROOT_DIR / "src" / "tools" / ("mock_gemini_processor.py" if IS_MOCK_MODE else "gemini_processor.py")
             # 問題二：將報告也輸出到 uploads 目錄下
             report_output_dir = UPLOADS_DIR / "reports"
             report_output_dir.mkdir(parents=True, exist_ok=True)
 
             cmd_process = [
-                sys.executable, processor_script,
+                sys.executable, str(processor_script_path),
                 "--command=process",
                 "--audio-file", media_file_path,
                 "--model", model,
@@ -1190,7 +1190,7 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
 
     # JULES: 移除此處的資料庫初始化呼叫。
-    # 父程序 orchestrator.py 將會負責此事，以避免競爭條件。
+    # 父程序 src/core/orchestrator.py 將會負責此事，以避免競爭條件。
 
     # JULES'S FIX: The database logging is now set up via the app's lifespan event.
     # setup_database_logging() is no longer needed here.

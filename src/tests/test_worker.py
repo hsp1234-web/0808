@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch, call, ANY
 
 # 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
 # pytest 會自動將 src 目錄下的模組視為頂層模組。
-import worker
+from tasks import worker
 
 # --- 測試資料 ---
 TEST_TASK_ID = "test-transcribe-task-456"
@@ -32,7 +32,7 @@ def mock_db_client(mocker):
     client.fetch_and_lock_task.side_effect = [mock_task, None]
 
     # 使用 mocker.patch 來取代 worker 模組中的 db_client
-    mocker.patch('worker.db_client', new=client)
+    mocker.patch('tasks.worker.db_client', new=client)
     return client
 
 @pytest.fixture

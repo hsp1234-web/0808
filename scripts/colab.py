@@ -218,7 +218,7 @@ class ServerManager:
 
             # 2. 立刻啟動核心協調器，讓 API 服務上線
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            orchestrator_script_path = project_path / "src" / "orchestrator.py"
+            orchestrator_script_path = project_path / "src" / "core" / "orchestrator.py"
             if not orchestrator_script_path.is_file():
                 self._log_manager.log("CRITICAL", f"核心協調器未找到: {orchestrator_script_path}")
                 return

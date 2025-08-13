@@ -69,7 +69,7 @@
 在開發與測試階段，遭遇了幾個與測試環境穩定性相關的重大挑戰。
 
 1.  **問題：服務啟動時的競爭條件 (Race Condition)**
-    *   **現象**：`orchestrator.py` 在啟動 `db/manager.py` 後，經常讀取到一個過時的埠號 (port) 檔案，導致它無法連線到正確的資料庫管理員服務，最終造成整個應用程式啟動失敗。
+    *   **現象**：`src/core/orchestrator.py` 在啟動 `db/manager.py` 後，經常讀取到一個過時的埠號 (port) 檔案，導致它無法連線到正確的資料庫管理員服務，最終造成整個應用程式啟動失敗。
     *   **嘗試的解決方案**：
         1.  在啟動 `db_manager` 前，由 `orchestrator` 主動刪除舊的埠號檔案。
         2.  在 `db_manager` 啟動時，由其自身主動刪除舊的埠號檔案。
@@ -79,7 +79,7 @@
 
 2.  **問題：Playwright E2E 測試持續失敗**
     *   **現象**：即使在修復了服務啟動問題後，用於驗證前端功能的 Playwright 腳本依然不穩定，出現了各種預期外的錯誤，例如：
-        *   `net::ERR_CONNECTION_REFUSED`：表示測試腳本無法連線到由 `orchestrator.py` 啟動的 API 伺服器，暗示背景服務可能已崩潰。
+        *   `net::ERR_CONNECTION_REFUSED`：表示測試腳本無法連線到由 `src/core/orchestrator.py` 啟動的 API 伺服器，暗示背景服務可能已崩潰。
         *   `AssertionError: Locator expected to be disabled`：斷言按鈕應為禁用狀態，但 Playwright 卻認為它是啟用狀態，這與實際的 HTML 和 JS 邏輯不符，可能指向環境或 Playwright 的渲染怪癖。
         *   `Timeout`：等待任務項目出現在列表中時超時。
     *   **嘗試的解決方案**：

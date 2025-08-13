@@ -1,0 +1,22 @@
+# Combined Dependencies
+
+# Server Core Dependencies
+fastapi
+uvicorn[standard]
+python-multipart
+psutil
+circus
+pytest-mock
+
+# Worker & Tooling Dependencies
+faster-whisper
+opencc-python-reimplemented
+yt-dlp
+google-generativeai
+pydub
+WeasyPrint
+websocket-client
+
+# Common Dependencies (for testing, scripts, etc.)
+requests
+pytest

@@ -41,7 +41,7 @@
 
 ### 2.1. 問題描述
 
-執行 `python local_run.py` 時，程序在啟動的最初階段就失敗了，日誌中充滿了來自 `orchestrator.py` 和 `api_server.py` 的資料庫錯誤：
+執行 `python local_run.py` 時，程序在啟動的最初階段就失敗了，日誌中充滿了來自 `src/core/orchestrator.py` 和 `src/api/api_server.py` 的資料庫錯誤：
 
 ```
 db.database - ERROR - 初始化資料庫時發生錯誤: disk I/O error
@@ -49,7 +49,7 @@ DBLogHandler Error: Cannot get DB connection. Log from orchestrator lost.
 db.database - ERROR - 資料庫連線失敗: disk I/O error
 ```
 
-此錯誤導致 `orchestrator.py` 的心跳檢測 (`HEARTBEAT`) 無法正確讀取資料庫中的任務狀態，最終導致測試因超時而失敗。
+此錯誤導致 `src/core/orchestrator.py` 的心跳檢測 (`HEARTBEAT`) 無法正確讀取資料庫中的任務狀態，最終導致測試因超時而失敗。
 
 ### 2.2. 已嘗試的除錯與修復步驟
 
@@ -57,7 +57,7 @@ db.database - ERROR - 資料庫連線失敗: disk I/O error
 
 1.  **確認架構**：
     *   最初我認為 `worker.py` 是主要處理者，並試圖重構系統為 Worker 導向的架構。
-    *   在詳細閱讀 `orchestrator.py` 後，發現了關鍵日誌：`🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。`
+    *   在詳細閱讀 `src/core/orchestrator.py` 後，發現了關鍵日誌：`🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。`
     *   **結論**：我確認了專案的**預期架構**是 `api_server.py` 作為主處理器，這讓我將注意力轉回 `api_server.py`。
 
 2.  **解決競爭條件**：
@@ -65,8 +65,8 @@ db.database - ERROR - 資料庫連線失敗: disk I/O error
     *   **解決方案**：我將更新資料庫的邏輯加入了 `api_server.py` 的 `trigger_transcription` 函式中。這是**核心功能的關鍵修復**。
 
 3.  **解決 `disk I/O error`**：
-    *   **假設 1：啟動時的競爭條件**。我懷疑 `orchestrator.py` 和它啟動的 `api_server.py` 子程序同時嘗試初始化資料庫。
-    *   **嘗試 1**：我修改了 `api_server.py`，移除了它在 `if __name__ == "__main__"` 中的初始化呼叫，讓 `orchestrator.py` 成為唯一的初始化者。**結果：失敗，錯誤依舊。**
+    *   **假設 1：啟動時的競爭條件**。我懷疑 `src/core/orchestrator.py` 和它啟動的 `src/api/api_server.py` 子程序同時嘗試初始化資料庫。
+    *   **嘗試 1**：我修改了 `src/api/api_server.py`，移除了它在 `if __name__ == "__main__"` 中的初始化呼叫，讓 `src/core/orchestrator.py` 成為唯一的初始化者。**結果：失敗，錯誤依舊。**
 
     *   **假設 2：目錄不存在**。我懷疑 `db/` 目錄可能在 `local_run.py` 清理資料庫檔案後沒有被重新建立。
     *   **嘗試 2**：我修改了 `db/database.py` 的 `initialize_database` 函式，在連接資料庫前，先使用 `DB_FILE.parent.mkdir(exist_ok=True)` 來確保 `db/` 目錄存在。**結果：失敗，錯誤依舊。**
@@ -74,7 +74,7 @@ db.database - ERROR - 資料庫連線失敗: disk I/O error
 ### 2.3. 問題根源推測
 
 到目前為止，所有針對程式碼邏輯的合理修改都未能解決此 I/O 錯誤。此錯誤的特點是：
-*   它在 `local_run.py` 刪除舊資料庫檔案後，`orchestrator.py` 首次嘗試建立新檔案和連線時就立即發生。
+*   它在 `local_run.py` 刪除舊資料庫檔案後，`src/core/orchestrator.py` 首次嘗試建立新檔案和連線時就立即發生。
 *   此時沒有其他程序在存取該檔案，理論上不應有鎖定或權限問題。
 
 **我的最終推測是，這個問題可能與執行環境本身、檔案系統、或是 Python 的 `sqlite3` 模組在當前環境下處理多進程檔案操作的某個底層 bug 有關。** 它似乎不是一個單純的程式碼邏輯錯誤。
@@ -87,8 +87,8 @@ db.database - ERROR - 資料庫連線失敗: disk I/O error
 2.  **驗證核心邏輯**：我所做的修改（前端按鈕、後端資料庫更新邏輯）是完整且正確的。您可以透過**手動啟動 `api_server.py --mock`** 並在瀏覽器中操作來驗證這一點，這個流程是通的。
 3.  **解決 `local_run.py` 的 I/O 錯誤**：
     *   您的首要任務是解決 `local_run.py` 在啟動時發生的 `disk I/O error`。
-    *   可以考慮在 `local_run.py` 中，刪除資料庫後，加入一個微小的延遲 (`time.sleep(0.1)`)，再啟動 `orchestrator.py`，看看是否能解決這個檔案系統層級的競爭問題。
-    *   或者，可以研究 `orchestrator.py` 和 `db/database.py` 的日誌記錄與資料庫連線方式，是否有更深層的衝突。
+    *   可以考慮在 `local_run.py` 中，刪除資料庫後，加入一個微小的延遲 (`time.sleep(0.1)`)，再啟動 `src/core/orchestrator.py`，看看是否能解決這個檔案系統層級的競爭問題。
+    *   或者，可以研究 `src/core/orchestrator.py` 和 `db/database.py` 的日誌記錄與資料庫連線方式，是否有更深層的衝突。
 4.  **提交**：一旦 `local_run.py` 的問題解決，我所提交的所有其他程式碼應該都能順利通過測試，屆時即可完成整個任務。
 
 祝您好運！
