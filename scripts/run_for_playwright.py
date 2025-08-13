@@ -52,6 +52,9 @@ def main():
         env['FORCE_MOCK_TRANSCRIBER'] = 'true'
         # The server itself runs in "real" mode to allow real YT/Gemini calls
         env['API_MODE'] = 'mock'
+        # JULES'S FIX: 設定 PYTHONPATH，以便子程序可以找到 'db' 和 'tools' 等模組
+        src_path = str(Path(__file__).resolve().parent.parent / "src")
+        env['PYTHONPATH'] = src_path
 
         # 清理日誌和上傳檔案
         log_dir = Path("logs")

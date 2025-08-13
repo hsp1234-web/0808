@@ -380,10 +380,10 @@
                     <div>
                         <label for="model-select">模型大小</label>
                         <select id="model-select">
-                            <option value="tiny">Tiny (最快)</option>
+                            <option value="tiny" selected>Tiny (最快)</option>
                             <option value="base">Base</option>
                             <option value="small">Small</option>
-                            <option value="medium" selected>Medium (建議)</option>
+                            <option value="medium">Medium (建議)</option>
                             <option value="large-v2">Large-v2 (準確)</option>
                             <option value="large-v3">Large-v3 (最準確)</option>
                         </select>
@@ -397,7 +397,7 @@
                     </div>
                     <div>
                         <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
-                        <input type="number" id="beam-size-input" value="5" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                        <input type="number" id="beam-size-input" value="1" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
                         <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
                     </div>
                     <button id="confirm-settings-btn">✓ 確認設定</button>
@@ -818,6 +818,7 @@
                 modalTitle.textContent = `預覽: ${filename}`;
 
                 if (fileType.startsWith('video/')) {
+                    modalBody.dataset.lastPreviewUrl = previewUrl; // For testability
                     const video = document.createElement('video');
                     video.src = previewUrl;
                     video.controls = true;
@@ -828,6 +829,17 @@
                         modalBody.innerHTML = `<p style="text-align: center; color: red;">影片預覽載入失敗。</p>`;
                     };
                     modalBody.appendChild(video);
+                } else if (fileType.startsWith('audio/')) {
+                    modalBody.dataset.lastPreviewUrl = previewUrl; // For testability
+                    const audio = document.createElement('audio');
+                    audio.src = previewUrl;
+                    audio.controls = true;
+                    audio.autoplay = true;
+                    audio.style.width = '100%';
+                    audio.onerror = () => {
+                        modalBody.innerHTML = `<p style="text-align: center; color: red;">音訊預覽載入失敗。</p>`;
+                    };
+                    modalBody.appendChild(audio);
                 } else if (fileType === 'text/html') {
                     const iframe = document.createElement('iframe');
                     iframe.src = previewUrl;
@@ -855,7 +867,8 @@
                     modalBody.innerHTML = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${previewUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
                 }
 
-                // 下載按鈕仍指向 /api/download/ 以強制下載行為
+                // JULES'S FIX (2025-08-13): 確保下載按鈕總是正確指向 API 端點。
+                // taskId 必須有效才能使此功能運作。
                 modalDownloadBtn.href = `/api/download/${taskId}`;
                 modalDownloadBtn.download = filename;
 
@@ -1214,107 +1227,95 @@
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'task-actions';
 
-                const taskElement = taskElements.get(taskId);
-                if (!taskElement) {
-                    console.error(`Could not find task element for ID: ${taskId}`);
-                    return buttonGroup;
-                }
-
                 const resultData = result || {};
                 const outputPath = resultData.output_path || resultData.transcript_path || '';
-                const extension = outputPath.substring(outputPath.lastIndexOf('.'));
-                const isVideo = extension === '.mp4';
-                const isAudio = ['.mp3', '.m4a', '.wav', '.flac'].includes(extension);
-                const isReport = ['.html', '.txt'].includes(extension) && !outputPath.endsWith(`${taskId}.txt`);
+                if (!outputPath) return buttonGroup;
 
-                const filenameSpan = taskElement.querySelector('.task-filename');
-                const originalFilename = filenameSpan ? filenameSpan.textContent : '';
-                const cleanFilename = originalFilename.split('(')[0].trim();
-                const baseName = cleanFilename.substring(0, cleanFilename.lastIndexOf('.')) || cleanFilename;
+                // JULES'S FIX (2025-08-13): Get the title directly from the result data
+                // instead of parsing it from the DOM. This is much more robust.
+                const title = resultData.video_title || resultData.original_filename || 'Untitled';
+
+                const extension = outputPath.substring(outputPath.lastIndexOf('.'));
+                const fileMimeTypes = {
+                    '.mp4': 'video/mp4',
+                    '.mp3': 'audio/mpeg',
+                    '.m4a': 'audio/mp4',
+                    '.wav': 'audio/wav',
+                    '.flac': 'audio/flac',
+                    '.html': 'text/html',
+                    '.txt': 'text/plain'
+                };
+                const mimeType = fileMimeTypes[extension] || 'application/octet-stream';
+
+                const isVideo = mimeType.startsWith('video/');
+                const isAudio = mimeType.startsWith('audio/');
+                const isReport = mimeType === 'text/html';
+                const isTranscriptionResult = mimeType === 'text/plain' && outputPath.includes('/transcripts/');
 
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `/api/download/${taskId}`;
                 downloadBtn.className = 'btn-download';
                 downloadBtn.textContent = '下載';
-                downloadBtn.download = `${baseName}${extension}`;
+                downloadBtn.download = `${title}${extension}`; // Use direct title
                 downloadBtn.addEventListener('click', (e) => logAction('click-download-task', taskId));
 
-                if (isReport) {
-                    const previewBtn = document.createElement('a');
+                // Preview button for Video, Audio, HTML Reports, and Text Transcripts
+                if (isVideo || isAudio || isReport || isTranscriptionResult) {
+                     const previewBtn = document.createElement('a');
                     previewBtn.href = '#';
                     previewBtn.className = 'btn-preview';
                     previewBtn.textContent = '預覽';
                     previewBtn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const fileType = extension === '.html' ? 'text/html' : 'text/plain';
-                        openPreviewModal(outputPath, `${baseName}${extension}`, fileType, taskId);
+                        logAction('click-preview', `${mimeType}:${taskId}`);
+                        // Use the direct title for the modal display
+                        openPreviewModal(outputPath, title, mimeType, taskId);
                     });
                     buttonGroup.appendChild(previewBtn);
-                } else { // Media file (video or audio)
+                }
+
+                // Additional actions for media files
+                if (isVideo || isAudio) {
                     const renameBtn = document.createElement('a');
                     renameBtn.href = '#';
                     renameBtn.className = 'btn-rename';
                     renameBtn.textContent = '修改名稱';
                     renameBtn.addEventListener('click', (e) => { e.preventDefault(); renameTask(taskId); });
                     buttonGroup.appendChild(renameBtn);
+                }
 
-                    if (isVideo) {
-                        const previewBtn = document.createElement('a');
-                        previewBtn.href = '#';
-                        previewBtn.className = 'btn-preview';
-                        previewBtn.textContent = '預覽影片';
-                        previewBtn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            openPreviewModal(outputPath, `${baseName}${extension}`, 'video/mp4', taskId);
-                        });
-                        buttonGroup.appendChild(previewBtn);
-                    } else if (isAudio) {
-                        // --- JULES'S FIX: Add the missing "Preview" button for audio files ---
-                        const previewBtn = document.createElement('a');
-                        // The href points to this same page, but with a query parameter.
-                        // The target='_blank' is crucial for opening in a new tab.
-                        previewBtn.href = `/static/mp3.html?file=${encodeURIComponent(outputPath)}`;
-                        previewBtn.className = 'btn-preview';
-                        previewBtn.textContent = '預覽';
-                        previewBtn.target = '_blank';
-                        previewBtn.addEventListener('click', (e) => {
-                            // We don't prevent default, we want the link to open.
-                            // We just log the action.
-                            logAction('click-preview-audio', taskId);
-                        });
-                        buttonGroup.appendChild(previewBtn);
-
-                        const sendToWhisperBtn = document.createElement('a');
-                        sendToWhisperBtn.href = '#';
-                        // Use a different style to distinguish from preview
-                        sendToWhisperBtn.className = 'btn-preview';
-                        sendToWhisperBtn.style.backgroundColor = '#17a2b8'; // Teal color
-                        sendToWhisperBtn.textContent = '送至轉錄區';
-                        sendToWhisperBtn.addEventListener('click', async (e) => {
-                            e.preventDefault();
-                            logAction('click-send-to-whisper', taskId);
-                            sendToWhisperBtn.textContent = '處理中...';
-                            try {
-                                const response = await fetch(outputPath); // Fetch from the public URL
-                                if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
-                                const audioBlob = await response.blob();
-                                const currentFilename = taskElement.querySelector('.task-filename').textContent.split('(')[0].trim();
-                                const audioFile = new File([audioBlob], `${currentFilename}${extension}`, { type: response.headers.get('Content-Type') });
-                                if (!uploadedFiles.some(f => f.name === audioFile.name)) {
-                                    uploadedFiles.push(audioFile);
-                                }
-                                document.querySelector('.tab-button[data-tab="local-file-tab"]').click();
-                                updateFileDisplay();
-                                showStatusMessage(`檔案 "${audioFile.name}" 已成功載入至「本機檔案轉錄」分頁！`, false);
-                            } catch (error) {
-                                console.error('傳送至轉錄區失敗:', error);
-                                showStatusMessage(`錯誤：${error.message}`, true);
-                            } finally {
-                                sendToWhisperBtn.textContent = '送至轉錄區';
+                // "Send to Whisper" for audio files
+                if (isAudio) {
+                    const sendToWhisperBtn = document.createElement('a');
+                    sendToWhisperBtn.href = '#';
+                    sendToWhisperBtn.className = 'btn-preview';
+                    sendToWhisperBtn.style.backgroundColor = '#17a2b8';
+                    sendToWhisperBtn.textContent = '送至轉錄區';
+                    sendToWhisperBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        logAction('click-send-to-whisper', taskId);
+                        sendToWhisperBtn.textContent = '處理中...';
+                        try {
+                            const response = await fetch(outputPath);
+                            if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
+                            const audioBlob = await response.blob();
+                            const taskElement = taskElements.get(taskId);
+                            const currentFilename = taskElement ? taskElement.querySelector('.task-filename').textContent.split('(')[0].trim() : title;
+                            const audioFile = new File([audioBlob], `${currentFilename}${extension}`, { type: response.headers.get('Content-Type') });
+                            if (!uploadedFiles.some(f => f.name === audioFile.name)) {
+                                uploadedFiles.push(audioFile);
                             }
-                        });
-                        buttonGroup.appendChild(sendToWhisperBtn);
-                    }
+                            document.querySelector('.tab-button[data-tab="local-file-tab"]').click();
+                            updateFileDisplay();
+                            showStatusMessage(`檔案 "${audioFile.name}" 已成功載入至「本機檔案轉錄」分頁！`, false);
+                        } catch (error) {
+                            console.error('傳送至轉錄區失敗:', error);
+                            showStatusMessage(`錯誤：${error.message}`, true);
+                        } finally {
+                            sendToWhisperBtn.textContent = '送至轉錄區';
+                        }
+                    });
+                    buttonGroup.appendChild(sendToWhisperBtn);
                 }
 
                 buttonGroup.appendChild(downloadBtn);
@@ -1658,7 +1659,9 @@
                     logAction('click-yt-report-preview', taskId);
                     const fileType = extension === '.html' ? 'text/html' : 'text/plain';
                     const filename = `${videoTitle.replace(/ /g, '_')}_report${extension}`;
-                    openPreviewModal(taskId, filename, fileType);
+                    // JULES'S FIX (2025-08-13): 傳遞正確的 'outputPath' 給預覽彈窗，
+                    // 而不是 'taskId'。同時也將 taskId 傳入以供下載按鈕使用。
+                    openPreviewModal(outputPath, filename, fileType, taskId);
                 };
 
                 const downloadBtn = document.createElement('a');
@@ -1884,13 +1887,17 @@
 
             // JULES'S NEW FEATURE: Load task history on page load
             const dispatchStatusUpdate = (task) => {
+                // JULES'S FIX (2025-08-13): The backend /api/tasks endpoint already parses
+                // the payload and result fields into objects. Calling JSON.parse here again
+                // on an object leads to the "[object Object]" error on page reload.
+                // We now simply merge the already-parsed objects.
                 const payload = {
-                    ...JSON.parse(task.payload || '{}'),
-                    ...JSON.parse(task.result || '{}'),
+                    ...(task.payload || {}),
+                    ...(task.result || {}),
                     task_id: task.id,
                     status: task.status,
                     task_type: task.type,
-                    filename: (JSON.parse(task.payload || '{}')).original_filename
+                    filename: (task.payload || {}).original_filename
                 };
 
                 // Manually move task element if it's completed but in ongoing list
@@ -2061,59 +2068,6 @@
                 });
             }
         });
-    </script>
-
-    <script>
-        // --- MP3 預覽頁面邏輯 ---
-        // 這段腳本在頁面載入時執行，以檢查這是否是一個預覽頁面。
-        (function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const audioFileUrl = urlParams.get('file');
-
-            if (audioFileUrl) {
-                // 這是一個預覽頁面。
-                // 1. 隱藏主應用程式容器。
-                const appContainer = document.getElementById('app');
-                if (appContainer) {
-                    appContainer.style.display = 'none';
-                }
-
-                // 2. 設定文件標題。
-                document.title = 'MP3 預覽';
-
-                // 3. 建立並注入音訊播放器 UI。
-                const playerContainer = document.createElement('div');
-                playerContainer.style.cssText = `
-                    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                    display: flex; flex-direction: column; justify-content: center; align-items: center;
-                    background-color: #2c3e50; color: white; font-family: sans-serif;
-                `;
-
-                const title = document.createElement('h1');
-                title.textContent = '音訊預覽';
-                title.style.marginBottom = '20px';
-
-                const audioPlayer = document.createElement('audio');
-                audioPlayer.controls = true;
-                audioPlayer.autoplay = true;
-                audioPlayer.src = decodeURIComponent(audioFileUrl);
-                audioPlayer.style.width = '80%';
-                audioPlayer.style.maxWidth = '600px';
-
-                const filePathText = document.createElement('p');
-                filePathText.textContent = `來源: ${decodeURIComponent(audioFileUrl)}`;
-                filePathText.style.marginTop = '20px';
-                filePathText.style.fontSize = '0.9em';
-                filePathText.style.color = '#bdc3c7';
-
-                playerContainer.appendChild(title);
-                playerContainer.appendChild(audioPlayer);
-                playerContainer.appendChild(filePathText);
-
-                document.body.appendChild(playerContainer);
-                document.body.style.margin = '0';
-            }
-        })();
     </script>
 </body>
 </html>
