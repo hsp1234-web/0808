@@ -238,9 +238,10 @@ class ServerManager:
             # --- 修復結束 ---
 
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
-            # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
-            # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
+            # JULES'S FIX (2025-08-14): 改為使用 `python -m` 來執行模組
+            # 這可以確保子進程能夠正確地解析專案的套件路徑，解決 ModuleNotFoundError
+            # cwd 仍然是 project_path，Python 會從那裡開始尋找 core.orchestrator 模組
+            launch_command = [sys.executable, "-m", "core.orchestrator", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
