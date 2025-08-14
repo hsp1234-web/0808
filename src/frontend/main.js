@@ -3,6 +3,7 @@ import { TaskList } from './components/TaskList.js';
 import { LocalTranscriber } from './components/LocalTranscriber.js';
 import { MediaDownloader } from './components/MediaDownloader.js';
 import { YouTubeReporter } from './components/YouTubeReporter.js';
+import { LogViewer } from './components/LogViewer.js';
 
 /**
  * 主應用程式類別
@@ -17,6 +18,7 @@ class App {
         this.youtubeReporterContainer = document.getElementById('youtube-report-tab');
         this.tasklistContainer = document.getElementById('task-list-container');
         this.fileBrowserContainer = document.getElementById('file-browser-container');
+        this.logViewerContainer = document.getElementById('log-viewer-container');
         this.statusMessageArea = document.getElementById('status-message-area');
         this.statusMessageText = document.getElementById('status-message-text');
 
@@ -158,18 +160,121 @@ class App {
     }
 
     /**
+     * 設定 Modal 彈窗的事件監聽器。
+     */
+    setupModals() {
+        const previewModal = document.getElementById('preview-modal');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        const closePreviewModal = () => {
+            this.logAction('close-preview-modal');
+            previewModal.style.display = 'none';
+            const modalBody = previewModal.querySelector('.modal-body');
+            modalBody.innerHTML = ''; // Stop video/audio playback
+        };
+
+        if (modalCloseBtn) modalCloseBtn.addEventListener('click', closePreviewModal);
+        if (previewModal) {
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) {
+                    closePreviewModal();
+                }
+            });
+        }
+    }
+
+    /**
+     * 開啟預覽 Modal 彈窗並載入內容。
+     */
+    async openPreviewModal(previewUrl, filename, fileType, taskId) {
+        this.logAction('open-preview-modal', taskId);
+
+        const previewModal = document.getElementById('preview-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = previewModal.querySelector('.modal-body');
+        const modalDownloadBtn = document.getElementById('modal-download-btn');
+        const modalCopyLinkBtn = document.getElementById('modal-copy-link-btn');
+
+        modalBody.innerHTML = '';
+        modalTitle.textContent = `預覽: ${filename}`;
+
+        if (fileType.startsWith('video/')) {
+            const video = document.createElement('video');
+            video.src = previewUrl;
+            video.controls = true;
+            video.autoplay = true;
+            video.style.width = '100%';
+            video.style.maxHeight = '75vh';
+            modalBody.appendChild(video);
+        } else if (fileType.startsWith('audio/')) {
+            const audio = document.createElement('audio');
+            audio.src = previewUrl;
+            audio.controls = true;
+            audio.autoplay = true;
+            audio.style.width = '100%';
+            modalBody.appendChild(audio);
+        } else if (fileType === 'text/html') {
+            const iframe = document.createElement('iframe');
+            iframe.src = previewUrl;
+            iframe.style.width = '100%';
+            iframe.style.height = '75vh';
+            iframe.style.border = 'none';
+            modalBody.appendChild(iframe);
+        } else if (fileType === 'text/plain') {
+            const pre = document.createElement('pre');
+            pre.style.whiteSpace = 'pre-wrap';
+            pre.textContent = '正在載入預覽...';
+            modalBody.appendChild(pre);
+            try {
+                const response = await fetch(previewUrl);
+                if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
+                pre.textContent = await response.text();
+            } catch (error) {
+                pre.textContent = `預覽載入失敗: ${error.message}`;
+            }
+        } else {
+            modalBody.innerHTML = `<p>此檔案類型 (${fileType}) 無法直接預覽。</p>`;
+        }
+
+        modalDownloadBtn.href = `/api/download/${taskId}`;
+        modalDownloadBtn.download = filename;
+
+        modalCopyLinkBtn.onclick = () => {
+            const publicUrl = new URL(previewUrl, window.location.origin).href;
+            navigator.clipboard.writeText(publicUrl).then(() => {
+                this.showStatusMessage('報告連結已複製！', false, 3000);
+            });
+        };
+
+        previewModal.style.display = 'flex';
+    }
+
+    /**
      * 初始化所有組件。
      */
     initComponents() {
-        const services = {
+        // JULES: 建立一個基礎的 services 物件
+        const baseServices = {
             socket: this.socket,
             showStatusMessage: this.showStatusMessage.bind(this),
             logAction: this.logAction.bind(this),
+            openPreviewModal: this.openPreviewModal.bind(this), // JULES: Add real function
+            app: this, // 傳入 App 實例
+        };
+
+        // JULES: 優先初始化 TaskList，因為其他元件會依賴它
+        if (this.tasklistContainer) {
+            this.taskList = new TaskList(this.tasklistContainer, baseServices);
+            this.taskList.init();
+        }
+
+        // JULES: 建立給其他主要元件使用的 services 物件，並注入 taskManager
+        const services = {
+            ...baseServices,
+            taskManager: this.taskList, // 將 taskList 實例注入
             updateModelDisplay: (modelName) => {
                 if (this.modelDisplay) this.modelDisplay.textContent = modelName;
             },
-            // 傳入 App 實例，以便組件間可以互相呼叫
-            app: this,
         };
 
         // 初始化 LocalTranscriber
@@ -184,27 +289,22 @@ class App {
             this.mediaDownloader.init();
         }
 
-        // 初始化 YouTubeReporter
+        // 初始化 YouTubeReporter (現在可以存取 taskManager)
         if (this.youtubeReporterContainer) {
             this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
             this.youtubeReporter.init();
-        }
-
-        // 初始化 TaskList
-        if (this.tasklistContainer) {
-            // TaskList 需要一個開啟預覽彈窗的函式
-            const taskListServices = {
-                ...services,
-                openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`),
-            };
-            this.taskList = new TaskList(this.tasklistContainer, taskListServices);
-            this.taskList.init();
         }
 
         // 初始化 FileBrowser
         if (this.fileBrowserContainer) {
             this.fileBrowser = new FileBrowser(this.fileBrowserContainer, services);
             this.fileBrowser.init();
+        }
+
+        // 初始化 LogViewer
+        if (this.logViewerContainer) {
+            this.logViewer = new LogViewer(this.logViewerContainer, services);
+            this.logViewer.init();
         }
     }
 
@@ -235,6 +335,7 @@ class App {
         this.setupWebSocket();
         this.initComponents();
         this.setupTabSwitching();
+        this.setupModals(); // JULES: Add this call
 
         // JULES: Periodically update system stats
         this.updateSystemStats();

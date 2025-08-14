@@ -715,82 +715,79 @@ class YouTubeReporter {
   }
   render() {
     this.container.innerHTML = `
-            <div id="youtube-report-tab" class="tab-content active flex flex-col gap-6">
-                <div class="card">
-                    <!-- 區域 1: API 金鑰管理 -->
-                    <div class="flex justify-between items-center flex-wrap gap-4">
-                        <h2>\uD83D\uDD11 Google API 金鑰管理</h2>
-                        <a href="/static/prompts.html" target="_blank" class="font-semibold text-btn-bg hover:underline">管理提示詞 &rarr;</a>
-                    </div>
-                    <div class="flex gap-2.5 items-center flex-wrap mt-3">
-                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="flex-grow">
-                        <button id="save-api-key-btn" class="btn btn-primary">儲存金鑰</button>
-                        <button id="clear-api-key-btn" class="btn bg-gray-500 text-white hover:bg-gray-600">清除金鑰</button>
-                    </div>
-                    <p id="api-key-status" class="mt-3 font-semibold">狀態: <span class="italic">尚未提供金鑰</span></p>
+            <div class="card">
+                <!-- 區域 1: API 金鑰管理 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <h2>\uD83D\uDD11 Google API 金鑰管理</h2>
+                    <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                    <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1;">
+                    <button id="save-api-key-btn">儲存金鑰</button>
+                    <button id="clear-api-key-btn" class="btn-secondary">清除金鑰</button>
+                </div>
+                <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
 
-                    <!-- 區域 2: YouTube 影片處理 -->
-                    <h2 class="mt-6">▶️ 輸入 YouTube 影片</h2>
-                    <fieldset id="youtube-controls-fieldset" class="mt-3">
-                        <div id="youtube-link-list" class="flex flex-col gap-2.5">
-                            <div class="youtube-link-row flex flex-wrap gap-2.5 items-center">
-                                <input type="text" class="youtube-url-input flex-grow min-w-[300px]" placeholder="YouTube 影片網址">
-                                <input type="text" class="youtube-filename-input flex-grow min-w-[150px]" placeholder="自訂檔名 (可選)">
-                                <button class="remove-youtube-row-btn btn bg-red-600 text-white hover:bg-red-700 px-4 text-2xl leading-none flex-shrink-0">×</button>
+                <!-- 區域 2: YouTube 影片處理 -->
+                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
+                <fieldset id="youtube-controls-fieldset">
+                    <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
+                        <!-- JS 動態新增的列將會插入到這裡 -->
+                    </div>
+                    <button id="add-youtube-row-btn" style="margin-top: 12px;">+ 新增一列</button>
+                </fieldset>
+            </div>
+
+            <!-- 區域 3: 參數控制區 -->
+            <div class="card" style="margin-top: 24px;">
+                <h2>⚙️ 參數控制區</h2>
+                <fieldset id="youtube-params-fieldset" disabled>
+                    <div class="grid-2-col">
+                        <!-- 左側：任務選項 -->
+                        <div>
+                            <label><strong>任務選項</strong></label>
+                            <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                                <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                <label><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
                             </div>
                         </div>
-                        <button id="add-youtube-row-btn" class="btn btn-primary mt-3">+ 新增一列</button>
-                    </fieldset>
-                </div>
-
-                <!-- 區域 3: 參數控制區 -->
-                <div class="card">
-                    <h2>⚙️ 參數控制區</h2>
-                    <fieldset id="youtube-params-fieldset" disabled class="mt-3">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col gap-2">
-                                <label class="font-semibold">任務選項</label>
-                                <div id="yt-tasks-group" class="flex flex-col gap-2 mt-1">
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
-                                </div>
+                        <!-- 右側：模型與格式 -->
+                        <div class="flex-col">
+                            <div>
+                                <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                                <select id="gemini-model-select">
+                                    <option>等待從伺服器載入模型列表...</option>
+                                </select>
                             </div>
-                            <div class="flex flex-col gap-4">
-                                <div class="flex flex-col gap-2">
-                                    <label for="gemini-model-select" class="font-semibold">AI 模型</label>
-                                    <select id="gemini-model-select">
-                                        <option>等待從伺服器載入模型列表...</option>
-                                    </select>
-                                </div>
-                                <div class="flex flex-col gap-2">
-                                    <label for="yt-output-format-select" class="font-semibold">輸出格式</label>
-                                    <select id="yt-output-format-select">
-                                        <option value="html">HTML 報告</option>
-                                        <option value="txt">純文字 (.txt)</option>
-                                    </select>
-                                </div>
+                            <div>
+                                <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                                <select id="yt-output-format-select">
+                                    <option value="html">HTML 報告</option>
+                                    <option value="txt">純文字 (.txt)</option>
+                                </select>
                             </div>
                         </div>
-                    </fieldset>
-                </div>
-
-                <!-- 區域 4: 操作按鈕 -->
-                <div class="flex justify-center gap-4 flex-wrap">
-                    <button id="download-audio-only-btn" class="btn btn-primary bg-gray-600 hover:bg-gray-700">\uD83C\uDFA7 僅下載音訊</button>
-                    <button id="start-youtube-processing-btn" class="btn btn-primary text-lg" disabled>\uD83D\uDE80 分析影片 (Gemini)</button>
-                </div>
-
-                <!-- 區域 5: YouTube 報告瀏覽區 -->
-                <div id="youtube-file-browser-container" class="card">
-                    <h2>\uD83D\uDCCA YouTube 報告瀏覽區</h2>
-                    <div id="youtube-file-browser" class="task-list mt-4">
-                        <p id="no-youtube-report-msg" class="text-gray-500 text-center">尚無已完成的報告</p>
                     </div>
+                </fieldset>
+            </div>
+
+            <!-- 區域 4: 操作按鈕 -->
+            <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <button id="download-audio-only-btn">\uD83C\uDFA7 僅下載音訊</button>
+                <button id="start-youtube-processing-btn" disabled>\uD83D\uDE80 分析影片 (Gemini)</button>
+            </div>
+
+            <!-- 區域 5: YouTube 報告瀏覽區 -->
+            <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
+                <h2>\uD83D\uDCCA YouTube 報告瀏覽區</h2>
+                <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
+                    <p id="no-youtube-report-msg">尚無已完成的報告</p>
                 </div>
             </div>
         `;
     this.cacheDomElements();
+    this.addNewYoutubeRow(false);
   }
   cacheDomElements() {
     this.apiKeyInput = this.container.querySelector("#api-key-input");
@@ -846,6 +843,8 @@ class YouTubeReporter {
   }
   initializeYouTubeTab() {
     this.logAction("initialize-youtube-tab");
+    const apiKeyToTest = "AIzaSyCRATAsKuVpcK2kBQ1Q-xZut53hb_RvfQw";
+    localStorage.setItem("googleApiKey", apiKeyToTest);
     const storedApiKey = localStorage.getItem("googleApiKey");
     if (storedApiKey) {
       this.apiKeyInput.value = storedApiKey;
@@ -892,13 +891,21 @@ class YouTubeReporter {
     }
     this.updateApiKeyUI("validating");
     try {
-      await this.loadGeminiModels(apiKey);
-      this.updateApiKeyUI("valid", "金鑰有效，Gemini 功能已啟用");
+      const response = await fetch("/api/youtube/validate_api_key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      const result = await response.json();
+      if (response.ok && result.valid) {
+        this.updateApiKeyUI("valid", "金鑰有效，Gemini 功能已啟用");
+        this.loadGeminiModels();
+      } else {
+        this.updateApiKeyUI("invalid", result.detail || "金鑰無效或發生未知錯誤");
+      }
     } catch (error) {
-      console.error("API Key validation/loading error:", error);
-      const errorMessage = error.detail || "金鑰無效或無法載入模型列表";
-      this.updateApiKeyUI("invalid", errorMessage);
-      this.geminiModelSelect.innerHTML = `<option>${errorMessage}</option>`;
+      console.error("API Key validation error:", error);
+      this.updateApiKeyUI("invalid", "無法連線至後端進行驗證");
     }
   }
   async loadGeminiModels(apiKey) {
@@ -922,14 +929,17 @@ class YouTubeReporter {
       throw error;
     }
   }
-  addNewYoutubeRow() {
-    this.logAction("click-add-youtube-row");
-    const firstRow = this.youtubeLinkList.querySelector(".youtube-link-row");
-    if (!firstRow)
-      return;
-    const newRow = firstRow.cloneNode(true);
-    newRow.querySelector(".youtube-url-input").value = "";
-    newRow.querySelector(".youtube-filename-input").value = "";
+  addNewYoutubeRow(log = true) {
+    if (log)
+      this.logAction("click-add-youtube-row");
+    const newRow = document.createElement("div");
+    newRow.className = "youtube-link-row";
+    newRow.style.cssText = "display: flex; flex-wrap: wrap; gap: 10px; align-items: center;";
+    newRow.innerHTML = `
+            <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+            <button class="remove-youtube-row-btn btn-danger" style="padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+        `;
     this.youtubeLinkList.appendChild(newRow);
   }
   sanitizeFilename(filename) {
@@ -957,9 +967,12 @@ class YouTubeReporter {
       return;
     }
     const button = downloadOnly ? this.downloadAudioOnlyBtn : this.startYoutubeProcessingBtn;
-    const originalText = button.textContent;
+    const spinner = this.startYoutubeProcessingBtn.querySelector("#processing-spinner");
     button.disabled = true;
-    button.textContent = "正在建立任務...";
+    if (spinner && !downloadOnly)
+      spinner.style.display = "inline-block";
+    if (downloadOnly)
+      button.textContent = "正在建立任務...";
     try {
       const payload = {
         requests,
@@ -986,7 +999,10 @@ class YouTubeReporter {
       this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.detail || error.message}`, true);
     } finally {
       button.disabled = false;
-      button.textContent = originalText;
+      if (spinner)
+        spinner.style.display = "none";
+      if (downloadOnly)
+        button.textContent = "\uD83C\uDFA7 僅下載音訊";
     }
   }
   addYoutubeReportToList(payload) {
@@ -1000,6 +1016,77 @@ class YouTubeReporter {
   }
 }
 
+// src/frontend/components/LogViewer.js
+class LogViewer {
+  constructor(container, deps) {
+    this.container = container;
+    this.showStatusMessage = deps.showStatusMessage;
+    this.logAction = deps.logAction;
+  }
+  init() {
+    this.render();
+    this.addEventListeners();
+  }
+  render() {
+    this.container.innerHTML = `
+            <div id="log-viewer-card" class="card">
+                <h2>\uD83D\uDCDC 系統日誌查看器</h2>
+                <div class="log-controls">
+                    <strong>等級:</strong>
+                    <label><input type="checkbox" name="log-level" value="INFO" checked> INFO</label>
+                    <label><input type="checkbox" name="log-level" value="SUCCESS" checked> SUCCESS</label>
+                    <label><input type="checkbox" name="log-level" value="WARN" checked> WARN</label>
+                    <label><input type="checkbox" name="log-level" value="ERROR" checked> ERROR</label>
+                    <label><input type="checkbox" name="log-level" value="CRITICAL" checked> CRITICAL</label>
+                </div>
+                <div class="log-controls" style="margin-top: 10px;">
+                    <strong>來源:</strong>
+                    <label><input type="checkbox" name="log-source" value="colab_setup" checked> Setup</label>
+                    <label><input type="checkbox" name="log-source" value="orchestrator" checked> Orchestrator</label>
+                    <label><input type="checkbox" name="log-source" value="api_server" checked> API Server</label>
+                    <label><input type="checkbox" name="log-source" value="worker" checked> Worker</label>
+                </div>
+                <div style="margin-top: 16px; display: flex; gap: 10px;">
+                    <button id="fetch-logs-btn">\uD83D\uDD04 更新日誌</button>
+                    <button id="copy-logs-btn">\uD83D\uDCCB 複製日誌</button>
+                </div>
+                <pre id="log-output" class="transcript-output" style="margin-top: 16px; min-height: 200px; max-height: 500px; overflow-y: auto;">點擊「更新日誌」以載入...</pre>
+            </div>
+        `;
+  }
+  addEventListeners() {
+    const fetchLogsBtn = this.container.querySelector("#fetch-logs-btn");
+    const copyLogsBtn = this.container.querySelector("#copy-logs-btn");
+    const logOutput = this.container.querySelector("#log-output");
+    fetchLogsBtn.addEventListener("click", async () => {
+      this.logAction("click-fetch-logs");
+      logOutput.textContent = "載入中...";
+      try {
+        const levels = Array.from(this.container.querySelectorAll('input[name="log-level"]:checked')).map((el) => el.value);
+        const sources = Array.from(this.container.querySelectorAll('input[name="log-source"]:checked')).map((el) => el.value);
+        const params = new URLSearchParams;
+        levels.forEach((level) => params.append("level", level));
+        sources.forEach((source) => params.append("source", source));
+        const response = await fetch(`/api/logs?${params.toString()}`);
+        if (!response.ok)
+          throw new Error(`伺服器錯誤: ${response.statusText}`);
+        const logs = await response.json();
+        if (logs.length === 0) {
+          logOutput.textContent = "找不到符合條件的日誌。";
+        } else {
+          logOutput.textContent = logs.map((log) => `[${new Date(log.timestamp).toLocaleString()}] [${log.source}] [${log.level}] ${log.message}`).join("\\n");
+        }
+      } catch (error) {
+        logOutput.textContent = `載入日誌時發生錯誤: ${error.message}`;
+      }
+    });
+    copyLogsBtn.addEventListener("click", () => {
+      this.logAction("click-copy-logs");
+      navigator.clipboard.writeText(logOutput.textContent).then(() => this.showStatusMessage("日誌已複製到剪貼簿！", false, 3000)).catch((err) => this.showStatusMessage("複製失敗: " + err, true));
+    });
+  }
+}
+
 // src/frontend/main.js
 class App {
   constructor() {
@@ -1008,6 +1095,7 @@ class App {
     this.youtubeReporterContainer = document.getElementById("youtube-report-tab");
     this.tasklistContainer = document.getElementById("task-list-container");
     this.fileBrowserContainer = document.getElementById("file-browser-container");
+    this.logViewerContainer = document.getElementById("log-viewer-container");
     this.statusMessageArea = document.getElementById("status-message-area");
     this.statusMessageText = document.getElementById("status-message-text");
     this.modelDisplay = document.getElementById("model-display");
@@ -1109,16 +1197,101 @@ class App {
       }
     });
   }
+  setupModals() {
+    const previewModal = document.getElementById("preview-modal");
+    const modalCloseBtn = document.getElementById("modal-close-btn");
+    const closePreviewModal = () => {
+      this.logAction("close-preview-modal");
+      previewModal.style.display = "none";
+      const modalBody = previewModal.querySelector(".modal-body");
+      modalBody.innerHTML = "";
+    };
+    if (modalCloseBtn)
+      modalCloseBtn.addEventListener("click", closePreviewModal);
+    if (previewModal) {
+      previewModal.addEventListener("click", (e) => {
+        if (e.target === previewModal) {
+          closePreviewModal();
+        }
+      });
+    }
+  }
+  async openPreviewModal(previewUrl, filename, fileType, taskId) {
+    this.logAction("open-preview-modal", taskId);
+    const previewModal = document.getElementById("preview-modal");
+    const modalTitle = document.getElementById("modal-title");
+    const modalBody = previewModal.querySelector(".modal-body");
+    const modalDownloadBtn = document.getElementById("modal-download-btn");
+    const modalCopyLinkBtn = document.getElementById("modal-copy-link-btn");
+    modalBody.innerHTML = "";
+    modalTitle.textContent = `預覽: ${filename}`;
+    if (fileType.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.src = previewUrl;
+      video.controls = true;
+      video.autoplay = true;
+      video.style.width = "100%";
+      video.style.maxHeight = "75vh";
+      modalBody.appendChild(video);
+    } else if (fileType.startsWith("audio/")) {
+      const audio = document.createElement("audio");
+      audio.src = previewUrl;
+      audio.controls = true;
+      audio.autoplay = true;
+      audio.style.width = "100%";
+      modalBody.appendChild(audio);
+    } else if (fileType === "text/html") {
+      const iframe = document.createElement("iframe");
+      iframe.src = previewUrl;
+      iframe.style.width = "100%";
+      iframe.style.height = "75vh";
+      iframe.style.border = "none";
+      modalBody.appendChild(iframe);
+    } else if (fileType === "text/plain") {
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.textContent = "正在載入預覽...";
+      modalBody.appendChild(pre);
+      try {
+        const response = await fetch(previewUrl);
+        if (!response.ok)
+          throw new Error(`伺服器錯誤: ${response.statusText}`);
+        pre.textContent = await response.text();
+      } catch (error) {
+        pre.textContent = `預覽載入失敗: ${error.message}`;
+      }
+    } else {
+      modalBody.innerHTML = `<p>此檔案類型 (${fileType}) 無法直接預覽。</p>`;
+    }
+    modalDownloadBtn.href = `/api/download/${taskId}`;
+    modalDownloadBtn.download = filename;
+    modalCopyLinkBtn.onclick = () => {
+      const publicUrl = new URL(previewUrl, window.location.origin).href;
+      navigator.clipboard.writeText(publicUrl).then(() => {
+        this.showStatusMessage("報告連結已複製！", false, 3000);
+      });
+    };
+    previewModal.style.display = "flex";
+  }
   initComponents() {
-    const services = {
+    const baseServices = {
       socket: this.socket,
       showStatusMessage: this.showStatusMessage.bind(this),
       logAction: this.logAction.bind(this),
+      openPreviewModal: this.openPreviewModal.bind(this),
+      app: this
+    };
+    if (this.tasklistContainer) {
+      this.taskList = new TaskList(this.tasklistContainer, baseServices);
+      this.taskList.init();
+    }
+    const services = {
+      ...baseServices,
+      taskManager: this.taskList,
       updateModelDisplay: (modelName) => {
         if (this.modelDisplay)
           this.modelDisplay.textContent = modelName;
-      },
-      app: this
+      }
     };
     if (this.localTranscriberContainer) {
       this.localTranscriber = new LocalTranscriber(this.localTranscriberContainer, services);
@@ -1132,17 +1305,13 @@ class App {
       this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
       this.youtubeReporter.init();
     }
-    if (this.tasklistContainer) {
-      const taskListServices = {
-        ...services,
-        openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`)
-      };
-      this.taskList = new TaskList(this.tasklistContainer, taskListServices);
-      this.taskList.init();
-    }
     if (this.fileBrowserContainer) {
       this.fileBrowser = new FileBrowser(this.fileBrowserContainer, services);
       this.fileBrowser.init();
+    }
+    if (this.logViewerContainer) {
+      this.logViewer = new LogViewer(this.logViewerContainer, services);
+      this.logViewer.init();
     }
   }
   async updateSystemStats() {
@@ -1168,6 +1337,7 @@ class App {
     this.setupWebSocket();
     this.initComponents();
     this.setupTabSwitching();
+    this.setupModals();
     this.updateSystemStats();
     setInterval(() => this.updateSystemStats(), 2000);
   }
