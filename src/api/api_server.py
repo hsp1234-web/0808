@@ -16,6 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, List
 
+# JULES'S FIX (2025-08-14): 動態將專案根目錄加入 sys.path
+# 這是為了解決在某些執行環境下 (例如 Colab) `python src/api/api_server.py`
+# 無法找到 `src` 模組的問題。
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+
 # 匯入新的資料庫客戶端
 # from db import database # REMOVED: No longer used directly
 from src.db.client import get_client
