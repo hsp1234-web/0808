@@ -2,36 +2,38 @@
 
 [![zh-Hant](https://img.shields.io/badge/language-繁體中文-blue.svg)](README.md)
 
-這是一個高效、可擴展的音訊轉錄專案，旨在提供一個可以透過 Web 介面輕鬆操作的語音轉文字服務。專案近期已整合 **YouTube 影片處理與 AI 分析** 功能。
+這是一個高效、可擴展的音訊轉錄專案，旨在提供一個可以透過 Web 介面輕鬆操作的語音轉文字服務。專案近期已整合 **YouTube 影片處理與 AI 分析** 功能，並加入了**後端驅動的 UI 狀態保存**，確保您的設定和輸入在重新整理頁面後不會遺失。
 
 ---
 
 ## ⚡️ 如何啟動與測試
 
-我們提供兩種主要的執行方式：一個用於本地開發與端對端測試，另一個專為在 Google Colab 中部署而設計。
+本專案提供多種啟動與測試方式，以適應不同開發需求。
 
-### 方式一：自動化後端整合測試 (`scripts/local_run.py`)
+### 方式一：執行完整測試套件 (建議在修改後執行)
 
-`scripts/local_run.py` 是一個**自動化的整合測試腳本**，主要用於驗證後端的核心功能。它會啟動所有服務，提交一個測試任務，並在任務完成後自動關閉。
+`scripts/run_tests.py` 是最權威的測試啟動器。它會準備一個乾淨的環境，啟動所有後端服務，並執行所有 Python 單元測試和 Playwright E2E 測試。
 
 **此方式適用於**：
-*   快速驗證後端修改是否引發問題。
-*   在 CI/CD 環境中進行自動化檢查。
+*   在提交程式碼前，驗證所有功能是否正常且未引入迴歸問題。
+*   CI/CD 環境中的自動化測試。
 
 **如何使用**:
 ```bash
-# 如果您有 Google API 金鑰，請將其設定在環境中以測試完整流程
-python scripts/local_run.py
+# 執行所有測試
+python scripts/run_tests.py
+
+# 僅執行特定的測試檔案
+python scripts/run_tests.py src/tests/e2e-full-ui-validation.spec.js
 ```
-當腳本顯示「所有驗證均已通過！」或「任務正確地以 'failed' 狀態結束」（在沒有 API 金鑰的情況下）時，即表示後端功能運作正常。
 
-### 方式二：啟動後端服務 (用於 UI 測試或手動操作)
+### 方式二：手動啟動後端服務 (用於開發與手動測試)
 
-如果您需要一個**持續運行的後端服務**來進行前端開發、手動測試或執行 Playwright UI 測試，請使用 `circus` 直接啟動服務。
+如果您需要一個**持續運行的後端服務**來進行前端開發或手動測試，請使用 `circus` 直接啟動。
 
 **此方式適用於**：
-*   本地端開啟 `src/static/mp3.html` 進行手動功能測試。
-*   執行 Playwright 端對端 UI 測試。
+*   本地端開啟 `http://127.0.0.1:42649` 進行手動功能測試。
+*   獨立執行 Playwright 測試 (`./node_modules/.bin/playwright test`)。
 
 **如何使用**:
 ```bash
@@ -70,10 +72,9 @@ python -m circus.circusctl quit
 ## 📁 檔案結構 (新版)
 
 ```
-hsp1234-web/
+phoenix_transcriber/
 ├── .github/              # CI/CD 工作流程
 ├── .vscode/              # VS Code 編輯器設定
-├── build/                # 建置後的產出物
 ├── config/               # 所有環境設定檔 (circus.ini)
 ├── docs/                 # 專案文件
 ├── logs/                 # 執行時產生的日誌檔案
