@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import wav from 'wav';
 
-const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/';
+// JULES'S FIX: Remove hardcoded URL, use baseURL from playwright.config.js
+// const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/';
 const TEST_TIMEOUT = 60000;
 const DUMMY_FILE_NAME = "dummy_audio.wav";
 
@@ -55,7 +56,7 @@ test.describe('綜合功能 E2E 測試', () => {
     });
 
     test.beforeEach(async ({ page }) => {
-        await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
         await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
     });
 

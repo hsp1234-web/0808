@@ -18,7 +18,7 @@ from typing import Optional, Dict, List
 
 # 匯入新的資料庫客戶端
 # from db import database # REMOVED: No longer used directly
-from db.client import get_client
+from src.db.client import get_client
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -50,7 +50,7 @@ log = logging.getLogger('api_server')
 def setup_database_logging():
     """設定資料庫日誌處理器。"""
     try:
-        from db.log_handler import DatabaseLogHandler
+        from src.db.log_handler import DatabaseLogHandler
         root_logger = logging.getLogger()
         # 檢查是否已經有同類型的 handler，避免重複加入
         if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):

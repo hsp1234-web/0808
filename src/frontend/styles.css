@@ -1,37 +1,265 @@
+/* Import Tailwind's base, components, and utilities */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* JULES: Add custom styles from damo.html for the new dashboard */
-:root {
-    --status-green: #28a745;
-    --status-yellow: #ffc107;
+/* Define CSS variables in the base layer */
+@layer base {
+    :root {
+        --custom-bg: #F8F9FA;
+        --custom-text: #202124;
+        --card-bg: rgba(255, 255, 255, 0.85);
+        --card-border: #e0e0e0;
+        --btn-bg: #007bff;
+        --btn-hover: #0056b3;
+        --disabled-bg: #ccc;
+        --success: #28a745;
+        --status-yellow: #ffc107;
+
+        --rounded-card: 12px;
+        --rounded-btn: 8px;
+        --rounded-input: 6px;
+
+        --shadow-card: 0 4px 6px rgba(0,0,0,0.05);
+    }
 }
 
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-}
+/*
+  JULES'S NOTE (2025-08-14):
+  Rewriting component styles using plain CSS instead of @apply.
+  Tailwind v4 has changed how @apply works, and it's no longer suitable for
+  composing utilities into arbitrary custom classes like this. This new approach
+  uses native CSS properties, referencing our defined CSS variables, which is
+  the correct pattern for v4.
+*/
+@layer components {
+    /* --- 基本佈局與字體 --- */
+    body {
+        background-color: var(--custom-bg);
+        color: var(--custom-text);
+        font-family: theme('fontFamily.sans');
+        padding: 1.25rem; /* p-5 */
+    }
 
-.stat-item {
-    font-size: 0.9em;
-}
+    .container {
+        max-width: 72rem; /* max-w-6xl */
+        margin-left: auto;
+        margin-right: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem; /* gap-6 */
+    }
 
-.status-light {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-}
+    /* --- 卡片樣式 --- */
+    .card {
+        border: 1px solid var(--card-border);
+        border-radius: var(--rounded-card);
+        background-color: var(--card-bg);
+        box-shadow: var(--shadow-card);
+        backdrop-filter: blur(10px);
+        padding: 1.5rem; /* p-6 */
+    }
 
-.status-green {
-    background-color: var(--status-green);
-    box-shadow: 0 0 6px var(--status-green);
-}
+    /* --- 標題 --- */
+    h1 {
+        font-size: 1.875rem; /* text-3xl */
+        font-weight: 700; /* font-bold */
+    }
 
-.status-yellow {
-    background-color: var(--status-yellow);
-    box-shadow: 0 0 6px var(--status-yellow);
+    h2 {
+        font-size: 1.25rem; /* text-xl */
+        font-weight: 600; /* font-semibold */
+        margin-bottom: 0.75rem; /* mb-3 */
+    }
+
+    /* --- 按鈕 --- */
+    .btn {
+        border-radius: var(--rounded-btn);
+        padding: 0.625rem 1.25rem; /* px-5 py-2.5 */
+        cursor: pointer;
+        font-weight: 500; /* font-medium */
+        transition: all 0.2s;
+    }
+    .btn-primary {
+        background-color: var(--btn-bg);
+        color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+        background-color: var(--btn-hover);
+        transform: translateY(-1px);
+    }
+    .btn:disabled {
+        background-color: var(--disabled-bg);
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* --- 分頁 --- */
+    .tab-container {
+        display: flex;
+        gap: 0.5rem; /* gap-2 */
+        padding: 0;
+    }
+    .tab-button {
+        border-radius: var(--rounded-btn);
+        padding: 0.625rem 1.25rem; /* px-5 py-2.5 */
+        cursor: pointer;
+        border: none;
+        background-color: #e5e7eb; /* bg-gray-200 */
+        color: var(--custom-text);
+        opacity: 0.8;
+        font-size: 1rem; /* text-base */
+        font-weight: 600; /* font-semibold */
+        transition: all 0.2s;
+    }
+    .tab-button:hover {
+        opacity: 1;
+    }
+    .tab-button.active {
+        background-color: var(--btn-bg);
+        color: white;
+        opacity: 1;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* shadow-md */
+    }
+    .tab-content {
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+
+    /* --- 表單元素 --- */
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    textarea,
+    select {
+        width: 100%;
+        border-radius: var(--rounded-input);
+        padding: 0.625rem; /* p-2.5 */
+        border: 1px solid #d1d5db; /* border-gray-300 */
+    }
+
+    .file-drop-zone {
+        border-radius: var(--rounded-card);
+        border-width: 2px;
+        border-style: dashed;
+        border-color: #d1d5db; /* border-gray-300 */
+        padding: 2rem; /* p-8 */
+        text-align: center;
+        cursor: pointer;
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+    .file-drop-zone:hover {
+        border-color: var(--btn-bg);
+        background-color: #eff6ff; /* bg-blue-50 */
+    }
+
+    /* --- 任務列表 --- */
+    .task-list {
+        min-height: 60px;
+        max-height: 400px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem; /* gap-3 */
+    }
+    .task-item {
+        padding: 0.75rem; /* p-3 */
+        border-radius: 0.5rem; /* rounded-lg */
+        background-color: #f9fafb; /* bg-gray-50 */
+        border: 1px solid #e5e7eb; /* border-gray-200 */
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.625rem; /* gap-2.5 */
+    }
+    .task-filename {
+        font-weight: 600; /* font-semibold */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 24rem; /* max-w-xs */
+    }
+    /* Status colors are handled by Tailwind utility classes in JS, which is fine */
+
+    .task-actions a {
+        border-radius: var(--rounded-input);
+        text-decoration: none;
+        padding: 0.375rem 0.75rem; /* px-3 py-1.5 */
+        color: white;
+        font-size: 0.875rem; /* text-sm */
+        transition: all 0.2s;
+        display: inline-block;
+        border: none;
+        font-weight: 500; /* font-medium */
+        text-align: center;
+    }
+    .task-actions a:hover {
+        transform: translateY(-1px);
+        opacity: 0.9;
+    }
+    .task-actions .btn-preview { background-color: var(--btn-bg); }
+    .task-actions .btn-download { background-color: var(--success); }
+    .task-actions .btn-rename {
+        background-color: var(--status-yellow);
+        color: var(--custom-text);
+    }
+
+    /* --- 彈出視窗 (Modal) --- */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(0 0 0 / 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 50;
+        padding: 1.25rem; /* p-5 */
+    }
+    .modal-content {
+        border-radius: var(--rounded-card);
+        background-color: white;
+        padding: 1.5rem; /* p-6 */
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); /* shadow-lg */
+        width: 100%;
+        max-width: 56rem; /* max-w-4xl */
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem; /* gap-4 */
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e5e7eb; /* border-gray-200 */
+        padding-bottom: 0.75rem; /* pb-3 */
+    }
+    .modal-close-button {
+        background-color: transparent;
+        border: none;
+        font-size: 2.25rem; /* text-4xl */
+        cursor: pointer;
+        color: #6b7280; /* text-gray-500 */
+        line-height: 1;
+        padding: 0;
+    }
+    .modal-close-button:hover {
+        color: #1f2937; /* text-gray-800 */
+    }
+    .modal-body {
+        overflow-y: auto;
+        flex-grow: 1;
+    }
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem; /* gap-3 */
+        border-top: 1px solid #e5e7eb; /* border-gray-200 */
+        padding-top: 1rem; /* pt-4 */
+    }
 }

@@ -32,56 +32,56 @@ export class YouTubeReporter {
 
     render() {
         this.container.innerHTML = `
-            <div id="youtube-report-tab" class="tab-content active">
+            <div id="youtube-report-tab" class="tab-content active flex flex-col gap-6">
                 <div class="card">
                     <!-- 區域 1: API 金鑰管理 -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <div class="flex justify-between items-center flex-wrap gap-4">
                         <h2>🔑 Google API 金鑰管理</h2>
-                        <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
+                        <a href="/static/prompts.html" target="_blank" class="font-semibold text-btn-bg hover:underline">管理提示詞 &rarr;</a>
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-                        <button id="save-api-key-btn">儲存金鑰</button>
-                        <button id="clear-api-key-btn" style="background-color: #6c757d;">清除金鑰</button>
+                    <div class="flex gap-2.5 items-center flex-wrap mt-3">
+                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="flex-grow">
+                        <button id="save-api-key-btn" class="btn btn-primary">儲存金鑰</button>
+                        <button id="clear-api-key-btn" class="btn bg-gray-500 text-white hover:bg-gray-600">清除金鑰</button>
                     </div>
-                    <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+                    <p id="api-key-status" class="mt-3 font-semibold">狀態: <span class="italic">尚未提供金鑰</span></p>
 
                     <!-- 區域 2: YouTube 影片處理 -->
-                    <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
-                    <fieldset id="youtube-controls-fieldset">
-                        <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
-                            <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-                                <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                                <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                                <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+                    <h2 class="mt-6">▶️ 輸入 YouTube 影片</h2>
+                    <fieldset id="youtube-controls-fieldset" class="mt-3">
+                        <div id="youtube-link-list" class="flex flex-col gap-2.5">
+                            <div class="youtube-link-row flex flex-wrap gap-2.5 items-center">
+                                <input type="text" class="youtube-url-input flex-grow min-w-[300px]" placeholder="YouTube 影片網址">
+                                <input type="text" class="youtube-filename-input flex-grow min-w-[150px]" placeholder="自訂檔名 (可選)">
+                                <button class="remove-youtube-row-btn btn bg-red-600 text-white hover:bg-red-700 px-4 text-2xl leading-none flex-shrink-0">×</button>
                             </div>
                         </div>
-                        <button id="add-youtube-row-btn" style="margin-top: 12px;">+ 新增一列</button>
+                        <button id="add-youtube-row-btn" class="btn btn-primary mt-3">+ 新增一列</button>
                     </fieldset>
                 </div>
 
                 <!-- 區域 3: 參數控制區 -->
-                <div class="card" style="margin-top: 24px;">
+                <div class="card">
                     <h2>⚙️ 參數控制區</h2>
-                    <fieldset id="youtube-params-fieldset" disabled>
-                        <div class="grid-2-col">
-                            <div>
-                                <label><strong>任務選項</strong></label>
-                                <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                                    <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
-                                    <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
-                                    <label><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
+                    <fieldset id="youtube-params-fieldset" disabled class="mt-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col gap-2">
+                                <label class="font-semibold">任務選項</label>
+                                <div id="yt-tasks-group" class="flex flex-col gap-2 mt-1">
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
                                 </div>
                             </div>
-                            <div class="flex-col">
-                                <div>
-                                    <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-col gap-2">
+                                    <label for="gemini-model-select" class="font-semibold">AI 模型</label>
                                     <select id="gemini-model-select">
                                         <option>等待從伺服器載入模型列表...</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                                <div class="flex flex-col gap-2">
+                                    <label for="yt-output-format-select" class="font-semibold">輸出格式</label>
                                     <select id="yt-output-format-select">
                                         <option value="html">HTML 報告</option>
                                         <option value="txt">純文字 (.txt)</option>
@@ -93,16 +93,16 @@ export class YouTubeReporter {
                 </div>
 
                 <!-- 區域 4: 操作按鈕 -->
-                <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-                    <button id="download-audio-only-btn">🎧 僅下載音訊</button>
-                    <button id="start-youtube-processing-btn" disabled>🚀 分析影片 (Gemini)</button>
+                <div class="flex justify-center gap-4 flex-wrap">
+                    <button id="download-audio-only-btn" class="btn btn-primary bg-gray-600 hover:bg-gray-700">🎧 僅下載音訊</button>
+                    <button id="start-youtube-processing-btn" class="btn btn-primary text-lg" disabled>🚀 分析影片 (Gemini)</button>
                 </div>
 
                 <!-- 區域 5: YouTube 報告瀏覽區 -->
-                <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
+                <div id="youtube-file-browser-container" class="card">
                     <h2>📊 YouTube 報告瀏覽區</h2>
-                    <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
-                        <p id="no-youtube-report-msg">尚無已完成的報告</p>
+                    <div id="youtube-file-browser" class="task-list mt-4">
+                        <p id="no-youtube-report-msg" class="text-gray-500 text-center">尚無已完成的報告</p>
                     </div>
                 </div>
             </div>

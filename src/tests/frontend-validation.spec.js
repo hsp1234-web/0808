@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 
 // --- 測試設定 ---
-const SERVER_URL = 'http://127.0.0.1:42649/';
+// JULES'S FIX: Remove hardcoded URL
+// const SERVER_URL = 'http://127.0.0.1:42649/';
 const TEST_TIMEOUT = 60000; // 60 秒
 const MOCK_VIDEO_URL = 'https://www.youtube.com/watch?v=mock_video_for_validation';
 const CUSTOM_FILENAME = '我的自訂影片名稱'; // 前端輸入的檔名
@@ -13,7 +14,7 @@ test.describe('前端新功能驗證', () => {
 
   // 每次測試前，重新載入頁面並切換到 YouTube 分頁
   test.beforeEach(async ({ page }) => {
-    await page.goto(SERVER_URL, { waitUntil: 'networkidle' });
+    await page.goto('/', { waitUntil: 'networkidle' });
     await expect(page.locator('h1')).toContainText('音訊轉錄儀');
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
     // 切換到 "YouTube 轉報告" 分頁

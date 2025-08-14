@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Prompts Page E2E Test', () => {
-  const serverUrl = 'http://127.0.0.1:42649';
+  // JULES'S FIX: Remove hardcoded URL
+  // const serverUrl = 'http://127.0.0.1:42649';
 
   test('should load, edit, save, and reload prompts', async ({ page }) => {
     // 1. Navigate to the prompts page
-    await page.goto(`${serverUrl}/static/prompts.html`);
+    await page.goto('/static/prompts.html');
 
     // 2. Check that the a default prompt label is visible
     await expect(page.getByText('get_summary_only')).toBeVisible();

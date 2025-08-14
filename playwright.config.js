@@ -17,7 +17,7 @@ export default defineConfig({
   },
 
   // Reporter to use. See https://playwright.dev/docs/test-reporters
-  reporter: 'list',
+  reporter: 'html',
 
   use: {
     // JULES'S FIX: Set the correct baseURL for the test server

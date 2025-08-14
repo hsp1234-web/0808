@@ -6,12 +6,12 @@ class FileBrowser {
   render() {
     this.container.innerHTML = `
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="flex justify-between items-center flex-wrap gap-4">
                     <h2>\uD83D\uDCC1 檔案總管 (Uploads)</h2>
-                    <button id="reload-file-browser-btn">\uD83D\uDD04 重新整理</button>
+                    <button id="reload-file-browser-btn" class="btn btn-primary bg-gray-500 hover:bg-gray-600">\uD83D\uDD04 重新整理</button>
                 </div>
-                <div id="file-browser-list" style="margin-top: 16px; min-height: 100px; border: 1px solid #eee; padding: 10px;">
-                    <p id="file-browser-loading-msg">正在載入檔案列表...</p>
+                <div id="file-browser-list" class="task-list mt-4">
+                    <p id="file-browser-loading-msg" class="text-gray-500 text-center">正在載入檔案列表...</p>
                 </div>
             </div>
         `;
@@ -26,52 +26,42 @@ class FileBrowser {
     }
   }
   async loadFileBrowser() {
-    console.log("開始載入檔案列表...");
     const listElement = this.container.querySelector("#file-browser-list");
     if (!listElement)
       return;
-    listElement.innerHTML = "<p>正在載入檔案列表...</p>";
+    listElement.innerHTML = `<p class="text-gray-500 text-center">正在載入檔案列表...</p>`;
     try {
       const response = await fetch("/api/list_files");
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API 請求失敗，狀態碼: ${response.status}. ${errorText}`);
-      }
+      if (!response.ok)
+        throw new Error(`API 請求失敗: ${response.statusText}`);
       const files = await response.json();
+      listElement.innerHTML = "";
       if (files.length === 0) {
-        listElement.innerHTML = "<p>Uploads 目錄是空的。</p>";
+        listElement.innerHTML = '<p class="text-gray-500 text-center">Uploads 目錄是空的。</p>';
         return;
       }
-      listElement.innerHTML = "";
-      const style = document.createElement("style");
-      style.textContent = `
-                .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; }
-                .file-item:last-child { border-bottom: none; }
-                .file-name { font-family: monospace; }
-                .file-details { font-size: 0.8em; color: #666; }
-            `;
-      listElement.appendChild(style);
       files.forEach((file) => {
-        const fileElement = document.createElement("div");
-        fileElement.className = "file-item";
+        const item = document.createElement("div");
+        item.className = "task-item";
         const icon = file.type === "dir" ? "\uD83D\uDCC1" : "\uD83D\uDCC4";
-        const fileName = document.createElement("span");
-        fileName.className = "file-name";
-        fileName.textContent = `${icon} ${file.name}`;
-        const fileDetails = document.createElement("span");
-        fileDetails.className = "file-details";
-        if (file.type !== "dir") {
-          const sizeInKB = (file.size / 1024).toFixed(2);
-          const modifiedDate = new Date(file.modified_time * 1000).toLocaleString("zh-TW", { hour12: false });
-          fileDetails.textContent = `${sizeInKB} KB - ${modifiedDate}`;
-        }
-        fileElement.appendChild(fileName);
-        fileElement.appendChild(fileDetails);
-        listElement.appendChild(fileElement);
+        const formattedSize = file.type !== "dir" ? `${(file.size / 1024).toFixed(2)} KB` : "";
+        const modifiedDate = new Date(file.modified_time * 1000).toLocaleString("zh-TW");
+        item.innerHTML = `
+                    <div class="flex-grow overflow-hidden mr-2.5 min-w-0">
+                        <strong class="task-filename" title="${file.name}">${icon} ${file.name}</strong>
+                        <small class="block text-gray-500 text-xs mt-1">
+                            ${formattedSize ? `${formattedSize} | ` : ""}${modifiedDate}
+                        </small>
+                    </div>
+                    <div class="task-actions">
+                        <a href="${file.path}" download="${file.name}" class="btn-download">下載</a>
+                    </div>
+                `;
+        listElement.appendChild(item);
       });
     } catch (error) {
       console.error("載入檔案列表時發生錯誤:", error);
-      listElement.innerHTML = `<p style="color: red;">無法載入檔案列表: ${error.message}</p>`;
+      listElement.innerHTML = `<p class="text-red-500 text-center">無法載入檔案列表: ${error.message}</p>`;
     }
   }
   init() {
@@ -121,7 +111,7 @@ class TaskList {
         this.taskElements.set(task.id, taskElement);
       });
     } else {
-      targetElement.innerHTML = `<p id="${noTasksMessageId}">${noTasksMessage}</p>`;
+      targetElement.innerHTML = `<p id="${noTasksMessageId}" class="text-gray-500 text-center">${noTasksMessage}</p>`;
     }
   }
   _createTaskElement(task) {
@@ -132,16 +122,16 @@ class TaskList {
     const taskType = task.type || "未知";
     const icon = this._getIconForFile(task.result?.output_path || "");
     taskElement.innerHTML = `
-            <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
+            <div class="flex-grow overflow-hidden mr-2.5 min-w-0">
                 <span class="task-filename" title="${displayName}">
-                    <span class="file-icon" style="margin-right: 8px;">${icon}</span>
+                    <span class="file-icon mr-2">${icon}</span>
                     ${displayName} (${taskType})
                 </span>
-                <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
-                    <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
+                <div class="task-progress-container bg-gray-200 rounded h-2 mt-1.5 hidden">
+                    <div class="task-progress-bar h-full bg-btn-bg rounded w-0 transition-width duration-200"></div>
                 </div>
             </div>
-            <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 120px;"></span>`;
+            <span class="task-status flex-shrink-0 text-right min-w-[120px]"></span>`;
     this._updateTaskElement(taskElement, task);
     return taskElement;
   }
@@ -308,52 +298,50 @@ class LocalTranscriber {
   }
   render() {
     this.container.innerHTML = `
-            <div>
-                <div class="grid-2-col">
-                    <div class="card flex-col">
-                        <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
-                        <div>
-                            <label for="model-select">模型大小</label>
-                            <select id="model-select">
-                                <option value="tiny" selected>Tiny (最快)</option>
-                                <option value="base">Base</option>
-                                <option value="small">Small</option>
-                                <option value="medium">Medium (建議)</option>
-                                <option value="large-v2">Large-v2 (準確)</option>
-                                <option value="large-v3">Large-v3 (最準確)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="language-select">轉錄語言</label>
-                            <select id="language-select">
-                                <option value="zh">繁體中文</option>
-                                <option value="en">英文</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
-                            <input type="number" id="beam-size-input" value="1" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                            <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
-                        </div>
-                        <button id="confirm-settings-btn">✓ 確認設定</button>
-                        <!-- 模型下載進度條 -->
-                        <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
-                            <div id="model-progress-bar" class="progress-bar"></div>
-                            <span id="model-progress-text" class="progress-text"></span>
-                        </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="card flex flex-col gap-4">
+                    <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
+                    <div class="flex flex-col gap-2">
+                        <label for="model-select" class="font-semibold">模型大小</label>
+                        <select id="model-select">
+                            <option value="tiny" selected>Tiny (最快)</option>
+                            <option value="base">Base</option>
+                            <option value="small">Small</option>
+                            <option value="medium">Medium (建議)</option>
+                            <option value="large-v2">Large-v2 (準確)</option>
+                            <option value="large-v3">Large-v3 (最準確)</option>
+                        </select>
                     </div>
-                    <div class="card flex-col">
-                        <h2>\uD83D\uDCE4 步驟 2: 上傳檔案</h2>
-                        <label for="file-input" class="file-drop-zone">
-                            點擊此處選擇檔案
-                        </label>
-                        <input id="file-input" type="file" multiple class="hidden">
-                        <div id="file-list" style="min-height: 50px;"></div>
+                    <div class="flex flex-col gap-2">
+                        <label for="language-select" class="font-semibold">轉錄語言</label>
+                        <select id="language-select">
+                            <option value="zh">繁體中文</option>
+                            <option value="en">英文</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <label for="beam-size-input" class="font-semibold">光束大小 (Beam Size)</label>
+                        <input type="number" id="beam-size-input" value="1" min="1" max="10">
+                        <small class="text-xs text-gray-500">建議值為 5。較大的值可能更準確但較慢。</small>
+                    </div>
+                    <button id="confirm-settings-btn" class="btn btn-primary">✓ 確認設定</button>
+                    <!-- 模型下載進度條 -->
+                    <div id="model-progress-container" class="hidden mt-2.5">
+                        <div id="model-progress-bar" class="progress-bar"></div>
+                        <span id="model-progress-text" class="progress-text"></span>
                     </div>
                 </div>
-                <div style="text-align: center; margin-top: 24px;">
-                    <button id="start-processing-btn" disabled>✨ 請先選擇檔案</button>
+                <div class="card flex flex-col gap-4">
+                    <h2>\uD83D\uDCE4 步驟 2: 上傳檔案</h2>
+                    <label for="file-input" class="file-drop-zone">
+                        點擊此處選擇檔案
+                    </label>
+                    <input id="file-input" type="file" multiple class="hidden">
+                    <div id="file-list" class="min-h-[50px]"></div>
                 </div>
+            </div>
+            <div class="text-center mt-6">
+                <button id="start-processing-btn" class="btn btn-primary text-lg" disabled>✨ 請先選擇檔案</button>
             </div>
         `;
   }
@@ -371,18 +359,15 @@ class LocalTranscriber {
     });
     fileDropZone.addEventListener("dragover", (e) => {
       e.preventDefault();
-      fileDropZone.style.backgroundColor = "#f0f8ff";
-      fileDropZone.style.borderColor = "var(--button-bg-color)";
+      fileDropZone.classList.add("bg-blue-50", "border-btn-bg");
     });
     fileDropZone.addEventListener("dragleave", (e) => {
       e.preventDefault();
-      fileDropZone.style.backgroundColor = "transparent";
-      fileDropZone.style.borderColor = "#ccc";
+      fileDropZone.classList.remove("bg-blue-50", "border-btn-bg");
     });
     fileDropZone.addEventListener("drop", (e) => {
       e.preventDefault();
-      fileDropZone.style.backgroundColor = "transparent";
-      fileDropZone.style.borderColor = "#ccc";
+      fileDropZone.classList.remove("bg-blue-50", "border-btn-bg");
       this.logAction("drop-file");
       const droppedFiles = Array.from(e.dataTransfer.files);
       this.addFiles(droppedFiles);
@@ -425,12 +410,12 @@ class LocalTranscriber {
     if (!fileListDisplay || !startBtn)
       return;
     if (this.uploadedFiles.length === 0) {
-      fileListDisplay.innerHTML = '<p style="color: #666; text-align: center;">尚未選擇任何檔案</p>';
+      fileListDisplay.innerHTML = '<p class="text-gray-500 text-center">尚未選擇任何檔案</p>';
     } else {
       fileListDisplay.innerHTML = this.uploadedFiles.map((file, index) => `
                 <div class="task-item">
                     <span class="task-filename">${file.name}</span>
-                    <button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>
+                    <button data-index="${index}" class="remove-file-btn btn bg-red-500 hover:bg-red-600 text-white px-2 py-1 text-xs">移除</button>
                 </div>
             `).join("");
     }
@@ -514,30 +499,30 @@ class MediaDownloader {
     this.container.innerHTML = `
             <div class="card">
                 <h2>\uD83D\uDCE5 媒體下載器</h2>
-                <div class="grid-2-col">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- 左側：輸入與主要控制 -->
-                    <div class="flex-col">
+                    <div class="flex flex-col gap-4">
                         <div>
-                            <label for="downloader-urls-input"><strong>網址或播放清單</strong> (可輸入多個，每行一個)</label>
-                            <textarea id="downloader-urls-input" rows="5" placeholder="支援 YouTube, Facebook, Bilibili 等多數影音網站..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
+                            <label for="downloader-urls-input" class="font-semibold">網址或播放清單 <span class="font-normal text-gray-500">(可輸入多個，每行一個)</span></label>
+                            <textarea id="downloader-urls-input" rows="5" placeholder="支援 YouTube, Facebook, Bilibili 等多數影音網站..." class="mt-2"></textarea>
                         </div>
-                        <div style="text-align: center; margin-top: 16px;">
-                            <button id="start-download-btn" style="width: 100%; padding: 12px; font-size: 1.1em;">開始下載</button>
+                        <div class="mt-4">
+                            <button id="start-download-btn" class="btn btn-primary w-full text-lg">開始下載</button>
                         </div>
                     </div>
                     <!-- 右側：詳細選項 -->
-                    <div class="flex-col">
+                    <div class="flex flex-col gap-4">
                         <div>
-                            <label><strong>下載類型</strong></label>
-                            <div style="display: flex; gap: 20px; margin-top: 8px;">
-                                <label><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
-                                <label><input type="radio" name="download-type" value="video"> 影片</label>
+                            <label class="font-semibold">下載類型</label>
+                            <div class="flex gap-5 mt-2">
+                                <label class="flex items-center gap-2"><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
+                                <label class="flex items-center gap-2"><input type="radio" name="download-type" value="video"> 影片</label>
                             </div>
                         </div>
 
                         <!-- 音訊選項 -->
-                        <div id="audio-options">
-                            <label for="audio-format-select"><strong>音訊格式</strong></label>
+                        <div id="audio-options" class="flex flex-col gap-2">
+                            <label for="audio-format-select" class="font-semibold">音訊格式</label>
                             <select id="audio-format-select">
                                 <option value="m4a">M4A (原生格式, 速度最快)</option>
                                 <option value="mp3">MP3 (需轉檔, 相容性高)</option>
@@ -547,8 +532,8 @@ class MediaDownloader {
                         </div>
 
                         <!-- 影片選項 (預設隱藏) -->
-                        <div id="video-options" class="hidden">
-                            <label for="video-quality-select"><strong>影片畫質</strong></label>
+                        <div id="video-options" class="hidden flex flex-col gap-2">
+                            <label for="video-quality-select" class="font-semibold">影片畫質</label>
                             <select id="video-quality-select">
                                 <option value="best">最佳畫質</option>
                                 <option value="1080p">1080p</option>
@@ -558,16 +543,16 @@ class MediaDownloader {
                         </div>
 
                         <div>
-                            <label><strong>進階功能</strong></label>
-                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                                <label><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
+                            <label class="font-semibold">進階功能</label>
+                            <div class="flex flex-col gap-2 mt-2">
+                                <label class="flex items-center gap-2"><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
                             </div>
                         </div>
 
-                        <div style="margin-top: 16px;">
-                            <label><strong>YouTube 驗證</strong></label>
-                             <p style="font-size: 0.85em; color: #666; margin-top: 4px; margin-bottom: 8px;">若下載需要登入的影片失敗，請上傳您的 cookies.txt 檔案。</p>
-                            <button id="upload-cookies-btn" style="background-color: #ffc107; color: var(--text-color);">\uD83C\uDF6A 上傳 cookies.txt</button>
+                        <div class="mt-4">
+                            <label class="font-semibold">YouTube 驗證</label>
+                             <p class="text-sm text-gray-600 mt-1 mb-2">若下載需要登入的影片失敗，請上傳您的 cookies.txt 檔案。</p>
+                            <button id="upload-cookies-btn" class="btn bg-status-yellow text-custom-text hover:bg-yellow-500">\uD83C\uDF6A 上傳 cookies.txt</button>
                             <input type="file" id="cookies-input" accept=".txt" class="hidden">
                         </div>
                     </div>
@@ -575,13 +560,13 @@ class MediaDownloader {
             </div>
 
             <!-- 下載列表 -->
-            <div class="card" style="margin-top: 24px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div class="card mt-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
                     <h2>\uD83D\uDCCB 下載佇列與歷史紀錄</h2>
-                    <button id="zip-download-btn" disabled style="background-color: #28a745;">打包下載選定項目 (.zip)</button>
+                    <button id="zip-download-btn" class="btn bg-success text-white" disabled>打包下載選定項目 (.zip)</button>
                 </div>
-                <div id="downloader-tasks" class="task-list" style="margin-top: 16px;">
-                    <p id="no-downloader-task-msg">暫無下載任務</p>
+                <div id="downloader-tasks" class="task-list mt-4">
+                    <p id="no-downloader-task-msg" class="text-gray-500 text-center">暫無下載任務</p>
                 </div>
             </div>
         `;
@@ -730,56 +715,56 @@ class YouTubeReporter {
   }
   render() {
     this.container.innerHTML = `
-            <div id="youtube-report-tab" class="tab-content active">
+            <div id="youtube-report-tab" class="tab-content active flex flex-col gap-6">
                 <div class="card">
                     <!-- 區域 1: API 金鑰管理 -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <div class="flex justify-between items-center flex-wrap gap-4">
                         <h2>\uD83D\uDD11 Google API 金鑰管理</h2>
-                        <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
+                        <a href="/static/prompts.html" target="_blank" class="font-semibold text-btn-bg hover:underline">管理提示詞 &rarr;</a>
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-                        <button id="save-api-key-btn">儲存金鑰</button>
-                        <button id="clear-api-key-btn" style="background-color: #6c757d;">清除金鑰</button>
+                    <div class="flex gap-2.5 items-center flex-wrap mt-3">
+                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="flex-grow">
+                        <button id="save-api-key-btn" class="btn btn-primary">儲存金鑰</button>
+                        <button id="clear-api-key-btn" class="btn bg-gray-500 text-white hover:bg-gray-600">清除金鑰</button>
                     </div>
-                    <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+                    <p id="api-key-status" class="mt-3 font-semibold">狀態: <span class="italic">尚未提供金鑰</span></p>
 
                     <!-- 區域 2: YouTube 影片處理 -->
-                    <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
-                    <fieldset id="youtube-controls-fieldset">
-                        <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
-                            <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-                                <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                                <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                                <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+                    <h2 class="mt-6">▶️ 輸入 YouTube 影片</h2>
+                    <fieldset id="youtube-controls-fieldset" class="mt-3">
+                        <div id="youtube-link-list" class="flex flex-col gap-2.5">
+                            <div class="youtube-link-row flex flex-wrap gap-2.5 items-center">
+                                <input type="text" class="youtube-url-input flex-grow min-w-[300px]" placeholder="YouTube 影片網址">
+                                <input type="text" class="youtube-filename-input flex-grow min-w-[150px]" placeholder="自訂檔名 (可選)">
+                                <button class="remove-youtube-row-btn btn bg-red-600 text-white hover:bg-red-700 px-4 text-2xl leading-none flex-shrink-0">×</button>
                             </div>
                         </div>
-                        <button id="add-youtube-row-btn" style="margin-top: 12px;">+ 新增一列</button>
+                        <button id="add-youtube-row-btn" class="btn btn-primary mt-3">+ 新增一列</button>
                     </fieldset>
                 </div>
 
                 <!-- 區域 3: 參數控制區 -->
-                <div class="card" style="margin-top: 24px;">
+                <div class="card">
                     <h2>⚙️ 參數控制區</h2>
-                    <fieldset id="youtube-params-fieldset" disabled>
-                        <div class="grid-2-col">
-                            <div>
-                                <label><strong>任務選項</strong></label>
-                                <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                                    <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
-                                    <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
-                                    <label><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
+                    <fieldset id="youtube-params-fieldset" disabled class="mt-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col gap-2">
+                                <label class="font-semibold">任務選項</label>
+                                <div id="yt-tasks-group" class="flex flex-col gap-2 mt-1">
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
                                 </div>
                             </div>
-                            <div class="flex-col">
-                                <div>
-                                    <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-col gap-2">
+                                    <label for="gemini-model-select" class="font-semibold">AI 模型</label>
                                     <select id="gemini-model-select">
                                         <option>等待從伺服器載入模型列表...</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                                <div class="flex flex-col gap-2">
+                                    <label for="yt-output-format-select" class="font-semibold">輸出格式</label>
                                     <select id="yt-output-format-select">
                                         <option value="html">HTML 報告</option>
                                         <option value="txt">純文字 (.txt)</option>
@@ -791,16 +776,16 @@ class YouTubeReporter {
                 </div>
 
                 <!-- 區域 4: 操作按鈕 -->
-                <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-                    <button id="download-audio-only-btn">\uD83C\uDFA7 僅下載音訊</button>
-                    <button id="start-youtube-processing-btn" disabled>\uD83D\uDE80 分析影片 (Gemini)</button>
+                <div class="flex justify-center gap-4 flex-wrap">
+                    <button id="download-audio-only-btn" class="btn btn-primary bg-gray-600 hover:bg-gray-700">\uD83C\uDFA7 僅下載音訊</button>
+                    <button id="start-youtube-processing-btn" class="btn btn-primary text-lg" disabled>\uD83D\uDE80 分析影片 (Gemini)</button>
                 </div>
 
                 <!-- 區域 5: YouTube 報告瀏覽區 -->
-                <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
+                <div id="youtube-file-browser-container" class="card">
                     <h2>\uD83D\uDCCA YouTube 報告瀏覽區</h2>
-                    <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
-                        <p id="no-youtube-report-msg">尚無已完成的報告</p>
+                    <div id="youtube-file-browser" class="task-list mt-4">
+                        <p id="no-youtube-report-msg" class="text-gray-500 text-center">尚無已完成的報告</p>
                     </div>
                 </div>
             </div>
@@ -1026,6 +1011,12 @@ class App {
     this.statusMessageArea = document.getElementById("status-message-area");
     this.statusMessageText = document.getElementById("status-message-text");
     this.modelDisplay = document.getElementById("model-display");
+    this.statusLight = document.getElementById("status-light");
+    this.statusText = document.getElementById("status-text");
+    this.gpuDisplay = document.getElementById("gpu-display");
+    this.cpuLabel = document.getElementById("cpu-label");
+    this.ramLabel = document.getElementById("ram-label");
+    this.gpuLabel = document.getElementById("gpu-label");
     this.socket = null;
   }
   setupWebSocket() {
@@ -1035,16 +1026,26 @@ class App {
     this.socket.onopen = () => {
       console.log("WebSocket 連線成功");
       this.logAction("websocket-connect-success");
+      if (this.statusText)
+        this.statusText.textContent = "已連線";
+      if (this.statusLight)
+        this.statusLight.className = "status-light status-green";
     };
     this.socket.onmessage = (event) => this.handleWebSocketMessage(JSON.parse(event.data));
     this.socket.onclose = () => {
       console.log("WebSocket 連線已關閉，正在嘗試重新連線...");
       this.logAction("websocket-connect-close");
+      if (this.statusText)
+        this.statusText.textContent = "已離線";
+      if (this.statusLight)
+        this.statusLight.className = "status-light status-yellow";
       setTimeout(() => this.setupWebSocket(), 3000);
     };
     this.socket.onerror = (error) => {
       console.error("WebSocket 發生錯誤:", error);
       this.logAction("websocket-connect-error");
+      if (this.statusText)
+        this.statusText.textContent = "連線錯誤";
     };
   }
   handleWebSocketMessage(message) {
@@ -1144,14 +1145,35 @@ class App {
       this.fileBrowser.init();
     }
   }
+  async updateSystemStats() {
+    try {
+      const response = await fetch("/api/system_stats");
+      if (!response.ok)
+        return;
+      const stats = await response.json();
+      if (this.cpuLabel)
+        this.cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
+      if (this.ramLabel)
+        this.ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
+      if (this.gpuDisplay)
+        this.gpuDisplay.textContent = stats.gpu_detected ? "已偵測到" : "未偵測到";
+      if (this.gpuLabel)
+        this.gpuLabel.textContent = stats.gpu_detected ? `${stats.gpu_usage.toFixed(1)}%` : "--%";
+    } catch (error) {
+      console.error("無法更新系統統計數據:", error);
+    }
+  }
   init() {
     console.log("DOM 已載入，開始初始化應用程式。");
     this.setupWebSocket();
     this.initComponents();
     this.setupTabSwitching();
+    this.updateSystemStats();
+    setInterval(() => this.updateSystemStats(), 2000);
   }
 }
 document.addEventListener("DOMContentLoaded", () => {
   const app = new App;
   app.init();
+  window.app = app;
 });

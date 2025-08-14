@@ -15,15 +15,14 @@ export class FileBrowser {
      * 渲染組件的初始 HTML 結構。
      */
     render() {
-        // 這是從舊的 mp3.html 中提取並簡化的結構，作為我們重構的起點。
         this.container.innerHTML = `
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="flex justify-between items-center flex-wrap gap-4">
                     <h2>📁 檔案總管 (Uploads)</h2>
-                    <button id="reload-file-browser-btn">🔄 重新整理</button>
+                    <button id="reload-file-browser-btn" class="btn btn-primary bg-gray-500 hover:bg-gray-600">🔄 重新整理</button>
                 </div>
-                <div id="file-browser-list" style="margin-top: 16px; min-height: 100px; border: 1px solid #eee; padding: 10px;">
-                    <p id="file-browser-loading-msg">正在載入檔案列表...</p>
+                <div id="file-browser-list" class="task-list mt-4">
+                    <p id="file-browser-loading-msg" class="text-gray-500 text-center">正在載入檔案列表...</p>
                 </div>
             </div>
         `;
@@ -46,66 +45,48 @@ export class FileBrowser {
      * 從後端 API 載入檔案列表並更新 UI。
      */
     async loadFileBrowser() {
-        console.log('開始載入檔案列表...');
         const listElement = this.container.querySelector('#file-browser-list');
         if (!listElement) return;
 
-        listElement.innerHTML = '<p>正在載入檔案列表...</p>';
+        listElement.innerHTML = `<p class="text-gray-500 text-center">正在載入檔案列表...</p>`;
 
         try {
             const response = await fetch('/api/list_files');
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`API 請求失敗，狀態碼: ${response.status}. ${errorText}`);
-            }
+            if (!response.ok) throw new Error(`API 請求失敗: ${response.statusText}`);
             const files = await response.json();
 
+            listElement.innerHTML = ''; // 清空讀取中訊息
+
             if (files.length === 0) {
-                listElement.innerHTML = '<p>Uploads 目錄是空的。</p>';
+                listElement.innerHTML = '<p class="text-gray-500 text-center">Uploads 目錄是空的。</p>';
                 return;
             }
 
-            // Clear loading message
-            listElement.innerHTML = '';
-
-            // 增加一些基本的樣式
-            const style = document.createElement('style');
-            style.textContent = `
-                .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; }
-                .file-item:last-child { border-bottom: none; }
-                .file-name { font-family: monospace; }
-                .file-details { font-size: 0.8em; color: #666; }
-            `;
-            listElement.appendChild(style);
-
-            // Create and append file items
             files.forEach(file => {
-                const fileElement = document.createElement('div');
-                fileElement.className = 'file-item';
+                const item = document.createElement('div');
+                item.className = 'task-item'; // 使用與 TaskList 相同的 class
 
                 const icon = file.type === 'dir' ? '📁' : '📄';
-                const fileName = document.createElement('span');
-                fileName.className = 'file-name';
-                fileName.textContent = `${icon} ${file.name}`;
+                const formattedSize = file.type !== 'dir' ? `${(file.size / 1024).toFixed(2)} KB` : '';
+                const modifiedDate = new Date(file.modified_time * 1000).toLocaleString('zh-TW');
 
-                const fileDetails = document.createElement('span');
-                fileDetails.className = 'file-details';
-                // Only show details for files
-                if (file.type !== 'dir') {
-                    const sizeInKB = (file.size / 1024).toFixed(2);
-                    const modifiedDate = new Date(file.modified_time * 1000).toLocaleString('zh-TW', { hour12: false });
-                    fileDetails.textContent = `${sizeInKB} KB - ${modifiedDate}`;
-                }
-
-                fileElement.appendChild(fileName);
-                fileElement.appendChild(fileDetails);
-
-                listElement.appendChild(fileElement);
+                item.innerHTML = `
+                    <div class="flex-grow overflow-hidden mr-2.5 min-w-0">
+                        <strong class="task-filename" title="${file.name}">${icon} ${file.name}</strong>
+                        <small class="block text-gray-500 text-xs mt-1">
+                            ${formattedSize ? `${formattedSize} | ` : ''}${modifiedDate}
+                        </small>
+                    </div>
+                    <div class="task-actions">
+                        <a href="${file.path}" download="${file.name}" class="btn-download">下載</a>
+                    </div>
+                `;
+                listElement.appendChild(item);
             });
 
         } catch (error) {
             console.error('載入檔案列表時發生錯誤:', error);
-            listElement.innerHTML = `<p style="color: red;">無法載入檔案列表: ${error.message}</p>`;
+            listElement.innerHTML = `<p class="text-red-500 text-center">無法載入檔案列表: ${error.message}</p>`;
         }
     }
 

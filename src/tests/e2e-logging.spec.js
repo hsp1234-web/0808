@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 
 // --- 測試設定 ---
-const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/'; // 使用 run_for_playwright.py 的埠號
+// JULES'S FIX: Remove hardcoded URL
+// const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/'; // 使用 run_for_playwright.py 的埠號
 const TEST_TIMEOUT = 60000; // 60 秒
 
 /**
@@ -46,7 +47,7 @@ test.describe('前端操作日誌 E2E 測試 (資料庫模式)', () => {
     });
 
     // 導覽至頁面並等待 WebSocket 連線
-    await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
 
     // JULES'S FIX: Add a dummy action to flush any lingering logs from previous tests.

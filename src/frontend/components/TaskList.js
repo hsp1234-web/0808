@@ -82,7 +82,7 @@ export class TaskList {
             });
         } else {
             // 如果沒有任務，顯示對應的訊息
-            targetElement.innerHTML = `<p id="${noTasksMessageId}">${noTasksMessage}</p>`;
+            targetElement.innerHTML = `<p id="${noTasksMessageId}" class="text-gray-500 text-center">${noTasksMessage}</p>`;
         }
     }
 
@@ -102,16 +102,16 @@ export class TaskList {
         const icon = this._getIconForFile(task.result?.output_path || '');
 
         taskElement.innerHTML = `
-            <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
+            <div class="flex-grow overflow-hidden mr-2.5 min-w-0">
                 <span class="task-filename" title="${displayName}">
-                    <span class="file-icon" style="margin-right: 8px;">${icon}</span>
+                    <span class="file-icon mr-2">${icon}</span>
                     ${displayName} (${taskType})
                 </span>
-                <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
-                    <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
+                <div class="task-progress-container bg-gray-200 rounded h-2 mt-1.5 hidden">
+                    <div class="task-progress-bar h-full bg-btn-bg rounded w-0 transition-width duration-200"></div>
                 </div>
             </div>
-            <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 120px;"></span>`;
+            <span class="task-status flex-shrink-0 text-right min-w-[120px]"></span>`;
 
         this._updateTaskElement(taskElement, task);
         return taskElement;

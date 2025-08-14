@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 
 // --- 測試設定 ---
-const SERVER_URL = 'http://127.0.0.1:42649/'; // 假設這是 local_run.py 啟動的伺服器位址
+// JULES'S FIX: 移除硬編碼的 URL，改為使用 playwright.config.js 中定義的 baseURL
+// const SERVER_URL = 'http://127.0.0.1:42649/';
 const TEST_TIMEOUT = 60000; // 60 秒
 
 /**
@@ -30,7 +31,7 @@ test.describe('全面 UI 功能驗證', () => {
       console.log(`[Browser Console] ${msg.type().toUpperCase()}: ${msg.text()}`);
     });
 
-    await page.goto(SERVER_URL, { waitUntil: 'networkidle' });
+    await page.goto('/', { waitUntil: 'networkidle' });
     await expect(page.locator('h1')).toContainText('音訊轉錄儀');
     await waitForWebSocket(page);
 

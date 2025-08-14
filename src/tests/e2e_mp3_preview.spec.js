@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 
 // --- Test Configuration ---
-const SERVER_URL = 'http://127.0.0.1:42649/'; // Port from run_for_playwright.py
+// JULES'S FIX: Remove hardcoded URL
+// const SERVER_URL = 'http://127.0.0.1:42649/'; // Port from run_for_playwright.py
 const TEST_TIMEOUT = 60000; // 60 seconds timeout for this test
 
 // --- E2E Test Suite for MP3 Preview ---
@@ -13,7 +14,7 @@ test.describe('MP3 預覽功能 E2E 測試', () => {
 
   test('使用者點擊預覽後，應能在彈出視窗看到音訊播放器並載入音訊', async ({ page, context }) => {
     // 1. 導覽至頁面並切換到「媒體下載器」分頁
-    await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
     await page.locator('button[data-tab="downloader-tab"]').click();
 

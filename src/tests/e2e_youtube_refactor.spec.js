@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('YouTube Refactor E2E Test', () => {
-  const serverUrl = 'http://127.0.0.1:42649';
+  // JULES'S FIX: Remove hardcoded URL
+  // const serverUrl = 'http://127.0.0.1:42649';
 
   test('should run the new YouTube to Report workflow and produce a .txt file', async ({ page }) => {
     // 1. Go to the page
-    await page.goto(serverUrl);
+    await page.goto('/');
 
     // 2. Click the "YouTube 轉報告" tab
     await page.getByRole('button', { name: '▶️ YouTube 轉報告' }).click();

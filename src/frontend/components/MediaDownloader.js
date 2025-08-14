@@ -27,30 +27,30 @@ export class MediaDownloader {
         this.container.innerHTML = `
             <div class="card">
                 <h2>📥 媒體下載器</h2>
-                <div class="grid-2-col">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- 左側：輸入與主要控制 -->
-                    <div class="flex-col">
+                    <div class="flex flex-col gap-4">
                         <div>
-                            <label for="downloader-urls-input"><strong>網址或播放清單</strong> (可輸入多個，每行一個)</label>
-                            <textarea id="downloader-urls-input" rows="5" placeholder="支援 YouTube, Facebook, Bilibili 等多數影音網站..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-family: inherit;"></textarea>
+                            <label for="downloader-urls-input" class="font-semibold">網址或播放清單 <span class="font-normal text-gray-500">(可輸入多個，每行一個)</span></label>
+                            <textarea id="downloader-urls-input" rows="5" placeholder="支援 YouTube, Facebook, Bilibili 等多數影音網站..." class="mt-2"></textarea>
                         </div>
-                        <div style="text-align: center; margin-top: 16px;">
-                            <button id="start-download-btn" style="width: 100%; padding: 12px; font-size: 1.1em;">開始下載</button>
+                        <div class="mt-4">
+                            <button id="start-download-btn" class="btn btn-primary w-full text-lg">開始下載</button>
                         </div>
                     </div>
                     <!-- 右側：詳細選項 -->
-                    <div class="flex-col">
+                    <div class="flex flex-col gap-4">
                         <div>
-                            <label><strong>下載類型</strong></label>
-                            <div style="display: flex; gap: 20px; margin-top: 8px;">
-                                <label><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
-                                <label><input type="radio" name="download-type" value="video"> 影片</label>
+                            <label class="font-semibold">下載類型</label>
+                            <div class="flex gap-5 mt-2">
+                                <label class="flex items-center gap-2"><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
+                                <label class="flex items-center gap-2"><input type="radio" name="download-type" value="video"> 影片</label>
                             </div>
                         </div>
 
                         <!-- 音訊選項 -->
-                        <div id="audio-options">
-                            <label for="audio-format-select"><strong>音訊格式</strong></label>
+                        <div id="audio-options" class="flex flex-col gap-2">
+                            <label for="audio-format-select" class="font-semibold">音訊格式</label>
                             <select id="audio-format-select">
                                 <option value="m4a">M4A (原生格式, 速度最快)</option>
                                 <option value="mp3">MP3 (需轉檔, 相容性高)</option>
@@ -60,8 +60,8 @@ export class MediaDownloader {
                         </div>
 
                         <!-- 影片選項 (預設隱藏) -->
-                        <div id="video-options" class="hidden">
-                            <label for="video-quality-select"><strong>影片畫質</strong></label>
+                        <div id="video-options" class="hidden flex flex-col gap-2">
+                            <label for="video-quality-select" class="font-semibold">影片畫質</label>
                             <select id="video-quality-select">
                                 <option value="best">最佳畫質</option>
                                 <option value="1080p">1080p</option>
@@ -71,16 +71,16 @@ export class MediaDownloader {
                         </div>
 
                         <div>
-                            <label><strong>進階功能</strong></label>
-                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                                <label><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
+                            <label class="font-semibold">進階功能</label>
+                            <div class="flex flex-col gap-2 mt-2">
+                                <label class="flex items-center gap-2"><input type="checkbox" id="remove-silence-checkbox"> 移除音訊靜默部分 (僅音訊)</label>
                             </div>
                         </div>
 
-                        <div style="margin-top: 16px;">
-                            <label><strong>YouTube 驗證</strong></label>
-                             <p style="font-size: 0.85em; color: #666; margin-top: 4px; margin-bottom: 8px;">若下載需要登入的影片失敗，請上傳您的 cookies.txt 檔案。</p>
-                            <button id="upload-cookies-btn" style="background-color: #ffc107; color: var(--text-color);">🍪 上傳 cookies.txt</button>
+                        <div class="mt-4">
+                            <label class="font-semibold">YouTube 驗證</label>
+                             <p class="text-sm text-gray-600 mt-1 mb-2">若下載需要登入的影片失敗，請上傳您的 cookies.txt 檔案。</p>
+                            <button id="upload-cookies-btn" class="btn bg-status-yellow text-custom-text hover:bg-yellow-500">🍪 上傳 cookies.txt</button>
                             <input type="file" id="cookies-input" accept=".txt" class="hidden">
                         </div>
                     </div>
@@ -88,13 +88,13 @@ export class MediaDownloader {
             </div>
 
             <!-- 下載列表 -->
-            <div class="card" style="margin-top: 24px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div class="card mt-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
                     <h2>📋 下載佇列與歷史紀錄</h2>
-                    <button id="zip-download-btn" disabled style="background-color: #28a745;">打包下載選定項目 (.zip)</button>
+                    <button id="zip-download-btn" class="btn bg-success text-white" disabled>打包下載選定項目 (.zip)</button>
                 </div>
-                <div id="downloader-tasks" class="task-list" style="margin-top: 16px;">
-                    <p id="no-downloader-task-msg">暫無下載任務</p>
+                <div id="downloader-tasks" class="task-list mt-4">
+                    <p id="no-downloader-task-msg" class="text-gray-500 text-center">暫無下載任務</p>
                 </div>
             </div>
         `;

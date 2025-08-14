@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build:css": "npx tailwindcss -i ./src/frontend/styles.css -o ./src/static/dist/output.css",
+    "build:css": "npx tailwindcss -c ./tailwind.config.js -i ./src/frontend/styles.css -o ./src/static/dist/output.css",
     "build:js": "bun build ./src/frontend/main.js --outdir ./src/static/dist",
     "build": "npm run build:css && npm run build:js",
     "watch": "bun build ./src/frontend/main.js --outdir ./src/static/dist --watch"

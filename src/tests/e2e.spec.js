@@ -5,7 +5,8 @@ import path from 'path';
 import wav from 'wav';
 
 // --- 測試設定 ---
-const SERVER_URL = 'http://127.0.0.1:42649/';
+// JULES'S FIX: Remove hardcoded URL
+// const SERVER_URL = 'http://127.0.0.1:42649/';
 const TEST_TIMEOUT = 180000;
 const DUMMY_FILE_NAME_1 = "dummy_audio_1.wav";
 const DUMMY_FILE_NAME_2 = "dummy_audio_2.wav";
@@ -48,7 +49,7 @@ test.describe('鳳凰音訊轉錄儀 E2E 整合測試', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('h1')).toContainText('音訊轉錄儀');
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
   });
@@ -110,7 +111,7 @@ test.describe('YouTube 處理功能 E2E 測試', () => {
     test.setTimeout(TEST_TIMEOUT);
 
     test.beforeEach(async ({ page }) => {
-        await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
         await page.locator('button[data-tab="youtube-report-tab"]').click();
     });
 
