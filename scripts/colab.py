@@ -200,16 +200,25 @@ class ServerManager:
             # --- 啟動流程優化 (2025-08-11) ---
             # 採用「混合式安裝」策略，以最快速度讓伺服器上線
 
-            # 1. 安裝輕量的核心伺服器依賴 (使用 pip)
+            # 1. 安裝輕量的核心伺服器依賴，並以可編輯模式安裝專案本身
             server_reqs_path = project_path / "src" / "requirements-server.txt"
             if server_reqs_path.is_file():
-                self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
-                add_system_log("colab_setup", "INFO", "Installing server dependencies...")
-                pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(server_reqs_path)]
-                install_result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
+                self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴 (日誌將顯示於下方)...")
+                add_system_log("colab_setup", "INFO", "Installing server dependencies and project in editable mode...")
+
+                # JULES'S FINAL FIX (2025-08-14):
+                # 1. 移除 -q 以顯示詳細的安裝過程，滿足使用者需求。
+                # 2. 加入 -e . 將專案本身以可編輯模式安裝，這會讓 src 下的模組 (core, db) 可被子進程正確引用。
+                # 3. 移除 capture_output，讓 pip 的輸出直接串流到 Colab Cell。
+                pip_command = [sys.executable, "-m", "pip", "install", "-r", str(server_reqs_path), "-e", "."]
+
+                # 將指令執行的工作目錄設為專案根目錄
+                install_result = subprocess.run(pip_command, check=False, text=True, encoding='utf-8', cwd=str(project_path))
+
                 if install_result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"核心依賴安裝失敗:\n{install_result.stderr}")
-                    add_system_log("colab_setup", "CRITICAL", f"Server dependency installation failed: {install_result.stderr}")
+                    # 因為輸出已經直接串流，這裡只記錄一個簡潔的錯誤訊息
+                    self._log_manager.log("CRITICAL", "核心依賴安裝失敗，請檢查上方日誌。")
+                    add_system_log("colab_setup", "CRITICAL", "Server dependency installation failed.")
                     return
                 self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
                 add_system_log("colab_setup", "SUCCESS", "Server dependencies installed.")
