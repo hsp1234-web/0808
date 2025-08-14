@@ -715,57 +715,59 @@ class YouTubeReporter {
   }
   render() {
     this.container.innerHTML = `
-            <div id="youtube-report-tab" class="tab-content active flex flex-col gap-6">
+            <div id="youtube-report-tab-content" class="flex flex-col gap-6">
+                <!-- 區域 1 & 2: 金鑰與影片輸入 -->
                 <div class="card">
-                    <!-- 區域 1: API 金鑰管理 -->
-                    <div class="flex justify-between items-center flex-wrap gap-4">
-                        <h2>\uD83D\uDD11 Google API 金鑰管理</h2>
-                        <a href="/static/prompts.html" target="_blank" class="font-semibold text-btn-bg hover:underline">管理提示詞 &rarr;</a>
+                    <!-- API 金鑰管理 -->
+                    <div class="flex justify-between items-center flex-wrap gap-2">
+                        <h2 class="text-xl font-bold text-gray-700">\uD83D\uDD11 Google API 金鑰管理</h2>
+                        <a href="/static/prompts.html" target="_blank" class="text-sm font-semibold text-blue-600 hover:underline">管理提示詞 &rarr;</a>
                     </div>
-                    <div class="flex gap-2.5 items-center flex-wrap mt-3">
-                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="flex-grow">
+                    <div class="flex gap-2 items-center flex-wrap mt-4">
+                        <input type="password" id="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="flex-grow input">
                         <button id="save-api-key-btn" class="btn btn-primary">儲存金鑰</button>
-                        <button id="clear-api-key-btn" class="btn bg-gray-500 text-white hover:bg-gray-600">清除金鑰</button>
+                        <button id="clear-api-key-btn" class="btn btn-secondary">清除</button>
                     </div>
-                    <p id="api-key-status" class="mt-3 font-semibold">狀態: <span class="italic">尚未提供金鑰</span></p>
+                    <p id="api-key-status" class="mt-2 text-sm">狀態: <span class="italic text-gray-500">尚未提供金鑰</span></p>
 
-                    <!-- 區域 2: YouTube 影片處理 -->
-                    <h2 class="mt-6">▶️ 輸入 YouTube 影片</h2>
-                    <fieldset id="youtube-controls-fieldset" class="mt-3">
-                        <div id="youtube-link-list" class="flex flex-col gap-2.5">
-                            <div class="youtube-link-row flex flex-wrap gap-2.5 items-center">
-                                <input type="text" class="youtube-url-input flex-grow min-w-[300px]" placeholder="YouTube 影片網址">
-                                <input type="text" class="youtube-filename-input flex-grow min-w-[150px]" placeholder="自訂檔名 (可選)">
-                                <button class="remove-youtube-row-btn btn bg-red-600 text-white hover:bg-red-700 px-4 text-2xl leading-none flex-shrink-0">×</button>
-                            </div>
+                    <!-- 分隔線 -->
+                    <hr class="my-6">
+
+                    <!-- YouTube 影片處理 -->
+                    <h2 class="text-xl font-bold text-gray-700">▶️ 輸入 YouTube 影片</h2>
+                    <fieldset id="youtube-controls-fieldset" class="mt-4">
+                        <div id="youtube-link-list" class="flex flex-col gap-3">
+                            <!-- JS 會動態在此插入影片輸入列 -->
                         </div>
-                        <button id="add-youtube-row-btn" class="btn btn-primary mt-3">+ 新增一列</button>
+                        <button id="add-youtube-row-btn" class="btn btn-secondary mt-3 text-sm font-semibold">+ 新增一列</button>
                     </fieldset>
                 </div>
 
                 <!-- 區域 3: 參數控制區 -->
                 <div class="card">
-                    <h2>⚙️ 參數控制區</h2>
-                    <fieldset id="youtube-params-fieldset" disabled class="mt-3">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col gap-2">
-                                <label class="font-semibold">任務選項</label>
-                                <div id="yt-tasks-group" class="flex flex-col gap-2 mt-1">
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="translate"> 翻譯為英文 (基於逐字稿)</label>
+                    <h2 class="text-xl font-bold text-gray-700">⚙️ 參數控制區</h2>
+                    <fieldset id="youtube-params-fieldset" disabled class="mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                            <!-- 任務選項 -->
+                            <div class="flex flex-col gap-3">
+                                <label class="font-semibold text-gray-600">任務選項</label>
+                                <div id="yt-tasks-group" class="flex flex-col gap-2">
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="summary" checked class="checkbox"> 重點摘要</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="transcript" checked class="checkbox"> 詳細逐字稿</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" name="yt-task" value="translate" class="checkbox"> 翻譯為英文 (基於逐字稿)</label>
                                 </div>
                             </div>
-                            <div class="flex flex-col gap-4">
+                            <!-- AI 模型與輸出格式 -->
+                            <div class="flex flex-col gap-6">
                                 <div class="flex flex-col gap-2">
-                                    <label for="gemini-model-select" class="font-semibold">AI 模型</label>
-                                    <select id="gemini-model-select">
+                                    <label for="gemini-model-select" class="font-semibold text-gray-600">AI 模型</label>
+                                    <select id="gemini-model-select" class="select">
                                         <option>等待從伺服器載入模型列表...</option>
                                     </select>
                                 </div>
                                 <div class="flex flex-col gap-2">
-                                    <label for="yt-output-format-select" class="font-semibold">輸出格式</label>
-                                    <select id="yt-output-format-select">
+                                    <label for="yt-output-format-select" class="font-semibold text-gray-600">輸出格式</label>
+                                    <select id="yt-output-format-select" class="select">
                                         <option value="html">HTML 報告</option>
                                         <option value="txt">純文字 (.txt)</option>
                                     </select>
@@ -776,21 +778,32 @@ class YouTubeReporter {
                 </div>
 
                 <!-- 區域 4: 操作按鈕 -->
-                <div class="flex justify-center gap-4 flex-wrap">
-                    <button id="download-audio-only-btn" class="btn btn-primary bg-gray-600 hover:bg-gray-700">\uD83C\uDFA7 僅下載音訊</button>
-                    <button id="start-youtube-processing-btn" class="btn btn-primary text-lg" disabled>\uD83D\uDE80 分析影片 (Gemini)</button>
+                <div class="card">
+                    <div class="flex justify-center gap-4 flex-wrap">
+                        <button id="download-audio-only-btn" class="btn btn-secondary">\uD83C\uDFA7 僅下載音訊</button>
+                        <button id="start-youtube-processing-btn" class="btn btn-primary text-lg px-8 py-3" disabled>
+                            <span class="flex items-center gap-2">
+                                \uD83D\uDE80 分析影片 (Gemini)
+                                <svg id="processing-spinner" class="animate-spin h-5 w-5 text-white" style="display: none;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 區域 5: YouTube 報告瀏覽區 -->
                 <div id="youtube-file-browser-container" class="card">
-                    <h2>\uD83D\uDCCA YouTube 報告瀏覽區</h2>
+                    <h2 class="text-xl font-bold text-gray-700">\uD83D\uDCCA YouTube 報告瀏覽區</h2>
                     <div id="youtube-file-browser" class="task-list mt-4">
-                        <p id="no-youtube-report-msg" class="text-gray-500 text-center">尚無已完成的報告</p>
+                        <p id="no-youtube-report-msg" class="text-gray-500 text-center py-4">尚無已完成的報告</p>
                     </div>
                 </div>
             </div>
         `;
     this.cacheDomElements();
+    this.addNewYoutubeRow(false);
   }
   cacheDomElements() {
     this.apiKeyInput = this.container.querySelector("#api-key-input");
@@ -857,30 +870,29 @@ class YouTubeReporter {
   }
   updateApiKeyUI(state, message) {
     const statusSpan = this.apiKeyStatus.querySelector("span");
-    statusSpan.style.color = "inherit";
-    statusSpan.style.fontStyle = "normal";
+    statusSpan.className = "";
     const isValid = state === "valid";
     this.startYoutubeProcessingBtn.disabled = !isValid;
     this.youtubeParamsFieldset.disabled = !isValid;
     switch (state) {
       case "valid":
         statusSpan.textContent = message || "驗證成功";
-        statusSpan.style.color = "var(--status-green)";
+        statusSpan.classList.add("status-valid");
         this.startYoutubeProcessingBtn.title = "";
         break;
       case "invalid":
         statusSpan.textContent = message || "驗證失敗";
-        statusSpan.style.color = "#dc3545";
+        statusSpan.classList.add("status-invalid");
         this.startYoutubeProcessingBtn.title = "請提供有效的 API 金鑰以啟用此功能";
         break;
       case "validating":
         statusSpan.textContent = message || "正在驗證中...";
-        statusSpan.style.fontStyle = "italic";
+        statusSpan.classList.add("italic", "text-gray-500");
         break;
       case "not_provided":
       default:
         statusSpan.textContent = message || "尚未提供金鑰";
-        statusSpan.style.fontStyle = "italic";
+        statusSpan.classList.add("italic", "text-gray-500");
         this.startYoutubeProcessingBtn.title = "請提供有效的 API 金鑰以啟用此功能";
         break;
     }
@@ -922,14 +934,16 @@ class YouTubeReporter {
       throw error;
     }
   }
-  addNewYoutubeRow() {
-    this.logAction("click-add-youtube-row");
-    const firstRow = this.youtubeLinkList.querySelector(".youtube-link-row");
-    if (!firstRow)
-      return;
-    const newRow = firstRow.cloneNode(true);
-    newRow.querySelector(".youtube-url-input").value = "";
-    newRow.querySelector(".youtube-filename-input").value = "";
+  addNewYoutubeRow(log = true) {
+    if (log)
+      this.logAction("click-add-youtube-row");
+    const newRow = document.createElement("div");
+    newRow.className = "youtube-link-row flex flex-wrap gap-2 items-center";
+    newRow.innerHTML = `
+            <input type="text" class="youtube-url-input flex-grow min-w-[250px] input" placeholder="YouTube 影片網址">
+            <input type="text" class="youtube-filename-input flex-grow min-w-[150px] input" placeholder="自訂檔名 (可選)">
+            <button class="remove-youtube-row-btn btn btn-danger flex-shrink-0">×</button>
+        `;
     this.youtubeLinkList.appendChild(newRow);
   }
   sanitizeFilename(filename) {
@@ -957,9 +971,12 @@ class YouTubeReporter {
       return;
     }
     const button = downloadOnly ? this.downloadAudioOnlyBtn : this.startYoutubeProcessingBtn;
-    const originalText = button.textContent;
+    const spinner = this.startYoutubeProcessingBtn.querySelector("#processing-spinner");
     button.disabled = true;
-    button.textContent = "正在建立任務...";
+    if (spinner && !downloadOnly)
+      spinner.style.display = "inline-block";
+    if (downloadOnly)
+      button.textContent = "正在建立任務...";
     try {
       const payload = {
         requests,
@@ -986,7 +1003,10 @@ class YouTubeReporter {
       this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.detail || error.message}`, true);
     } finally {
       button.disabled = false;
-      button.textContent = originalText;
+      if (spinner)
+        spinner.style.display = "none";
+      if (downloadOnly)
+        button.textContent = "\uD83C\uDFA7 僅下載音訊";
     }
   }
   addYoutubeReportToList(payload) {
@@ -1110,15 +1130,27 @@ class App {
     });
   }
   initComponents() {
-    const services = {
+    const baseServices = {
       socket: this.socket,
       showStatusMessage: this.showStatusMessage.bind(this),
       logAction: this.logAction.bind(this),
+      app: this
+    };
+    if (this.tasklistContainer) {
+      const taskListServices = {
+        ...baseServices,
+        openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`)
+      };
+      this.taskList = new TaskList(this.tasklistContainer, taskListServices);
+      this.taskList.init();
+    }
+    const services = {
+      ...baseServices,
+      taskManager: this.taskList,
       updateModelDisplay: (modelName) => {
         if (this.modelDisplay)
           this.modelDisplay.textContent = modelName;
-      },
-      app: this
+      }
     };
     if (this.localTranscriberContainer) {
       this.localTranscriber = new LocalTranscriber(this.localTranscriberContainer, services);
@@ -1131,14 +1163,6 @@ class App {
     if (this.youtubeReporterContainer) {
       this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
       this.youtubeReporter.init();
-    }
-    if (this.tasklistContainer) {
-      const taskListServices = {
-        ...services,
-        openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`)
-      };
-      this.taskList = new TaskList(this.tasklistContainer, taskListServices);
-      this.taskList.init();
     }
     if (this.fileBrowserContainer) {
       this.fileBrowser = new FileBrowser(this.fileBrowserContainer, services);

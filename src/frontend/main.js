@@ -161,15 +161,31 @@ class App {
      * 初始化所有組件。
      */
     initComponents() {
-        const services = {
+        // JULES: 建立一個基礎的 services 物件
+        const baseServices = {
             socket: this.socket,
             showStatusMessage: this.showStatusMessage.bind(this),
             logAction: this.logAction.bind(this),
+            app: this, // 傳入 App 實例
+        };
+
+        // JULES: 優先初始化 TaskList，因為其他元件會依賴它
+        if (this.tasklistContainer) {
+            const taskListServices = {
+                ...baseServices,
+                openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`),
+            };
+            this.taskList = new TaskList(this.tasklistContainer, taskListServices);
+            this.taskList.init();
+        }
+
+        // JULES: 建立給其他主要元件使用的 services 物件，並注入 taskManager
+        const services = {
+            ...baseServices,
+            taskManager: this.taskList, // 將 taskList 實例注入
             updateModelDisplay: (modelName) => {
                 if (this.modelDisplay) this.modelDisplay.textContent = modelName;
             },
-            // 傳入 App 實例，以便組件間可以互相呼叫
-            app: this,
         };
 
         // 初始化 LocalTranscriber
@@ -184,21 +200,10 @@ class App {
             this.mediaDownloader.init();
         }
 
-        // 初始化 YouTubeReporter
+        // 初始化 YouTubeReporter (現在可以存取 taskManager)
         if (this.youtubeReporterContainer) {
             this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
             this.youtubeReporter.init();
-        }
-
-        // 初始化 TaskList
-        if (this.tasklistContainer) {
-            // TaskList 需要一個開啟預覽彈窗的函式
-            const taskListServices = {
-                ...services,
-                openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`),
-            };
-            this.taskList = new TaskList(this.tasklistContainer, taskListServices);
-            this.taskList.init();
         }
 
         // 初始化 FileBrowser
