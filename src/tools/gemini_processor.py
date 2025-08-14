@@ -243,6 +243,7 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
     try:
         import google.generativeai as genai
+        from google.api_core import exceptions as google_exceptions
     except ImportError:
         log.critical("🔴 Necessary library (google-generativeai) not installed.")
         raise
@@ -357,6 +358,12 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
         }
         print(json.dumps(final_result), flush=True)
 
+    except google_exceptions.PermissionDenied as e:
+        log.error(f"❌ Gemini API 金鑰無效或權限不足: {e}")
+        raise ValueError("API 金鑰無效或權限不足。請檢查您的金鑰，或確認您已在 Google Cloud Console 中啟用 Generative Language API。")
+    except google_exceptions.ResourceExhausted as e:
+        log.error(f"❌ Gemini API 額度已用盡: {e}")
+        raise ValueError("API 請求已達額度上限。請檢查您的 Google Cloud 帳戶用量。")
     except ValueError as e:
         # 捕捉我們自訂的、易於理解的錯誤
         log.error(f"❌ Gemini 處理失敗: {e}")

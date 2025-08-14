@@ -868,28 +868,34 @@ class YouTubeReporter {
     }
     this.updateApiKeyUI("validating");
     try {
-      const result = await this.api.youtube.validateApiKey(apiKey);
+      await this.loadGeminiModels(apiKey);
       this.updateApiKeyUI("valid", "金鑰有效，Gemini 功能已啟用");
     } catch (error) {
-      console.error("API Key validation error:", JSON.stringify(error, null, 2));
-      this.updateApiKeyUI("invalid", error.detail || "金鑰無效或發生未知錯誤");
+      console.error("API Key validation/loading error:", error);
+      const errorMessage = error.detail || "金鑰無效或無法載入模型列表";
+      this.updateApiKeyUI("invalid", errorMessage);
+      this.geminiModelSelect.innerHTML = `<option>${errorMessage}</option>`;
     }
   }
-  async loadGeminiModels() {
+  async loadGeminiModels(apiKey) {
     try {
-      const modelsData = await this.api.youtube.getModels();
+      const modelsData = await this.api.youtube.getModels(apiKey);
       this.geminiModelSelect.innerHTML = "";
-      modelsData.models.forEach((model) => {
-        const option = document.createElement("option");
-        option.value = model.id;
-        option.textContent = model.name;
-        this.geminiModelSelect.appendChild(option);
-      });
-      this.logAction("load-gemini-models-success");
+      if (modelsData && modelsData.models && modelsData.models.length > 0) {
+        modelsData.models.forEach((model) => {
+          const option = document.createElement("option");
+          option.value = model.id;
+          option.textContent = model.name;
+          this.geminiModelSelect.appendChild(option);
+        });
+        this.logAction("load-gemini-models-success");
+      } else {
+        throw new Error("模型列表為空或格式不符。");
+      }
     } catch (error) {
       console.error("載入 Gemini 模型時出錯:", error);
-      this.logAction("load-gemini-models-failed");
-      this.geminiModelSelect.innerHTML = `<option>${error.message}</option>`;
+      this.logAction("load-gemini-models-failed", error.detail || error.message);
+      throw error;
     }
   }
   addNewYoutubeRow() {
@@ -936,7 +942,8 @@ class YouTubeReporter {
         model: this.geminiModelSelect.value,
         download_only: downloadOnly,
         tasks: selectedTasks.join(","),
-        output_format: this.ytOutputFormatSelect.value
+        output_format: this.ytOutputFormatSelect.value,
+        api_key: localStorage.getItem("googleApiKey")
       };
       const result = await this.api.youtube.process(payload);
       result.tasks.forEach((task) => {
@@ -952,7 +959,7 @@ class YouTubeReporter {
         }
       });
     } catch (error) {
-      this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.message}`, true);
+      this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.detail || error.message}`, true);
     } finally {
       button.disabled = false;
       button.textContent = originalText;

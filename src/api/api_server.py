@@ -634,9 +634,12 @@ async def validate_api_key(request: Request):
         raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
 
 
-@app.get("/api/youtube/models")
-async def get_youtube_models():
-    """獲取可用的 Gemini 模型列表。"""
+@app.post("/api/youtube/models")
+async def get_youtube_models(request: Request):
+    """
+    獲取可用的 Gemini 模型列表。
+    JULES: 改為 POST，並可選擇性地接收來自前端的 API 金鑰進行驗證。
+    """
     # 在模擬模式下，回傳一個固定的假列表
     if IS_MOCK_MODE:
         return {
@@ -647,19 +650,35 @@ async def get_youtube_models():
         }
 
     # 真實模式下，從 gemini_processor.py 獲取
-    # 注意：此端點現在依賴於一個有效的 GOOGLE_API_KEY 環境變數
     try:
-        if not os.environ.get("GOOGLE_API_KEY"):
-             raise HTTPException(status_code=401, detail="後端尚未設定有效的 Google API 金鑰。")
+        # 嘗試從 payload 獲取 api_key
+        try:
+            payload = await request.json()
+            api_key = payload.get("api_key")
+        except json.JSONDecodeError:
+            api_key = None
+
+        # 優先使用來自 payload 的金鑰，否則回退到伺服器的環境變數
+        key_to_use = api_key or os.environ.get("GOOGLE_API_KEY")
+
+        if not key_to_use:
+             raise HTTPException(status_code=401, detail="後端或前端請求中均未提供有效的 Google API 金鑰。")
 
         tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
         cmd = [sys.executable, str(tool_script_path), "--command=list_models"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+
+        # 將要使用的金鑰作為環境變數傳遞給子程序
+        proc_env = os.environ.copy()
+        proc_env["GOOGLE_API_KEY"] = key_to_use
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', env=proc_env)
         models = json.loads(result.stdout)
         return {"models": models}
     except subprocess.CalledProcessError as e:
-        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {e.stderr}")
-        raise HTTPException(status_code=401, detail="無法使用提供的 API 金鑰獲取模型列表。")
+        # JULES: 提供更詳細的錯誤回饋
+        error_detail = f"無法獲取模型列表。可能是金鑰無效或網路問題。Stderr: {e.stderr}"
+        log.error(f"獲取 Gemini 模型列表失敗。{error_detail}")
+        raise HTTPException(status_code=401, detail=error_detail)
     except Exception as e:
         log.error(f"獲取 Gemini 模型列表時發生錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
@@ -685,6 +704,7 @@ async def process_youtube_urls(request: Request):
     output_format = payload.get("output_format", "html") # "html" or "txt"
     download_only = payload.get("download_only", False)
     download_type = payload.get("download_type", "audio") # JULES'S NEW FEATURE
+    api_key = payload.get("api_key") # JULES: 新增，從前端接收 API 金鑰
 
     if not requests_list:
         # 在加入相容性邏輯後，更新錯誤訊息
@@ -718,7 +738,8 @@ async def process_youtube_urls(request: Request):
                 "model": model,
                 "output_dir": "transcripts",
                 "tasks": tasks_to_run,
-                "output_format": output_format
+                "output_format": output_format,
+                "api_key": api_key # JULES: 將金鑰存入任務 payload
             }
 
             db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
@@ -985,6 +1006,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             model = process_payload['model']
             tasks_to_run = process_payload.get('tasks', 'summary,transcript')
             output_format = process_payload.get('output_format', 'html')
+            # JULES: 從 payload 中讀取 API 金鑰
+            api_key_from_payload = process_payload.get("api_key")
 
             log.info(f"執行 Gemini 分析，任務: '{tasks_to_run}', 格式: '{output_format}'")
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
@@ -1009,6 +1032,11 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             ]
 
             proc_env = os.environ.copy()
+            # JULES: 如果從前端收到了金鑰，就用它來覆蓋環境變數
+            if api_key_from_payload:
+                log.info("偵測到來自前端的 API 金鑰，將其用於本次處理。")
+                proc_env["GOOGLE_API_KEY"] = api_key_from_payload
+
             process_gemini = subprocess.Popen(
                 cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env
             )

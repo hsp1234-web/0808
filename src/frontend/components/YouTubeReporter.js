@@ -221,30 +221,40 @@ export class YouTubeReporter {
         }
         this.updateApiKeyUI('validating');
         try {
-            const result = await this.api.youtube.validateApiKey(apiKey);
+            // JULES: 為了讓金鑰在後端生效以載入模型列表，我們不再分離驗證和載入
+            // 我們直接嘗試載入模型，如果成功，就代表金鑰有效。
+            await this.loadGeminiModels(apiKey);
             this.updateApiKeyUI('valid', '金鑰有效，Gemini 功能已啟用');
-            // this.loadGeminiModels(); // JULES: Temporarily disabled for debugging
         } catch (error) {
-            console.error('API Key validation error:', JSON.stringify(error, null, 2));
-            this.updateApiKeyUI('invalid', error.detail || '金鑰無效或發生未知錯誤');
+            console.error('API Key validation/loading error:', error);
+            const errorMessage = error.detail || '金鑰無效或無法載入模型列表';
+            this.updateApiKeyUI('invalid', errorMessage);
+            this.geminiModelSelect.innerHTML = `<option>${errorMessage}</option>`;
         }
     }
 
-    async loadGeminiModels() {
+    async loadGeminiModels(apiKey) {
+        // JULES: 讓此函式能接收一個臨時金鑰，用於驗證流程
+        // 這樣就不需要依賴後端設定的全域金鑰
         try {
-            const modelsData = await this.api.youtube.getModels();
+            const modelsData = await this.api.youtube.getModels(apiKey);
             this.geminiModelSelect.innerHTML = '';
-            modelsData.models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = model.name;
-                this.geminiModelSelect.appendChild(option);
-            });
-            this.logAction('load-gemini-models-success');
+            if (modelsData && modelsData.models && modelsData.models.length > 0) {
+                modelsData.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.name;
+                    this.geminiModelSelect.appendChild(option);
+                });
+                this.logAction('load-gemini-models-success');
+            } else {
+                throw new Error("模型列表為空或格式不符。");
+            }
         } catch (error) {
             console.error("載入 Gemini 模型時出錯:", error);
-            this.logAction('load-gemini-models-failed');
-            this.geminiModelSelect.innerHTML = `<option>${error.message}</option>`;
+            this.logAction('load-gemini-models-failed', error.detail || error.message);
+            // 將錯誤向上拋出，讓 validateApiKey 能夠捕獲
+            throw error;
         }
     }
 
@@ -298,7 +308,8 @@ export class YouTubeReporter {
                 model: this.geminiModelSelect.value,
                 download_only: downloadOnly,
                 tasks: selectedTasks.join(','),
-                output_format: this.ytOutputFormatSelect.value
+                output_format: this.ytOutputFormatSelect.value,
+                api_key: localStorage.getItem('googleApiKey') // JULES: 將儲存的金鑰加入請求
             };
 
             const result = await this.api.youtube.process(payload);
@@ -319,7 +330,8 @@ export class YouTubeReporter {
             });
 
         } catch (error) {
-            this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.message}`, true);
+            // JULES: 顯示來自後端的詳細錯誤訊息
+            this.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.detail || error.message}`, true);
         } finally {
             button.disabled = false;
             button.textContent = originalText;

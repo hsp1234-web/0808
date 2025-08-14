@@ -4,13 +4,17 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build ./src/frontend/main.js --outdir ./src/static/dist",
+    "build:css": "npx tailwindcss -i ./src/frontend/styles.css -o ./src/static/dist/output.css",
+    "build:js": "bun build ./src/frontend/main.js --outdir ./src/static/dist",
+    "build": "npm run build:css && npm run build:js",
     "watch": "bun build ./src/frontend/main.js --outdir ./src/static/dist --watch"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
+    "@tailwindcss/cli": "^4.1.12",
     "@types/bun": "latest",
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.1.12"
   },
   "peerDependencies": {
     "typescript": "^5"
