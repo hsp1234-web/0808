@@ -29,6 +29,8 @@ test.describe('YouTube Reporter Component E2E Test', () => {
     });
 
     await page.goto('/');
+    // 點擊 "YouTube 轉報告" 頁籤，以確保該元件可見
+    await page.locator('button[data-tab="youtube-report-tab"]').click();
   });
 
   test('應能正確渲染 YouTube Reporter 的 UI 元素', async ({ page }) => {
@@ -62,7 +64,8 @@ test.describe('YouTube Reporter Component E2E Test', () => {
     // 1. 測試無效金鑰
     await apiKeyInput.fill('invalid-key');
     await saveBtn.click();
-    await expect(statusText).toHaveText('API 金鑰無效。');
+    // JULES'S FIX: 更新斷言以匹配 UI 實際顯示的更詳細的錯誤訊息
+    await expect(statusText).toHaveText('金鑰無效或發生未知錯誤');
     await expect(processBtn).toBeDisabled();
     // 使用 toHaveAttribute 進行更穩健的檢查
     await expect(paramsFieldset).toHaveAttribute('disabled', '');

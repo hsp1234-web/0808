@@ -9,9 +9,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 log = logging.getLogger(__name__)
 
 # --- 資料庫路徑設定 ---
-# JULES'S FIX 2025-08-13: 將資料庫檔案移至 /content/ 目錄下，
-# 以避免在 Colab 環境中因專案資料夾被刷新而導致資料遺失。
-DB_FILE = Path("/content/tasks.db")
+# JULES'S FIX 2025-08-14: 將資料庫檔案路徑改為相對於此檔案的本地路徑，
+# 以解決沙箱環境中的權限問題。
+DB_FILE = Path(__file__).parent / "tasks.db"
 
 def get_db_connection():
     """建立並回傳一個資料庫連線。"""

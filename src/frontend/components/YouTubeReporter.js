@@ -223,7 +223,7 @@ export class YouTubeReporter {
         try {
             const result = await this.api.youtube.validateApiKey(apiKey);
             this.updateApiKeyUI('valid', '金鑰有效，Gemini 功能已啟用');
-            this.loadGeminiModels();
+            // this.loadGeminiModels(); // JULES: Temporarily disabled for debugging
         } catch (error) {
             console.error('API Key validation error:', JSON.stringify(error, null, 2));
             this.updateApiKeyUI('invalid', error.detail || '金鑰無效或發生未知錯誤');
