@@ -1,0 +1,9 @@
+# Server Core Dependencies
+# These are lightweight and essential for the API server to start quickly.
+fastapi
+uvicorn[standard]
+python-multipart
+psutil
+circus
+websocket-client
+requests

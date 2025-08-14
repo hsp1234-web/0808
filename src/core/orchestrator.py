@@ -24,6 +24,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # sys.path.insert(0, str(ROOT_DIR))
 
 # from db import database # REMOVED: No longer used directly
+from db.database import initialize_database
 from db.client import get_client
 
 # --- 日誌設定 ---
@@ -127,9 +128,14 @@ def main():
     )
     args = parser.parse_args()
 
-    # DB Manager 會處理初始化，所以這裡不需要再呼叫
-    # database.initialize_database()
-    # setup_database_logging() # 將在 DB Manager 就緒後呼叫
+    # --- JULES'S FIX (2025-08-14): 強制同步初始化資料庫 ---
+    # 為了解決競爭條件 (race condition)，我們在協調器啟動的最開始，
+    # 就強制、同步地執行資料庫初始化。這確保了 `system_logs` 資料表
+    # 在任何子服務 (如 api_server) 嘗試寫入日誌之前就已存在。
+    log.info("🔧 正在強制執行同步資料庫初始化...")
+    initialize_database()
+    log.info("✅ 同步資料庫初始化完成。")
+    # --- 修正結束 ---
 
     log.info(f"🚀 協調器啟動。模式: {'模擬 (Mock)' if args.mock else '真實 (Real)'}")
 

@@ -9,9 +9,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 log = logging.getLogger(__name__)
 
 # --- 資料庫路徑設定 ---
-# JULES'S FIX 2025-08-13: 將資料庫檔案移至 /content/ 目錄下，
-# 以避免在 Colab 環境中因專案資料夾被刷新而導致資料遺失。
-DB_FILE = Path("/content/tasks.db")
+# JULES'S FIX 2025-08-14 (v2): 將資料庫檔案路徑改為相對於專案根目錄 /app 的絕對路徑。
+# 這可以避免因不同執行方式 (直接執行、透過 pytest、透過 circus)
+# 造成的 `__file__` 解析路徑不一致問題，確保路徑的絕對唯一性。
+DB_FILE = Path("/app/data/tasks.db")
 
 def get_db_connection():
     """建立並回傳一個資料庫連線。"""
@@ -371,6 +372,26 @@ def get_system_logs_by_filter(levels: list[str] = None, sources: list[str] = Non
         return [dict(log) for log in logs]
     except sqlite3.Error as e:
         log.error(f"❌ 獲取系統日誌時發生錯誤: {e}", exc_info=True)
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_all_system_logs() -> list[dict]:
+    """
+    獲取資料庫中所有的系統日誌，用於完整匯出。
+    """
+    sql = "SELECT timestamp, source, level, message FROM system_logs ORDER BY timestamp ASC"
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        logs = cursor.fetchall()
+        return [dict(log) for log in logs]
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取所有系統日誌時發生錯誤: {e}", exc_info=True)
         return []
     finally:
         if conn:

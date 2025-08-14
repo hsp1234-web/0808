@@ -10,7 +10,7 @@ import asyncio
 import os
 import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -412,6 +412,34 @@ async def get_system_logs_endpoint(
     except Exception as e:
         log.error(f"❌ 查詢系統日誌時 API 出錯: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="查詢系統日誌時發生內部錯誤")
+
+
+@app.get("/api/logs/export", response_class=PlainTextResponse)
+async def export_system_logs_endpoint():
+    """
+    匯出所有系統日誌為一個純文字檔案。
+    """
+    log.info("API: 收到匯出所有系統日誌的請求...")
+    try:
+        logs = db_client.get_all_system_logs()
+
+        # 格式化日誌為純文字
+        log_lines = []
+        for entry in logs:
+            # 格式: 2025-08-14T12:34:56 [INFO] [api_server] This is a log message.
+            line = f"{entry['timestamp']} [{entry['level']:^8}] [{entry['source']}] {entry['message']}"
+            log_lines.append(line)
+
+        log_content = "\n".join(log_lines)
+
+        log.info(f"✅ 成功獲取並格式化 {len(log_lines)} 條日誌。")
+        return PlainTextResponse(content=log_content)
+
+    except Exception as e:
+        log.error(f"❌ 匯出系統日誌時 API 出錯: {e}", exc_info=True)
+        # 即使出錯，也回傳一個純文字錯誤訊息，以符合 response_class 的期待
+        error_message = f"無法匯出日誌: {e}"
+        return PlainTextResponse(content=error_message, status_code=500)
 
 
 @app.get("/api/download/{task_id}")

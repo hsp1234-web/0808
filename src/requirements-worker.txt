@@ -1,0 +1,12 @@
+# Worker & Tooling Dependencies
+# These are heavier, non-essential-for-startup packages that can be installed in the background.
+faster-whisper
+opencc-python-reimplemented
+yt-dlp
+google-generativeai
+pydub
+WeasyPrint
+
+# Testing dependencies are also not needed for the core server to run.
+pytest
+pytest-mock

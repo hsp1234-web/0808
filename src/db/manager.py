@@ -56,6 +56,7 @@ ACTION_MAP = {
     "are_tasks_active": database.are_tasks_active,
     "get_all_tasks": database.get_all_tasks,
     "get_system_logs": database.get_system_logs_by_filter,
+    "get_all_system_logs": database.get_all_system_logs,
     "find_dependent_task": database.find_dependent_task,
 }
 
@@ -137,15 +138,11 @@ def run_server():
             # 即便移除失敗，也只記錄錯誤，不中斷啟動流程
             log.error(f"無法移除舊的埠號檔案: {e}", exc_info=True)
 
-    # 這是整個系統中，唯一應該呼叫 `initialize_database` 的地方
-    try:
-        log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
-        database.initialize_database()
-        log.info("✅ 資料庫初始化成功。")
-    except sqlite3.Error as e:
-        log.critical(f"❌ 資料庫初始化失敗，伺服器無法啟動: {e}")
-        # 在這種嚴重錯誤下，我們應該讓程序以非零代碼退出
-        sys.exit(1)
+    # JULES'S FIX (2025-08-14):
+    # 資料庫的初始化工作已移至更高層級的啟動腳本
+    # (如 colab.py, run_tests.py, test_core_logic.py) 中，
+    # 以確保在任何服務啟動前，資料庫就已就緒，從而根除競態條件。
+    # 此處不再執行初始化。
 
     # 建立 TCP 伺服器
     # 讓 server 在程式結束後可以立即重用同一個位址

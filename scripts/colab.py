@@ -362,13 +362,16 @@ class ServerManager:
                 return
             self._log_manager.log("INFO", "[背景] ✅ uv 安裝成功。")
 
-            # 使用 uv 安裝 worker 依賴
-            self._log_manager.log("INFO", "[背景] 正在使用 uv 加速安裝大型依賴...")
-            uv_pip_install_cmd = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(requirements_path)]
-            worker_install_result = subprocess.run(uv_pip_install_cmd, check=False, capture_output=True, text=True, encoding='utf-8')
-            if worker_install_result.returncode != 0:
-                self._log_manager.log("ERROR", f"[背景] 大型依賴安裝失敗:\n{worker_install_result.stderr}")
-                return
+            # 使用 uv 安裝 worker 依賴，並即時串流輸出
+            self._log_manager.log("INFO", "[背景] 正在使用 uv 加速安裝大型依賴... (輸出將直接顯示在下方)")
+            # 移除 -q 以顯示詳細進度，移除 capture_output 以即時打印
+            uv_pip_install_cmd = [sys.executable, "-m", "uv", "pip", "install", "-r", str(requirements_path)]
+            # check=False 讓它在失敗時不會拋出例外，我們手動檢查返回碼
+            result = subprocess.run(uv_pip_install_cmd, check=False, text=True, encoding='utf-8')
+
+            if result.returncode != 0:
+                self._log_manager.log("ERROR", f"[背景] 大型依賴安裝失敗，返回碼: {result.returncode}")
+                # 不需要 return，讓日誌記錄下來即可
 
             self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
         except Exception as e:
@@ -443,55 +446,91 @@ def main():
         display_manager.start()
         server_manager.start()
 
+        # --- 階段一完成，生成靜態介面 ---
         if server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT):
             if not server_manager.port:
                 log_manager.log("CRITICAL", "伺服器已就緒，但未能解析出 API 埠號。無法建立代理連結。")
             else:
-                # V65.5: 增強重試邏輯 (根據使用者回饋調整)
-                max_retries, retry_delay = 20, 2
+                max_retries, retry_delay = 20, 2; url = None
                 for attempt in range(max_retries):
                     try:
-                        log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
                         url = colab_output.eval_js(f'google.colab.kernel.proxyPort({server_manager.port})')
-                        if url and url.strip():
-                            shared_stats['proxy_url'] = url
-                            log_manager.log("SUCCESS", f"✅ 成功取得代理連結！埠號: {server_manager.port}")
-                            break # 成功，跳出迴圈
-                    except Exception as e:
-                        log_manager.log("WARN", f"嘗試失敗: {e}")
+                        if url and url.strip(): shared_stats['proxy_url'] = url; break
+                    except Exception: time.sleep(retry_delay)
 
-                    if not shared_stats.get('proxy_url'):
-                        log_manager.log("INFO", f"將於 {retry_delay} 秒後重試...")
-                        time.sleep(retry_delay)
+                if shared_stats.get('proxy_url'):
+                    # **核心變更點**
+                    # 1. 停止動態儀表板
+                    display_manager.stop()
+                    # 2. 清理螢幕，準備輸出最終靜態面板
+                    clear_output(wait=True)
+                    log_manager.log("SUCCESS", f"✅ 成功取得 Web UI 代理連結！")
 
-                if not shared_stats.get('proxy_url'):
+                    # 3. 建立並顯示最終的靜態 HTML 操作面板
+                    from IPython.display import display, HTML
+
+                    # 準備日誌下載連結 (此功能將在階段二完成)
+                    log_download_url = f"{shared_stats['proxy_url']}api/logs/export"
+
+                    html_content = f"""
+                    <style>
+                        .phoenix-panel {{
+                            border: 2px solid #4CAF50; padding: 16px; border-radius: 8px;
+                            background-color: #f0fff0; font-family: 'Roboto', sans-serif;
+                        }}
+                        .phoenix-panel h2 {{ color: #2E7D32; }}
+                        .phoenix-panel a {{
+                            background-color: #4CAF50; color: white; padding: 10px 15px;
+                            text-decoration: none; border-radius: 5px; font-weight: bold;
+                            display: inline-block; margin-right: 10px;
+                        }}
+                        .phoenix-panel a:hover {{ background-color: #45a049; }}
+                    </style>
+                    <div class="phoenix-panel">
+                        <h2>🐦‍🔥 鳳凰之心 V66 - 系統已就緒 🐦‍🔥</h2>
+                        <p>後端核心服務已成功啟動。您可以開始使用 Web UI。</p>
+                        <p>
+                            <a href="{shared_stats['proxy_url']}" target="_blank">🚀 前往 Web UI 操作介面</a>
+                            <a href="{log_download_url}" target="_blank" download="phoenix_runtime_log.txt">📋 下載本次執行的完整日誌</a>
+                        </p>
+                        <p>
+                            <small>
+                                <strong>請注意：</strong>背景正在繼續安裝大型功能性套件 (如 Whisper 模型相關)，
+                                在安裝完成前，部分功能 (如本地轉錄) 可能無法使用。
+                                安裝進度將會即時顯示在此儲存格的下方。
+                            </small>
+                        </p>
+                    </div>
+                    """
+                    display(HTML(html_content))
+                    print("\n" + "="*50)
+                    print("⬇️ 背景依賴安裝日誌將顯示於此處 ⬇️")
+                    print("="*50 + "\n")
+
+                else:
                     shared_stats['status'] = "❌ 取得代理連結失敗"
                     log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
+        # 讓主執行緒等待，直到伺服器執行緒結束 (例如被使用者中斷)
         while server_manager._thread.is_alive(): time.sleep(1)
+
     except KeyboardInterrupt:
         if log_manager: log_manager.log("WARN", "🛑 偵測到使用者手動中斷...")
     except Exception as e:
         if log_manager: log_manager.log("CRITICAL", f"❌ 發生未預期的致命錯誤: {e}")
         else: print(f"❌ 發生未預期的致命錯誤: {e}")
     finally:
+        # 顯示管理器已經在成功時被停止，這裡的呼叫是為了處理失敗或中斷的情況
         if display_manager and display_manager._thread.is_alive(): display_manager.stop()
         if server_manager: server_manager.stop()
         end_time = datetime.now(pytz.timezone(TIMEZONE))
-        if log_manager and display_manager:
-            clear_output(); print("\n".join(display_manager._build_output_buffer()))
+
+        # 移除舊的不穩定 JS 按鈕，只保留歸檔功能
+        if log_manager:
             print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
-            from IPython.display import display, HTML
-            import json
-            full_log_history = log_manager.get_full_history()
-            js_screen = json.dumps("\n".join(display_manager._build_output_buffer()))
-            js_logs = json.dumps("\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history]))
-            display(HTML(f"""<script>function copyToClipboard(text) {{navigator.clipboard.writeText(text);}}</script>
-                <button onclick='copyToClipboard({js_screen})'>📋 複製上方儲存格輸出</button>
-                <button onclick='copyToClipboard({js_logs})'>📄 複製完整詳細日誌</button>"""))
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
 if __name__ == "__main__":

@@ -142,6 +142,12 @@ class DBClient:
         """
         return self._send_request("find_dependent_task", {"parent_task_id": parent_task_id})
 
+    def get_all_system_logs(self) -> list[dict]:
+        """
+        從資料庫獲取所有系統日誌，用於完整匯出。
+        """
+        return self._send_request("get_all_system_logs")
+
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
 

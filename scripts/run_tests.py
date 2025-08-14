@@ -98,7 +98,7 @@ def main():
     exit_code = 1 # 預設結束代碼為 1 (失敗)
     try:
         import requests
-        import pytest
+        from pytest import ExitCode
 
         log.info("--- 正在動態生成 circus.ini 設定檔 ---")
         template_path = Path("config/circus.ini.template")
@@ -147,11 +147,17 @@ def main():
                 pytest_args.insert(0, arg)
 
         log.info(f"傳遞給 pytest 的參數: {pytest_args}")
-        # 使用 pytest.ExitCode.OK 來進行比較，更具可讀性
-        exit_code = pytest.main(pytest_args)
+
+        # JULES'S FIX (2025-08-14): 使用子程序呼叫 pytest
+        # 透過 subprocess 呼叫 pytest，可以確保它在一個獨立的、乾淨的環境中執行，
+        # 就像在命令列中直接執行一樣。這能更好地利用 `pip install -e .`
+        # 所建立的可編輯安裝路徑，從而解決 'ModuleNotFoundError' 的問題。
+        pytest_cmd = [sys.executable, "-m", "pytest"] + pytest_args
+        result = subprocess.run(pytest_cmd)
+        exit_code = result.returncode
 
         # Pytest 的一些結束代碼 (如 5) 表示沒有收集到測試，這在某些情況下是正常的
-        if exit_code not in [pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED]:
+        if exit_code not in [ExitCode.OK, ExitCode.NO_TESTS_COLLECTED]:
             log.error(f"Pytest 以結束代碼 {exit_code} 結束，表示有測試失敗。")
         else:
             log.info("✅ 所有測試皆通過。")
