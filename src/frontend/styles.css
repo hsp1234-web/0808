@@ -1,3 +1,37 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* JULES: Add custom styles from damo.html for the new dashboard */
+:root {
+    --status-green: #28a745;
+    --status-yellow: #ffc107;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.stat-item {
+    font-size: 0.9em;
+}
+
+.status-light {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.status-green {
+    background-color: var(--status-green);
+    box-shadow: 0 0 6px var(--status-green);
+}
+
+.status-yellow {
+    background-color: var(--status-yellow);
+    box-shadow: 0 0 6px var(--status-yellow);
+}

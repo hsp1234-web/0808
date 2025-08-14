@@ -127,39 +127,44 @@ def run_server():
     """
     啟動資料庫管理者伺服器。
     """
-    # 在伺服器啟動前，先主動清理任何可能存在的舊 port 檔案，確保一致性
+    db_ready_file = Path(__file__).parent / "db.ready"
+
+    # 在伺服器啟動前，先主動清理任何可能存在的舊 port 和 ready 檔案
     port_file = Path(__file__).parent / "db_manager.port"
-    if port_file.exists():
-        try:
-            port_file.unlink()
-            log.info(f"已成功移除舊的埠號檔案: {port_file}")
-        except OSError as e:
-            # 即便移除失敗，也只記錄錯誤，不中斷啟動流程
-            log.error(f"無法移除舊的埠號檔案: {e}", exc_info=True)
+    for f in [port_file, db_ready_file]:
+        if f.exists():
+            try:
+                f.unlink()
+                log.info(f"已成功移除舊的狀態檔案: {f}")
+            except OSError as e:
+                log.error(f"無法移除舊的狀態檔案 {f}: {e}", exc_info=True)
 
     # 這是整個系統中，唯一應該呼叫 `initialize_database` 的地方
     try:
         log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
         database.initialize_database()
         log.info("✅ 資料庫初始化成功。")
-    except sqlite3.Error as e:
-        log.critical(f"❌ 資料庫初始化失敗，伺服器無法啟動: {e}")
-        # 在這種嚴重錯誤下，我們應該讓程序以非零代碼退出
+        # JULES'S FIX: Create a ready file as a synchronization signal
+        db_ready_file.touch()
+        log.info(f"✅ 已建立資料庫就緒信號檔案: {db_ready_file}")
+    except (sqlite3.Error, OSError) as e:
+        log.critical(f"❌ 資料庫初始化或就緒信號建立失敗，伺服器無法啟動: {e}")
         sys.exit(1)
 
     # 建立 TCP 伺服器
-    # 讓 server 在程式結束後可以立即重用同一個位址
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
-        # 獲取實際綁定的埠號
         actual_port = server.server_address[1]
         log.info(f"🚀 資料庫管理者伺服器已在 {HOST}:{actual_port} 上啟動...")
 
         try:
-            # 啟動伺服器，它將一直運行直到被中斷 (例如 Ctrl+C)
             server.serve_forever()
         finally:
-            log.info("伺服器已關閉。")
+            log.info("伺服器正在關閉...")
+            # JULES'S FIX: Clean up the ready file on shutdown
+            if db_ready_file.exists():
+                db_ready_file.unlink()
+                log.info(f"已清理資料庫就緒信號檔案: {db_ready_file}")
 
 
 if __name__ == "__main__":

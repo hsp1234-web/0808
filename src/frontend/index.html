@@ -18,10 +18,22 @@
             <p id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></p>
         </div>
 
-        <!-- 全域儀表板 (簡化) -->
+        <!-- 全域儀表板 -->
         <div class="card">
             <h2>📊 全域儀表板</h2>
-            <div><strong>模型:</strong> <span id="model-display">medium</span></div>
+            <div class="dashboard-grid">
+                <div class="stat-item">
+                    <span id="status-light" class="status-light status-green"></span>
+                    <strong>狀態:</strong> <span id="status-text">準備就緒</span>
+                </div>
+                <div class="stat-item"><strong>模型:</strong> <span id="model-display">medium</span></div>
+                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">未偵測到</span></div>
+            </div>
+            <div class="dashboard-grid" style="margin-top: 16px;">
+                 <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
+                 <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
+                 <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+            </div>
         </div>
 
         <!-- 功能分頁導覽 -->

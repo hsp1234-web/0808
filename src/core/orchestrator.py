@@ -46,6 +46,10 @@ def setup_database_logging():
     except Exception as e:
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
+# JULES'S FIX: The db_client was being initialized at the module level, creating a race condition.
+# It will now be initialized inside main() after the DB is confirmed ready.
+db_client = None
+
 def stream_reader(stream, prefix):
     """一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。"""
     for line in iter(stream.readline, ''):
@@ -170,16 +174,23 @@ def main():
         if not wait_for_service(db_manager_port):
             raise RuntimeError(f"DB Manager 服務在埠號 {db_manager_port} 上未能及時就緒，啟動中止。")
 
-        log.info("✅ 資料庫管理者服務已完全就緒。")
+        # JULES'S FIX (Attempt 3): Wait for the db.ready signal file.
+        db_ready_file = ROOT_DIR / "src" / "db" / "db.ready"
+        ready_timeout = time.time() + 10 # 10 second timeout for ready file
+        while not db_ready_file.exists():
+            if time.time() > ready_timeout:
+                raise RuntimeError("DB Manager port is open, but the ready signal file was not created in time.")
+            time.sleep(0.1)
 
-        # --- JULES' FIX START ---
-        # 修復：在 DB Manager 就緒後，再設定資料庫日誌，以避免 race condition
+        log.info("✅ 資料庫管理者服務已完全就緒 (Port and Ready File confirmed)。")
+
+        # Now that the DB is truly ready, set up logging.
         setup_database_logging()
         log.info("Orchestrator's database logging is now configured.")
-        # --- JULES' FIX END ---
 
         # 2. 獲取資料庫客戶端
-        # 此時，我們已確認服務就緒，get_client() 應能立即成功
+        # JULES'S FIX: Initialize the client here, now that the DB is guaranteed to be ready.
+        global db_client
         db_client = get_client()
 
         # 3. 根據參數決定埠號並啟動 API 伺服器

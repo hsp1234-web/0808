@@ -19,7 +19,16 @@ class App {
         this.fileBrowserContainer = document.getElementById('file-browser-container');
         this.statusMessageArea = document.getElementById('status-message-area');
         this.statusMessageText = document.getElementById('status-message-text');
+
+        // JULES: Get new dashboard elements
         this.modelDisplay = document.getElementById('model-display');
+        this.statusLight = document.getElementById('status-light');
+        this.statusText = document.getElementById('status-text');
+        this.gpuDisplay = document.getElementById('gpu-display');
+        this.cpuLabel = document.getElementById('cpu-label');
+        this.ramLabel = document.getElementById('ram-label');
+        this.gpuLabel = document.getElementById('gpu-label');
+
 
         // 服務與狀態
         this.socket = null;
@@ -36,6 +45,8 @@ class App {
         this.socket.onopen = () => {
             console.log('WebSocket 連線成功');
             this.logAction('websocket-connect-success');
+            if (this.statusText) this.statusText.textContent = '已連線';
+            if (this.statusLight) this.statusLight.className = 'status-light status-green';
         };
 
         this.socket.onmessage = (event) => this.handleWebSocketMessage(JSON.parse(event.data));
@@ -43,12 +54,15 @@ class App {
         this.socket.onclose = () => {
             console.log('WebSocket 連線已關閉，正在嘗試重新連線...');
             this.logAction('websocket-connect-close');
+            if (this.statusText) this.statusText.textContent = '已離線';
+            if (this.statusLight) this.statusLight.className = 'status-light status-yellow';
             setTimeout(() => this.setupWebSocket(), 3000);
         };
 
         this.socket.onerror = (error) => {
             console.error('WebSocket 發生錯誤:', error);
             this.logAction('websocket-connect-error');
+            if (this.statusText) this.statusText.textContent = '連線錯誤';
         };
     }
 
@@ -195,6 +209,25 @@ class App {
     }
 
     /**
+     * 從 API 獲取系統統計數據並更新儀表板。
+     */
+    async updateSystemStats() {
+        try {
+            const response = await fetch('/api/system_stats');
+            if (!response.ok) return;
+            const stats = await response.json();
+
+            if (this.cpuLabel) this.cpuLabel.textContent = `${stats.cpu_usage.toFixed(1)}%`;
+            if (this.ramLabel) this.ramLabel.textContent = `${stats.ram_usage.toFixed(1)}%`;
+            if (this.gpuDisplay) this.gpuDisplay.textContent = stats.gpu_detected ? '已偵測到' : '未偵測到';
+            if (this.gpuLabel) this.gpuLabel.textContent = stats.gpu_detected ? `${stats.gpu_usage.toFixed(1)}%` : '--%';
+
+        } catch (error) {
+            console.error("無法更新系統統計數據:", error);
+        }
+    }
+
+    /**
      * 啟動應用程式。
      */
     init() {
@@ -202,6 +235,10 @@ class App {
         this.setupWebSocket();
         this.initComponents();
         this.setupTabSwitching();
+
+        // JULES: Periodically update system stats
+        this.updateSystemStats();
+        setInterval(() => this.updateSystemStats(), 2000);
     }
 }
 
@@ -209,4 +246,6 @@ class App {
 document.addEventListener('DOMContentLoaded', () => {
     const app = new App();
     app.init();
+    // JULES'S DEBUGGING: Expose app to the window for E2E testing.
+    window.app = app;
 });

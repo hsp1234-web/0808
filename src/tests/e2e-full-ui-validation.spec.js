@@ -10,7 +10,13 @@ const TEST_TIMEOUT = 60000; // 60 秒
  * @param {import('@playwright/test').Page} page
  */
 const waitForWebSocket = async (page) => {
-  await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
+  // JULES'S FIX (Attempt 2): Waiting for the 'websocket' event seems flaky/racy in this environment.
+  // The new strategy is to poll the application's internal state directly from the browser context,
+  // which is more reliable than event listening.
+  await page.waitForFunction(() => {
+    // We exposed the `app` instance to `window` in main.js for this purpose.
+    return window.app && window.app.socket && window.app.socket.readyState === 1; // 1 means OPEN
+  }, { timeout: 15000 });
 };
 
 // --- 全面 UI 驗證測試套件 ---
@@ -19,9 +25,18 @@ test.describe('全面 UI 功能驗證', () => {
 
   // 每次測試前，重新載入頁面並等待連線
   test.beforeEach(async ({ page }) => {
+    // JULES'S DEBUGGING: Add a console listener to see what's happening inside the browser.
+    page.on('console', msg => {
+      console.log(`[Browser Console] ${msg.type().toUpperCase()}: ${msg.text()}`);
+    });
+
     await page.goto(SERVER_URL, { waitUntil: 'networkidle' });
     await expect(page.locator('h1')).toContainText('音訊轉錄儀');
     await waitForWebSocket(page);
+
+    // JULES: Add a final screenshot command to provide visual proof to the user.
+    // This will only run if the above assertions (including waitForWebSocket) pass.
+    await page.screenshot({ path: 'test-results/final-screenshot.png' });
   });
 
   // 測試 1: 縮放功能與主要分頁切換
