@@ -2,6 +2,7 @@ import { FileBrowser } from './components/FileBrowser.js';
 import { TaskList } from './components/TaskList.js';
 import { LocalTranscriber } from './components/LocalTranscriber.js';
 import { MediaDownloader } from './components/MediaDownloader.js';
+import { YouTubeReporter } from './components/YouTubeReporter.js';
 
 /**
  * 主應用程式類別
@@ -13,6 +14,7 @@ class App {
         // DOM 元素
         this.localTranscriberContainer = document.getElementById('local-file-tab');
         this.mediaDownloaderContainer = document.getElementById('downloader-tab');
+        this.youtubeReporterContainer = document.getElementById('youtube-report-tab');
         this.tasklistContainer = document.getElementById('task-list-container');
         this.fileBrowserContainer = document.getElementById('file-browser-container');
         this.statusMessageArea = document.getElementById('status-message-area');
@@ -166,6 +168,12 @@ class App {
         if (this.mediaDownloaderContainer) {
             this.mediaDownloader = new MediaDownloader(this.mediaDownloaderContainer, services);
             this.mediaDownloader.init();
+        }
+
+        // 初始化 YouTubeReporter
+        if (this.youtubeReporterContainer) {
+            this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
+            this.youtubeReporter.init();
         }
 
         // 初始化 TaskList
