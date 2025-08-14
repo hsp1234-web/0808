@@ -1,3 +1,4 @@
+import { apiService } from './ApiService.js';
 import { FileBrowser } from './components/FileBrowser.js';
 import { TaskList } from './components/TaskList.js';
 import { LocalTranscriber } from './components/LocalTranscriber.js';
@@ -147,15 +148,41 @@ class App {
      * 初始化所有組件。
      */
     initComponents() {
+        // 核心服務優先初始化
+        const boundShowStatusMessage = this.showStatusMessage.bind(this);
+        const api = apiService; // 使用匯入的單例
+
+        // TaskList 現在也成為一個核心服務
+        if (this.tasklistContainer) {
+            const taskListServices = {
+                api: api,
+                socket: this.socket,
+                showStatusMessage: boundShowStatusMessage,
+                logAction: this.logAction.bind(this),
+                openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`),
+            };
+            this.taskList = new TaskList(this.tasklistContainer, taskListServices);
+            this.taskList.init();
+        } else {
+            // 如果 TaskList 無法初始化，這是一個嚴重問題，因為其他組件依賴它
+            console.error("無法初始化 TaskList，部分功能將無法運作。");
+            // 提供一個假的 taskList 來避免應用程式完全崩潰
+            this.taskList = { startTask: () => console.error("TaskList 未初始化!") };
+        }
+
+        // 建立一個通用的服務包給其他組件
         const services = {
+            api: api,
             socket: this.socket,
-            showStatusMessage: this.showStatusMessage.bind(this),
+            showStatusMessage: boundShowStatusMessage,
             logAction: this.logAction.bind(this),
             updateModelDisplay: (modelName) => {
                 if (this.modelDisplay) this.modelDisplay.textContent = modelName;
             },
             // 傳入 App 實例，以便組件間可以互相呼叫
             app: this,
+            // 傳入 TaskList 的實例，這是關鍵的修復
+            taskManager: this.taskList,
         };
 
         // 初始化 LocalTranscriber
@@ -170,21 +197,10 @@ class App {
             this.mediaDownloader.init();
         }
 
-        // 初始化 YouTubeReporter
+        // 初始化 YouTubeReporter，現在它能獲得所有需要的依賴
         if (this.youtubeReporterContainer) {
             this.youtubeReporter = new YouTubeReporter(this.youtubeReporterContainer, services);
             this.youtubeReporter.init();
-        }
-
-        // 初始化 TaskList
-        if (this.tasklistContainer) {
-            // TaskList 需要一個開啟預覽彈窗的函式
-            const taskListServices = {
-                ...services,
-                openPreviewModal: (url, name, type, id) => alert(`預覽功能待實現: ${name}`),
-            };
-            this.taskList = new TaskList(this.tasklistContainer, taskListServices);
-            this.taskList.init();
         }
 
         // 初始化 FileBrowser
