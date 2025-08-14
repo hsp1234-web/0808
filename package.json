@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build ./src/frontend/main.js --outdir ./src/static/dist",
-    "watch": "bun build ./src/frontend/main.js --outdir ./src/static/dist --watch"
+    "build": "bun build ./src/frontend/main.js ./src/frontend/components/*.js --outdir ./src/static/dist --outfile ./src/static/dist/main.js",
+    "watch": "bun build ./src/frontend/main.js ./src/frontend/components/*.js --outdir ./src/static/dist --outfile ./src/static/dist/main.js --watch"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
