@@ -680,7 +680,10 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // JULES'S NEW FEATURE: Load state from backend as the first step
+            await loadState();
+
             // --- 全域狀態訊息處理 ---
             const statusMessageArea = document.getElementById('status-message-area');
             const statusMessageText = document.getElementById('status-message-text');
@@ -802,6 +805,95 @@
             const modelStatus = {};
             let currentFontSize = 100;
             let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
+
+            // --- JULES'S NEW FEATURE: Backend-driven App State Management ---
+            let appState = {
+                whisperModel: 'medium',
+                whisperLanguage: 'zh',
+                whisperBeamSize: 1,
+                downloaderUrls: '',
+                youtubeLinks: [],
+                activeTab: 'local-file-tab',
+                fontSize: 100
+            };
+
+            let saveTimeout;
+            const saveState = () => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(async () => {
+                    try {
+                        const response = await fetch('/api/app_state', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(appState)
+                        });
+                        if (!response.ok) throw new Error('儲存狀態時伺服器回傳錯誤');
+                        logAction('save-app-state-success');
+                    } catch (error) {
+                        console.error('無法儲存應用程式狀態:', error);
+                        showStatusMessage('無法儲存您的設定，請檢查連線。', true, 3000);
+                    }
+                }, 500); // Debounce by 500ms
+            };
+
+            const applyStateToUI = () => {
+                // 1. Whisper 設定
+                if (modelSelect.querySelector(`option[value="${appState.whisperModel}"]`)) {
+                    modelSelect.value = appState.whisperModel;
+                }
+                modelDisplay.textContent = modelSelect.value;
+                 if (languageSelect.querySelector(`option[value="${appState.whisperLanguage}"]`)) {
+                    languageSelect.value = appState.whisperLanguage;
+                }
+                beamSizeInput.value = appState.whisperBeamSize;
+
+                // 2. 媒體下載器
+                downloaderUrlsInput.value = appState.downloaderUrls;
+
+                // 3. YouTube 轉報告
+                if (Array.isArray(appState.youtubeLinks) && appState.youtubeLinks.length > 0) {
+                    const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
+                    if (firstRow) {
+                        firstRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[0].url || '';
+                        firstRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[0].filename || '';
+                        for (let i = 1; i < appState.youtubeLinks.length; i++) {
+                            const newRow = firstRow.cloneNode(true);
+                            newRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[i].url || '';
+                            newRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[i].filename || '';
+                            youtubeLinkList.appendChild(newRow);
+                        }
+                    }
+                }
+
+                // 4. 使用者介面狀態 (分頁)
+                const tabToActivate = document.querySelector(`.tab-button[data-tab="${appState.activeTab}"]`);
+                if (tabToActivate) {
+                    tabToActivate.click();
+                }
+
+                // 5. 使用者介面狀態 (字體大小)
+                currentFontSize = appState.fontSize || 100;
+                updateFontSize();
+            };
+
+            const loadState = async () => {
+                try {
+                    const response = await fetch('/api/app_state');
+                    if (!response.ok) throw new Error('無法從伺服器獲取狀態');
+                    const savedState = await response.json();
+                    if (savedState && typeof savedState === 'object' && Object.keys(savedState).length > 0) {
+                        Object.assign(appState, savedState);
+                        logAction('load-app-state-success');
+                    } else {
+                        logAction('load-app-state-default');
+                    }
+                    applyStateToUI();
+                } catch (error) {
+                    console.error('無法載入應用程式狀態:', error);
+                    showStatusMessage('無法載入您先前的設定，將使用預設值。', true, 5000);
+                    applyStateToUI(); // 即使載入失敗，也套用預設值
+                }
+            };
 
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
@@ -1539,6 +1631,7 @@
             const initializeYouTubeTab = () => {
                 logAction('initialize-youtube-tab');
 
+                // This function is now only for adding new, empty rows
                 const addNewYoutubeRow = () => {
                     logAction('click-add-youtube-row');
                     const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
@@ -1549,15 +1642,29 @@
                     youtubeLinkList.appendChild(newRow);
                 };
 
+                const updateAndSaveYoutubeLinks = () => {
+                    const rows = youtubeLinkList.querySelectorAll('.youtube-link-row');
+                    const links = Array.from(rows).map(row => ({
+                        url: row.querySelector('.youtube-url-input').value.trim(),
+                        filename: row.querySelector('.youtube-filename-input').value.trim()
+                    }));
+                    appState.youtubeLinks = links;
+                    saveState();
+                };
+
                 const sanitizeFilename = (filename) => filename.replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
 
-                addYoutubeRowBtn.addEventListener('click', addNewYoutubeRow);
+                addYoutubeRowBtn.addEventListener('click', () => {
+                    addNewYoutubeRow();
+                    updateAndSaveYoutubeLinks();
+                });
 
                 youtubeLinkList.addEventListener('click', (e) => {
                     if (e.target && e.target.classList.contains('remove-youtube-row-btn')) {
                         logAction('click-remove-youtube-row');
                         if (youtubeLinkList.querySelectorAll('.youtube-link-row').length > 1) {
                             e.target.closest('.youtube-link-row').remove();
+                            updateAndSaveYoutubeLinks();
                         } else {
                             showStatusMessage('至少需要保留一列。', true, 3000);
                         }
@@ -1568,8 +1675,12 @@
                     if (e.target && e.target.classList.contains('youtube-filename-input')) {
                         e.target.value = sanitizeFilename(e.target.value);
                     }
+                    if (e.target.classList.contains('youtube-url-input') || e.target.classList.contains('youtube-filename-input')) {
+                        updateAndSaveYoutubeLinks();
+                    }
                 });
 
+                // NOTE: API Key is still stored in localStorage as it's sensitive and shouldn't be part of the general app state blob.
                 saveApiKeyBtn.addEventListener('click', () => {
                     const apiKey = apiKeyInput.value.trim();
                     logAction('click-save-api-key');
@@ -1880,6 +1991,10 @@
                     if (transcriptContainer) {
                         transcriptContainer.style.display = (tabId === 'youtube-report-tab') ? 'none' : 'block';
                     }
+
+                    // JULES'S NEW FEATURE: Save active tab to state
+                    appState.activeTab = tabId;
+                    saveState();
                 });
             });
 
@@ -2003,6 +2118,8 @@
                 if (currentFontSize < 150) { // 設定最大縮放
                     currentFontSize += 10;
                     updateFontSize();
+                    appState.fontSize = currentFontSize;
+                    saveState();
                 }
             });
 
@@ -2011,14 +2128,39 @@
                  if (currentFontSize > 70) { // 設定最小縮放
                     currentFontSize -= 10;
                     updateFontSize();
+                    appState.fontSize = currentFontSize;
+                    saveState();
                 }
             });
 
             // --- 其他 UI 事件記錄 ---
             timestampToggle.addEventListener('change', (e) => logAction('toggle-timestamp', e.target.checked));
-            modelSelect.addEventListener('change', (e) => logAction('change-model-select', e.target.value));
-            languageSelect.addEventListener('change', (e) => logAction('change-language-select', e.target.value));
-            beamSizeInput.addEventListener('change', (e) => logAction('change-beam-size', e.target.value));
+
+            modelSelect.addEventListener('change', (e) => {
+                const model = e.target.value;
+                logAction('change-model-select', model);
+                modelDisplay.textContent = model;
+                appState.whisperModel = model;
+                saveState();
+            });
+            languageSelect.addEventListener('change', (e) => {
+                const lang = e.target.value;
+                logAction('change-language-select', lang);
+                appState.whisperLanguage = lang;
+                saveState();
+            });
+            beamSizeInput.addEventListener('change', (e) => {
+                const size = e.target.value;
+                logAction('change-beam-size', size);
+                appState.whisperBeamSize = size;
+                saveState();
+            });
+
+            downloaderUrlsInput.addEventListener('input', (e) => {
+                appState.downloaderUrls = e.target.value;
+                saveState();
+            });
+
             geminiModelSelect.addEventListener('change', (e) => logAction('change-gemini-model', e.target.value));
             audioFormatSelect.addEventListener('change', (e) => logAction('change-audio-format', e.target.value));
             videoQualitySelect.addEventListener('change', (e) => logAction('change-video-quality', e.target.value));
