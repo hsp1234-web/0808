@@ -26,50 +26,52 @@ export class LocalTranscriber {
      */
     render() {
         this.container.innerHTML = `
-            <div class="grid-2-col">
-                <div class="card flex-col">
-                    <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
-                    <div>
-                        <label for="model-select">模型大小</label>
-                        <select id="model-select">
-                            <option value="tiny" selected>Tiny (最快)</option>
-                            <option value="base">Base</option>
-                            <option value="small">Small</option>
-                            <option value="medium">Medium (建議)</option>
-                            <option value="large-v2">Large-v2 (準確)</option>
-                            <option value="large-v3">Large-v3 (最準確)</option>
-                        </select>
+            <div>
+                <div class="grid-2-col">
+                    <div class="card flex-col">
+                        <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
+                        <div>
+                            <label for="model-select">模型大小</label>
+                            <select id="model-select">
+                                <option value="tiny" selected>Tiny (最快)</option>
+                                <option value="base">Base</option>
+                                <option value="small">Small</option>
+                                <option value="medium">Medium (建議)</option>
+                                <option value="large-v2">Large-v2 (準確)</option>
+                                <option value="large-v3">Large-v3 (最準確)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="language-select">轉錄語言</label>
+                            <select id="language-select">
+                                <option value="zh">繁體中文</option>
+                                <option value="en">英文</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
+                            <input type="number" id="beam-size-input" value="1" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
+                        </div>
+                        <button id="confirm-settings-btn">✓ 確認設定</button>
+                        <!-- 模型下載進度條 -->
+                        <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
+                            <div id="model-progress-bar" class="progress-bar"></div>
+                            <span id="model-progress-text" class="progress-text"></span>
+                        </div>
                     </div>
-                    <div>
-                        <label for="language-select">轉錄語言</label>
-                        <select id="language-select">
-                            <option value="zh">繁體中文</option>
-                            <option value="en">英文</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
-                        <input type="number" id="beam-size-input" value="1" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
-                        <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
-                    </div>
-                    <button id="confirm-settings-btn">✓ 確認設定</button>
-                    <!-- 模型下載進度條 -->
-                    <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
-                        <div id="model-progress-bar" class="progress-bar"></div>
-                        <span id="model-progress-text" class="progress-text"></span>
+                    <div class="card flex-col">
+                        <h2>📤 步驟 2: 上傳檔案</h2>
+                        <label for="file-input" class="file-drop-zone">
+                            點擊此處選擇檔案
+                        </label>
+                        <input id="file-input" type="file" multiple class="hidden">
+                        <div id="file-list" style="min-height: 50px;"></div>
                     </div>
                 </div>
-                <div class="card flex-col">
-                    <h2>📤 步驟 2: 上傳檔案</h2>
-                    <label for="file-input" class="file-drop-zone">
-                        點擊此處選擇檔案
-                    </label>
-                    <input id="file-input" type="file" multiple class="hidden">
-                    <div id="file-list" style="min-height: 50px;"></div>
+                <div style="text-align: center; margin-top: 24px;">
+                    <button id="start-processing-btn" disabled>✨ 請先選擇檔案</button>
                 </div>
-            </div>
-            <div style="text-align: center; margin-top: 24px;">
-                <button id="start-processing-btn" disabled>✨ 請先選擇檔案</button>
             </div>
         `;
     }

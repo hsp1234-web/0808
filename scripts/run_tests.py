@@ -85,6 +85,14 @@ def main():
         db_file.unlink()
         log.info("✅ 舊資料庫已刪除。")
 
+    # 確保日誌目錄存在
+    log_dir = Path("logs")
+    if not log_dir.exists():
+        log.info(f"--- 正在建立日誌目錄 ({log_dir}) ---")
+        log_dir.mkdir()
+        log.info("✅ 日誌目錄已建立。")
+
+
     # 步驟 2: 在 try/finally 區塊中啟動服務，以確保它們總能被關閉
     circus_proc = None
     exit_code = 1 # 預設結束代碼為 1 (失敗)
