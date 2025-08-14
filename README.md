@@ -1,95 +1,76 @@
 # 鳳凰音訊轉錄儀 (Phoenix Transcriber)
 
-[![zh-Hant](https://img.shields.io/badge/language-繁體中文-blue.svg)](README.md)
+歡迎使用鳳凰音訊轉錄儀，一個強大的、網頁介面的音訊與視訊轉錄工具。本應用程式整合了後端處理、前端互動介面與自動化測試，旨在提供一個高效、易用的轉錄解決方案。
 
-這是一個高效、可擴展的音訊轉錄專案，旨在提供一個可以透過 Web 介面輕鬆操作的語音轉文字服務。專案近期已整合 **YouTube 影片處理與 AI 分析** 功能。
+## 主要技術棧
 
----
+*   **後端**: [FastAPI](https://fastapi.tiangolo.com/) (Python)
+*   **前端**: 原生 JavaScript, [Tailwind CSS](https://tailwindcss.com/)
+*   **打包與建置**: [Bun](https://bun.sh/)
+*   **測試**: [Playwright](https://playwright.dev/)
 
-## ⚡️ 如何啟動與測試
+## 專案結構
 
-我們提供兩種主要的執行方式：一個用於本地開發與端對端測試，另一個專為在 Google Colab 中部署而設計。
+本專案的核心邏輯位於 `src` 目錄下，整體結構如下：
 
-### 方式一：自動化後端整合測試 (`scripts/local_run.py`)
+```
+.
+├── src/
+│   ├── api/                # FastAPI 後端伺服器
+│   ├── core/               # 核心業務邏輯 (例如，任務協調器)
+│   ├── db/                 # 資料庫管理與客戶端
+│   ├── frontend/           # 前端原始碼 (HTML, JS, CSS)
+│   │   ├── components/     # 前端 JS 元件
+│   │   ├── index.html      # 主入口 HTML
+│   │   └── main.js         # 主入口 JavaScript
+│   ├── static/             # 靜態檔案
+│   │   └── dist/           # 打包後的前端資源 (由 build 產生)
+│   ├── tasks/              # 背景任務工作者
+│   ├── tests/              # 自動化測試 (包含 Playwright E2E 測試)
+│   └── tools/              # 外部工具的封裝 (例如，轉錄器、下載器)
+│
+├── scripts/                # 用於啟動、測試的實用腳本
+│   └── run_for_playwright.py # 啟動完整應用程式 (後端+前端) 的主要腳本
+│
+├── docs/                   # 專案文件
+│   └── ARCHITECTURE.md     # 架構說明文件
+│
+├── package.json            # Node.js 依賴與腳本
+├── requirements.txt        # Python 依賴
+└── tailwind.config.js      # Tailwind CSS 設定檔
+```
 
-`scripts/local_run.py` 是一個**自動化的整合測試腳本**，主要用於驗證後端的核心功能。它會啟動所有服務，提交一個測試任務，並在任務完成後自動關閉。
+## 如何運行應用程式
 
-**此方式適用於**：
-*   快速驗證後端修改是否引發問題。
-*   在 CI/CD 環境中進行自動化檢查。
+啟動本專案以進行開發或測試的最推薦方式是使用 `run_for_playwright.py` 腳本。這個腳本會自動處理所有必要的步驟。
 
-**如何使用**:
+在專案根目錄下執行以下指令：
+
 ```bash
-# 如果您有 Google API 金鑰，請將其設定在環境中以測試完整流程
-python scripts/local_run.py
+python3 scripts/run_for_playwright.py
 ```
-當腳本顯示「所有驗證均已通過！」或「任務正確地以 'failed' 狀態結束」（在沒有 API 金鑰的情況下）時，即表示後端功能運作正常。
 
-### 方式二：啟動後端服務 (用於 UI 測試或手動操作)
+此指令將會：
+1.  **安裝依賴**：安裝所有必要的 Python (`requirements.txt`) 和 Node.js (`package.json`) 依賴。
+2.  **建置前端**：執行 `bun run build` 來編譯 Tailwind CSS 和打包 JavaScript。
+3.  **清理環境**：刪除舊的日誌和資料庫檔案，確保一個乾淨的啟動環境。
+4.  **啟動服務**：依序啟動資料庫管理器和 FastAPI 後端伺服器。
 
-如果您需要一個**持續運行的後端服務**來進行前端開發、手動測試或執行 Playwright UI 測試，請使用 `circus` 直接啟動服務。
+當您在終端機看到 `✅✅✅ API 伺服器已就緒！ ✅✅✅` 的訊息時，表示應用程式已成功啟動。
 
-**此方式適用於**：
-*   本地端開啟 `src/static/mp3.html` 進行手動功能測試。
-*   執行 Playwright 端對端 UI 測試。
+預設情況下，您可以透過瀏覽器訪問 `http://127.0.0.1:42649` 來使用此應用程式。
 
-**如何使用**:
-```bash
-# (首次執行前) 確保 logs 目錄存在
-mkdir -p logs
+## 前端開發
 
-# 啟動所有後端服務
-python -m circus.circusd config/circus.ini
+如果您需要專注於前端開發，可以使用 `package.json` 中定義的腳本：
 
-# 完成測試後，可使用以下指令關閉服務
-python -m circus.circusctl quit
-```
-服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。
+*   **建置所有資源**:
+    ```bash
+    bun run build
+    ```
+*   **僅監控 JavaScript 變動並自動打包**:
+    ```bash
+    bun run watch
+    ```
 
-### 方式三：在 Google Colab 中部署 (`scripts/colab.py`)
-
-`scripts/colab.py` 是專為在 Google Colab 環境中一鍵部署和運行本專案而設計的啟動器。它會處理 Git 倉庫的複製、環境設定，並利用 Colab 的代理功能生成一個公開的訪問連結。
-
-**如何使用**:
-1.  在 Google Colab 中開啟一個新的筆記本。
-2.  將 `colab.py` 的完整程式碼複製並貼到 Colab 的儲存格中。
-3.  根據您的需求修改儲存格頂部的參數（例如，`TARGET_BRANCH_OR_TAG`）。
-4.  執行該儲存格。儀表板將會顯示，並在伺服器就緒後提供一個 `ngrok` 或類似的代理連結供您訪問。
-
----
-
-## 📈 專案狀態
-
-**核心功能與測試 - ✅ 已完成**
-
-*   [x] **架構重構**：已完成穩定的多程序架構（協調器、資料庫管理器、API 伺服器）。
-*   [x] **功能完整**：本地檔案轉錄與 YouTube 影片處理功能均已完整實現。
-*   [x] **測試穩定**：`local_run.py` 後端整合測試運作正常。前端 UI 測試採用 Playwright (`/tests` 目錄下的 `.spec.js` 檔案)，可有效驗證 `mp3.html` 的各項功能。
-
----
-## 📁 檔案結構 (新版)
-
-```
-hsp1234-web/
-├── .github/              # CI/CD 工作流程
-├── .vscode/              # VS Code 編輯器設定
-├── build/                # 建置後的產出物
-├── config/               # 所有環境設定檔 (circus.ini)
-├── docs/                 # 專案文件
-├── logs/                 # 執行時產生的日誌檔案
-├── scripts/              # 各類輔助腳本 (部署、測試啟動器)
-├── src/                  # 主要應用程式原始碼
-│   ├── api/              # API 伺服器 (api_server.py)
-│   ├── core/             # 核心商業邏輯 (orchestrator.py)
-│   ├── db/               # 資料庫相關模組
-│   ├── static/           # 靜態檔案 (HTML, CSS, 前端 JS)
-│   ├── tasks/            # 背景任務/Worker (worker.py)
-│   ├── tests/            # 所有測試檔案 (單元測試、E2E 測試)
-│   └── tools/            # 專案使用的工具模組
-├── .gitignore            # Git 忽略清單
-├── package.json          # Node.js 專案依賴
-├── playwright.config.js  # Playwright E2E 測試設定
-├── pyproject.toml        # Python 專案設定
-├── requirements.txt      # Python 專案依賴
-└── README.md             # 專案主說明文件
-```
+**注意**: 這些指令只會處理前端資源的打包，您仍需另外啟動後端伺服器來查看完整的應用程式。因此，在大多數情況下，直接使用 `scripts/run_for_playwright.py` 是更方便的選擇。
