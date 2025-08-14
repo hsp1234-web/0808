@@ -5,49 +5,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音訊轉錄儀 (重構版)</title>
     <style>
-        /* Basic styles from mp3.html needed for components to render correctly */
+        /* --- Basic styles from mp3.html needed for components to render correctly --- */
         :root {
             --bg-color: #F8F9FA; --text-color: #202124; --card-bg-color: rgba(255, 255, 255, 0.85);
             --card-border-color: #e0e0e0; --button-bg-color: #007bff; --button-hover-bg-color: #0056b3;
-            --success-color: #28a745; --status-yellow: #ffc107;
+            --disabled-bg-color: #ccc; --progress-bar-bg: #e9ecef; --success-color: #28a745;
+            --status-green: #28a745; --status-yellow: #ffc107;
         }
-        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; font-size: 100%; line-height: 1.5; }
         .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; gap: 24px; }
-        .card { border: 1px solid var(--card-border-color); border-radius: 12px; padding: 24px; background-color: var(--card-bg-color); }
+        .card { border: 1px solid var(--card-border-color); border-radius: 12px; padding: 24px; background-color: var(--card-bg-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .grid-2-col { display: grid; grid-template-columns: 1fr; gap: 24px; }
         @media (min-width: 768px) { .grid-2-col { grid-template-columns: 1fr 1fr; } }
-        h1 { font-size: 1.8em; }
-        h2 { font-size: 1.3em; font-weight: 600; }
+        .flex-col { display: flex; flex-direction: column; gap: 16px; }
+        h1 { font-size: 1.8em; font-weight: 700; }
+        h2 { font-size: 1.3em; font-weight: 600; margin-bottom: 12px; }
+        .hidden { display: none; }
+        button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background-color: var(--button-bg-color); color: white; font-weight: 500; transition: all 0.2s; }
+        button:hover:not(:disabled) { background-color: var(--button-hover-bg-color); }
+        button:disabled { background-color: var(--disabled-bg-color); cursor: not-allowed; }
+        select, input[type="text"], input[type="number"], textarea { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
+        .file-drop-zone { border: 2px dashed #ccc; border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; transition: background-color 0.2s, border-color 0.2s; }
+        .file-drop-zone:hover { background-color: #f0f8ff; border-color: var(--button-bg-color); }
+        .progress-container { width: 100%; background-color: var(--progress-bar-bg); border-radius: 8px; overflow: hidden; position: relative; height: 28px; display: flex; align-items: center; }
+        .progress-bar { height: 100%; width: 0%; background-color: var(--button-bg-color); transition: width 0.2s ease-in-out; }
+        .progress-text { position: absolute; width: 100%; text-align: center; color: var(--text-color); font-weight: 600; line-height: 28px; }
         .task-list { min-height: 60px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
         .task-item { padding: 12px; border-radius: 8px; background-color: #f9f9f9; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
         .task-filename { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px; }
-        .task-status { font-size: 0.9em; font-weight: 500; color: #666; }
-        .task-status.status-downloading { color: #007bff; }
-        .task-status.status-processing { color: #fd7e14; }
-        .task-status.status-completed { color: #28a745; }
-        .task-status.status-failed { color: #dc3545; font-weight: bold; }
-        .task-actions { display: flex; gap: 8px; }
-        .task-actions a { text-decoration: none; padding: 5px 12px; border-radius: 6px; color: white; font-size: 0.9em; display: inline-block; border: none; }
-        .btn-preview { background-color: var(--button-bg-color); }
-        .btn-download { background-color: var(--success-color); }
+
+        /* --- Tab Styles --- */
+        .tab-container { display: flex; gap: 8px; padding: 0; }
+        .tab-button { padding: 10px 20px; cursor: pointer; border: none; background-color: #e9ecef; color: var(--text-color); opacity: 0.8; font-size: 1em; font-weight: 600; border-radius: 8px; transition: all 0.2s; }
+        .tab-button:hover { opacity: 1; }
+        .tab-button.active { background-color: var(--button-bg-color); color: white; opacity: 1; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>音訊轉錄儀 (重構版)</h1>
+    <div id="app" class="container">
+        <!-- 標題 -->
+        <header class="card">
+            <h1>音訊轉錄儀 (重構版)</h1>
+        </header>
 
-        <!-- Global Status Message Area -->
+        <!-- 全域狀態訊息 -->
         <div id="status-message-area" class="card" style="display: none; padding: 12px; border-width: 2px;">
             <p id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></p>
         </div>
 
-        <div id="app">
-            <!-- JavaScript components will be rendered here -->
+        <!-- 全域儀表板 (簡化) -->
+        <div class="card">
+            <h2>📊 全域儀表板</h2>
+            <div><strong>模型:</strong> <span id="model-display">medium</span></div>
         </div>
-    </div>
 
-    <!-- The full modal is complex, so we will omit it from this refactor for now.
-         A placeholder in JS will handle the preview calls. -->
+        <!-- 功能分頁導覽 -->
+        <div class="card">
+            <div class="tab-container">
+                <button class="tab-button active" data-tab="local-file-tab">📁 本機檔案轉錄</button>
+                <button class="tab-button" data-tab="downloader-tab">📥 媒體下載器</button>
+            </div>
+        </div>
+
+        <!-- 分頁內容 -->
+        <div id="tab-content-container">
+            <div id="local-file-tab" class="tab-content active">
+                <!-- LocalTranscriber component will be rendered here -->
+            </div>
+            <div id="downloader-tab" class="tab-content">
+                <!-- MediaDownloader component will be rendered here -->
+            </div>
+        </div>
+
+        <!-- 檔案總管和任務列表將由它們自己的組件渲染 -->
+        <div id="task-list-container"></div>
+        <div id="file-browser-container"></div>
+
+    </div>
 
     <script type="module" src="/dist/main.js"></script>
 </body>
