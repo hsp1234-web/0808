@@ -24,6 +24,12 @@ def install_dependencies():
     subprocess.check_call(["bun", "install"])
     log.info("✅ Node.js 依賴安裝成功。")
 
+def build_frontend():
+    log.info("--- 正在建置前端資源 (CSS & JS) ---")
+    # 使用 bun 來執行 package.json 中的 build 指令
+    subprocess.check_call(["bun", "run", "build"])
+    log.info("✅ 前端資源建置成功。")
+
 def main():
     procs = []
     log_files = {}
@@ -43,6 +49,7 @@ def main():
 
     try:
         install_dependencies()
+        build_frontend()
         import requests
 
         # 設定環境變數

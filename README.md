@@ -1,95 +1,66 @@
-# 鳳凰音訊轉錄儀 (Phoenix Transcriber)
+# 後端品質保證進化藍圖 - 實作範例
 
-[![zh-Hant](https://img.shields.io/badge/language-繁體中文-blue.svg)](README.md)
+本專案旨在實作「後端品質保證進化藍圖」中所描述的核心概念。透過一個簡化的後端服務模型，我們展示了如何建立一個以「數據驅動」為核心的診斷體系，為 AI 助理提供進行根本原因分析所需的「數位證據」。
 
-這是一個高效、可擴展的音訊轉錄專案，旨在提供一個可以透過 Web 介面輕鬆操作的語音轉文字服務。專案近期已整合 **YouTube 影片處理與 AI 分析** 功能。
+## 核心概念
 
----
+這個實作範例圍繞兩個核心概念構建：
 
-## ⚡️ 如何啟動與測試
+1.  **結構化日誌 (Structured Logging)**: 所有服務的日誌都以統一的 JSON 格式輸出，使機器能夠輕易地解析和查詢。
+2.  **全鏈路追蹤 ID (Correlation ID)**: 任何進入系統的請求都會被分配一個唯一的 `correlation_id`，此 ID 會在所有服務間傳遞，讓我們能將一次操作在後端所有環節的日誌串聯起來。
 
-我們提供兩種主要的執行方式：一個用於本地開發與端對端測試，另一個專為在 Google Colab 中部署而設計。
+## 專案結構
 
-### 方式一：自動化後端整合測試 (`scripts/local_run.py`)
+```
+.
+├── services/               # 核心後端服務
+│   ├── __init__.py
+│   ├── api_server.py       # 模擬 API 伺服器，請求的進入點
+│   ├── orchestrator.py     # 業務流程編排器
+│   └── worker.py           # 執行具體任務的工作者
+├── utils/                  # 共用工具模組
+│   ├── __init__.py
+│   └── logger.py           # 結構化日誌 (JSON Formatter) 的實作
+├── logs/                   # 存放集中化的日誌檔案
+│   └── backend.log         # 所有服務的日誌都會寫入此檔案
+├── evidence_packages/      # 存放生成的「數位證據包」
+│   └── ...
+├── main.py                 # 用於啟動模擬流程的主腳本
+└── create_evidence_package.py # 用於從日誌中提取證據包的工具
+```
 
-`scripts/local_run.py` 是一個**自動化的整合測試腳本**，主要用於驗證後端的核心功能。它會啟動所有服務，提交一個測試任務，並在任務完成後自動關閉。
+## 如何使用
 
-**此方式適用於**：
-*   快速驗證後端修改是否引發問題。
-*   在 CI/CD 環境中進行自動化檢查。
+請遵循以下步驟來體驗整個流程：
 
-**如何使用**:
+### 步驟 1: 運行模擬以產生日誌
+
+首先，我們需要運行主腳本 `main.py` 來模擬一系列的後端請求。這將會觸發所有服務，並在 `logs/backend.log` 中產生對應的結構化日誌。
+
+在終端機中執行：
 ```bash
-# 如果您有 Google API 金鑰，請將其設定在環境中以測試完整流程
-python scripts/local_run.py
+python3 main.py
 ```
-當腳本顯示「所有驗證均已通過！」或「任務正確地以 'failed' 狀態結束」（在沒有 API 金鑰的情況下）時，即表示後端功能運作正常。
+運行後，您會看到模擬過程的輸出，並被告知日誌已成功寫入。
 
-### 方式二：啟動後端服務 (用於 UI 測試或手動操作)
+### 步驟 2: 產生數位證據包
 
-如果您需要一個**持續運行的後端服務**來進行前端開發、手動測試或執行 Playwright UI 測試，請使用 `circus` 直接啟動服務。
+模擬運行完畢後，`logs/backend.log` 檔案中會包含多次請求的日誌。現在，我們可以針對某一次特定的請求（由 `correlation_id` 標識）來產生「數位證據包」。
 
-**此方式適用於**：
-*   本地端開啟 `src/static/mp3.html` 進行手動功能測試。
-*   執行 Playwright 端對端 UI 測試。
+1.  **查看日誌並選擇一個 ID**:
+    打開 `logs/backend.log` 檔案。您會看到多個 JSON 物件，每一個都代表一條日誌。找到您感興趣的請求，並複製其 `correlation_id` 的值。
 
-**如何使用**:
-```bash
-# (首次執行前) 確保 logs 目錄存在
-mkdir -p logs
+    *提示：您可以選擇在模擬中失敗的那個請求的 ID，以查看包含錯誤資訊的完整證據包。*
 
-# 啟動所有後端服務
-python -m circus.circusd config/circus.ini
+2.  **執行證據包生成工具**:
+    使用您複製的 `correlation_id` 作為參數，執行 `create_evidence_package.py` 腳本。
 
-# 完成測試後，可使用以下指令關閉服務
-python -m circus.circusctl quit
-```
-服務啟動後，您可以透過 `http://127.0.0.1:42649` 訪問前端介面。
+    例如 (請將 ID 替換為您自己的):
+    ```bash
+    python3 create_evidence_package.py f55905ff-bdad-47cf-8517-75b9dc45c139
+    ```
 
-### 方式三：在 Google Colab 中部署 (`scripts/colab.py`)
+3.  **查看證據包**:
+    腳本執行成功後，會在 `evidence_packages/` 目錄下生成一個名為 `evidence_{correlation_id}.json` 的檔案。
 
-`scripts/colab.py` 是專為在 Google Colab 環境中一鍵部署和運行本專案而設計的啟動器。它會處理 Git 倉庫的複製、環境設定，並利用 Colab 的代理功能生成一個公開的訪問連結。
-
-**如何使用**:
-1.  在 Google Colab 中開啟一個新的筆記本。
-2.  將 `colab.py` 的完整程式碼複製並貼到 Colab 的儲存格中。
-3.  根據您的需求修改儲存格頂部的參數（例如，`TARGET_BRANCH_OR_TAG`）。
-4.  執行該儲存格。儀表板將會顯示，並在伺服器就緒後提供一個 `ngrok` 或類似的代理連結供您訪問。
-
----
-
-## 📈 專案狀態
-
-**核心功能與測試 - ✅ 已完成**
-
-*   [x] **架構重構**：已完成穩定的多程序架構（協調器、資料庫管理器、API 伺服器）。
-*   [x] **功能完整**：本地檔案轉錄與 YouTube 影片處理功能均已完整實現。
-*   [x] **測試穩定**：`local_run.py` 後端整合測試運作正常。前端 UI 測試採用 Playwright (`/tests` 目錄下的 `.spec.js` 檔案)，可有效驗證 `mp3.html` 的各項功能。
-
----
-## 📁 檔案結構 (新版)
-
-```
-hsp1234-web/
-├── .github/              # CI/CD 工作流程
-├── .vscode/              # VS Code 編輯器設定
-├── build/                # 建置後的產出物
-├── config/               # 所有環境設定檔 (circus.ini)
-├── docs/                 # 專案文件
-├── logs/                 # 執行時產生的日誌檔案
-├── scripts/              # 各類輔助腳本 (部署、測試啟動器)
-├── src/                  # 主要應用程式原始碼
-│   ├── api/              # API 伺服器 (api_server.py)
-│   ├── core/             # 核心商業邏輯 (orchestrator.py)
-│   ├── db/               # 資料庫相關模組
-│   ├── static/           # 靜態檔案 (HTML, CSS, 前端 JS)
-│   ├── tasks/            # 背景任務/Worker (worker.py)
-│   ├── tests/            # 所有測試檔案 (單元測試、E2E 測試)
-│   └── tools/            # 專案使用的工具模組
-├── .gitignore            # Git 忽略清單
-├── package.json          # Node.js 專案依賴
-├── playwright.config.js  # Playwright E2E 測試設定
-├── pyproject.toml        # Python 專案設定
-├── requirements.txt      # Python 專案依賴
-└── README.md             # 專案主說明文件
-```
+    打開這個檔案，您會看到一個 JSON 陣列，其中包含了與該 `correlation_id` 相關的所有日誌，並按照時間順序排列。這份檔案就是一份高度聚焦、專為單次失敗事件量身打造的「數位證據包」，可以被直接提交給 AI 助理進行分析。
