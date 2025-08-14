@@ -209,4 +209,6 @@ class App {
 document.addEventListener('DOMContentLoaded', () => {
     const app = new App();
     app.init();
+    // JULES'S DEBUGGING: Expose app to the window for E2E testing.
+    window.app = app;
 });
