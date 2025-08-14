@@ -31,9 +31,48 @@ class FileBrowser {
     if (!listElement)
       return;
     listElement.innerHTML = "<p>正在載入檔案列表...</p>";
-    setTimeout(() => {
-      listElement.innerHTML = "<p>檔案列表將會顯示在這裡。</p>";
-    }, 1000);
+    try {
+      const response = await fetch("/api/list_files");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API 請求失敗，狀態碼: ${response.status}. ${errorText}`);
+      }
+      const files = await response.json();
+      if (files.length === 0) {
+        listElement.innerHTML = "<p>Uploads 目錄是空的。</p>";
+        return;
+      }
+      listElement.innerHTML = "";
+      const style = document.createElement("style");
+      style.textContent = `
+                .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; }
+                .file-item:last-child { border-bottom: none; }
+                .file-name { font-family: monospace; }
+                .file-details { font-size: 0.8em; color: #666; }
+            `;
+      listElement.appendChild(style);
+      files.forEach((file) => {
+        const fileElement = document.createElement("div");
+        fileElement.className = "file-item";
+        const icon = file.type === "dir" ? "\uD83D\uDCC1" : "\uD83D\uDCC4";
+        const fileName = document.createElement("span");
+        fileName.className = "file-name";
+        fileName.textContent = `${icon} ${file.name}`;
+        const fileDetails = document.createElement("span");
+        fileDetails.className = "file-details";
+        if (file.type !== "dir") {
+          const sizeInKB = (file.size / 1024).toFixed(2);
+          const modifiedDate = new Date(file.modified_time * 1000).toLocaleString("zh-TW", { hour12: false });
+          fileDetails.textContent = `${sizeInKB} KB - ${modifiedDate}`;
+        }
+        fileElement.appendChild(fileName);
+        fileElement.appendChild(fileDetails);
+        listElement.appendChild(fileElement);
+      });
+    } catch (error) {
+      console.error("載入檔案列表時發生錯誤:", error);
+      listElement.innerHTML = `<p style="color: red;">無法載入檔案列表: ${error.message}</p>`;
+    }
   }
   init() {
     this.render();
