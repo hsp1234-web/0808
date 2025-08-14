@@ -1,0 +1,62 @@
+[
+    {
+        "timestamp": "2025-08-14T18:03:43.104919+00:00",
+        "service_name": "api_server",
+        "log_level": "INFO",
+        "correlation_id": "f55905ff-bdad-47cf-8517-75b9dc45c139",
+        "message": "接收到新請求",
+        "data": {
+            "request_body": {
+                "user_id": "user-789",
+                "action": "create_report",
+                "should_fail": true
+            }
+        }
+    },
+    {
+        "timestamp": "2025-08-14T18:03:43.104988+00:00",
+        "service_name": "orchestrator",
+        "log_level": "INFO",
+        "correlation_id": "f55905ff-bdad-47cf-8517-75b9dc45c139",
+        "message": "開始編排任務",
+        "data": null
+    },
+    {
+        "timestamp": "2025-08-14T18:03:43.105044+00:00",
+        "service_name": "worker",
+        "log_level": "INFO",
+        "correlation_id": "f55905ff-bdad-47cf-8517-75b9dc45c139",
+        "message": "Worker 開始執行具體工作",
+        "data": {
+            "work_data": {
+                "user_id": "user-789",
+                "action": "create_report",
+                "should_fail": true,
+                "orchestrator_processed": true
+            }
+        }
+    },
+    {
+        "timestamp": "2025-08-14T18:03:43.605395+00:00",
+        "service_name": "worker",
+        "log_level": "WARNING",
+        "correlation_id": "f55905ff-bdad-47cf-8517-75b9dc45c139",
+        "message": "偵測到潛在問題，工作可能無法成功完成。",
+        "data": {
+            "work_data": {
+                "user_id": "user-789",
+                "action": "create_report",
+                "should_fail": true,
+                "orchestrator_processed": true
+            }
+        }
+    },
+    {
+        "timestamp": "2025-08-14T18:03:43.605650+00:00",
+        "service_name": "orchestrator",
+        "log_level": "ERROR",
+        "correlation_id": "f55905ff-bdad-47cf-8517-75b9dc45c139",
+        "message": "任務編排失敗: 模擬一個在 Worker 中發生的錯誤",
+        "data": null
+    }
+]
