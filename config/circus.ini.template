@@ -6,8 +6,8 @@ stats_endpoint = tcp://127.0.0.1:5557
 httpd = False
 
 [watcher:db_manager]
-cmd = %%PYTHON_EXEC%% src/db/manager.py
-working_dir = /app
+cmd = %%PYTHON_EXEC%% -m db.manager
+working_dir = /app/src
 stdout_stream.class = FileStream
 stdout_stream.filename = /app/logs/db_manager.log
 stderr_stream.class = FileStream
@@ -16,9 +16,9 @@ autostart = True
 restart_on_error = True
 
 [watcher:api_server]
-cmd = %%PYTHON_EXEC%% src/api/api_server.py --port 42649
+cmd = %%PYTHON_EXEC%% -m api.api_server --port 42649
 env.API_MODE = mock
-working_dir = /app
+working_dir = /app/src
 stdout_stream.class = FileStream
 stdout_stream.filename = /app/logs/api_server.log
 stderr_stream.class = FileStream

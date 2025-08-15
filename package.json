@@ -3,10 +3,14 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "snapshot": "mkdir -p logs && python3 -m pip install -r requirements.txt && npx playwright install chromium && bun scripts/snapshot.js"
+  },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
     "@types/bun": "latest",
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "playwright": "^1.45.0"
   },
   "peerDependencies": {
     "typescript": "^5"

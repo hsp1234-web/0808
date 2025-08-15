@@ -86,14 +86,22 @@ def main():
         proc_env = os.environ.copy()
         proc_env["API_MODE"] = "mock"
 
-        # 確保 circus.ini 存在
-        if not os.path.exists("circus.ini"):
-            if os.path.exists("config/circus.ini.template"):
-                log.info("未找到 circus.ini，從範本複製...")
-                import shutil
-                shutil.copy("config/circus.ini.template", "circus.ini")
-            else:
-                raise FileNotFoundError("找不到 circus.ini 或其範本 config/circus.ini.template")
+        # 確保 circus.ini 存在並替換變數
+        template_path = "config/circus.ini.template"
+        config_path = "circus.ini"
+        if os.path.exists(template_path):
+            log.info("從範本建立 circus.ini 並替換 PYTHON_EXEC...")
+            with open(template_path, 'r') as f_template:
+                content = f_template.read()
+
+            # 替換預留位置
+            # 使用 sys.executable 確保我們用的是執行此腳本的同一個 Python 直譯器
+            content = content.replace("%%PYTHON_EXEC%%", sys.executable)
+
+            with open(config_path, 'w') as f_config:
+                f_config.write(content)
+        else:
+            raise FileNotFoundError(f"找不到 circus.ini 的範本檔案: {template_path}")
 
         circus_cmd = [sys.executable, "-m", "circus.circusd", "circus.ini"]
         # 將日誌導向檔案以便除錯
