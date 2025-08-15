@@ -1134,7 +1134,7 @@
                     } else if (payload.status === 'completed') {
                         if (progressContainer) progressContainer.style.display = 'none';
                         statusSpan.innerHTML = '';
-                        const buttonGroup = createActionButtons(payload.task_id, payload.result);
+                        const buttonGroup = createActionButtons(payload.task_id, payload);
                         statusSpan.appendChild(buttonGroup);
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
@@ -1291,7 +1291,7 @@
                 if (payload.status === 'completed') {
                     if (progressContainer) progressContainer.style.display = 'none';
                     statusSpan.innerHTML = '';
-                    let buttonGroup = createActionButtons(payload.task_id, payload.result);
+                    let buttonGroup = createActionButtons(payload.task_id, payload);
                     statusSpan.appendChild(buttonGroup);
 
                     // 問題三：為完成的任務加上圖示
