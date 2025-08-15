@@ -109,7 +109,7 @@ def main():
         api_port = 42649
         api_url = f"http://127.0.0.1:{api_port}"
         api_health_url = f"{api_url}/api/health"
-        timeout = time.time() + 45
+        timeout = time.time() + 300
         server_ready = False
         while time.time() < timeout:
             try:
