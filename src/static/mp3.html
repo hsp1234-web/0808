@@ -1734,6 +1734,15 @@
 
                 const result = payload.result || {};
                 const taskId = payload.task_id;
+
+                // JULES'S FIX: 防止重複渲染已完成的報告
+                const existingElement = youtubeFileBrowser.querySelector(`.task-item[data-task-id="${taskId}"]`);
+                if (existingElement) {
+                    // 如果元素已存在，則直接返回，不進行任何操作。
+                    // 這樣可以防止輪詢機制在每次獲取到相同的已完成任務時，不斷地在畫面上新增重複的項目。
+                    return;
+                }
+
                 const videoTitle = result.video_title || '無標題報告';
                 const outputPath = result.output_path || '';
                 const tokens = result.total_tokens_used || 'N/A';
