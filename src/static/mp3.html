@@ -480,13 +480,6 @@
                             </div>
                         </div>
 
-                        <!-- JULES'S NEW FEATURE: Cookies Upload -->
-                        <div style="margin-top: 16px;">
-                            <label><strong>YouTube 驗證</strong></label>
-                             <p style="font-size: 0.85em; color: #666; margin-top: 4px; margin-bottom: 8px;">若下載需要登入的影片失敗，請上傳您的 cookies.txt 檔案。</p>
-                            <button id="upload-cookies-btn" style="background-color: #ffc107; color: var(--text-color);">🍪 上傳 cookies.txt</button>
-                            <input type="file" id="cookies-input" accept=".txt" class="hidden">
-                        </div>
                     </div>
                 </div>
             </div>
@@ -786,8 +779,6 @@
             const audioFormatSelect = document.getElementById('audio-format-select');
             const videoQualitySelect = document.getElementById('video-quality-select');
             const zipDownloadBtn = document.getElementById('zip-download-btn');
-            const uploadCookiesBtn = document.getElementById('upload-cookies-btn'); // JULES'S NEW FEATURE
-            const cookiesInput = document.getElementById('cookies-input'); // JULES'S NEW FEATURE
 
             // --- 日誌檢視器元素 ---
             const fetchLogsBtn = document.getElementById('fetch-logs-btn');
@@ -1734,6 +1725,15 @@
 
                 const result = payload.result || {};
                 const taskId = payload.task_id;
+
+                // JULES'S FIX: 防止重複渲染已完成的報告
+                const existingElement = youtubeFileBrowser.querySelector(`.task-item[data-task-id="${taskId}"]`);
+                if (existingElement) {
+                    // 如果元素已存在，則直接返回，不進行任何操作。
+                    // 這樣可以防止輪詢機制在每次獲取到相同的已完成任務時，不斷地在畫面上新增重複的項目。
+                    return;
+                }
+
                 const videoTitle = result.video_title || '無標題報告';
                 const outputPath = result.output_path || '';
                 const tokens = result.total_tokens_used || 'N/A';
@@ -2153,49 +2153,6 @@
             videoQualitySelect.addEventListener('change', (e) => logAction('change-video-quality', e.target.value));
             removeSilenceCheckbox.addEventListener('change', (e) => logAction('toggle-remove-silence', e.target.checked));
             renameFileCheckbox.addEventListener('change', (e) => logAction('toggle-rename-file', e.target.checked));
-
-            // JULES'S NEW FEATURE: Cookies Upload Logic
-            if (uploadCookiesBtn && cookiesInput) {
-                uploadCookiesBtn.addEventListener('click', () => {
-                    logAction('click-upload-cookies-btn');
-                    cookiesInput.click();
-                });
-
-                cookiesInput.addEventListener('change', async (event) => {
-                    const file = event.target.files[0];
-                    if (!file) {
-                        return; // User cancelled the dialog
-                    }
-
-                    logAction('change-cookies-input', file.name);
-                    const formData = new FormData();
-                    // Force the filename on the backend side to be 'cookies.txt'
-                    formData.append('file', file, 'cookies.txt');
-
-                    showStatusMessage('正在上傳 Cookies...', false, 0); // Indefinite message
-
-                    try {
-                        const response = await fetch('/api/upload_cookies', {
-                            method: 'POST',
-                            body: formData,
-                        });
-
-                        const result = await response.json();
-
-                        if (!response.ok) {
-                            throw new Error(result.detail || '上傳失敗');
-                        }
-
-                        showStatusMessage('Cookies 上傳成功！', false, 5000);
-                    } catch (error) {
-                        console.error('Cookies 上傳失敗:', error);
-                        showStatusMessage(`錯誤: ${error.message}`, true, 8000);
-                    } finally {
-                        // Reset the input so the change event fires again for the same file
-                        cookiesInput.value = '';
-                    }
-                });
-            }
         });
     </script>
 </body>

@@ -978,18 +978,28 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             proc_env = os.environ.copy()
             process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
 
-            last_line = ""
-            if process_dl.stdout:
-                for line in iter(process_dl.stdout.readline, ''):
+            # JULES'S FIX: 讀取 stderr 以獲取即時進度更新，與 Gemini 處理器保持一致
+            if process_dl.stderr:
+                for line in iter(process_dl.stderr.readline, ''):
                     line = line.strip()
-                    if line: last_line = line
+                    if not line: continue
+                    try:
+                        progress_data = json.loads(line)
+                        if progress_data.get("type") == "progress":
+                             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                                "type": "YOUTUBE_STATUS",
+                                "payload": { "task_id": task_id, "status": "downloading", "message": progress_data.get("description", "下載中..."), "progress": progress_data.get("percent", 0), "task_type": task_type }
+                            }), loop)
+                    except json.JSONDecodeError:
+                        log.debug(f"[stderr from youtube_downloader]: {line}")
 
-            process_dl.wait()
+
+            stdout_output, stderr_output = process_dl.communicate()
+
             if process_dl.returncode != 0:
-                stderr_output = process_dl.stderr.read() if process_dl.stderr else "下載器未提供錯誤訊息。"
-                raise RuntimeError(last_line or stderr_output)
+                raise RuntimeError(f"YouTube downloader failed. stderr: {stderr_output}")
 
-            download_result = json.loads(last_line)
+            download_result = json.loads(stdout_output)
             media_file_path = download_result['output_path'] # This is an absolute path
             video_title = download_result.get('video_title', '無標題影片')
             log.info(f"✅ [執行緒] YouTube 媒體下載完成: {media_file_path}")
