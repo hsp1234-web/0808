@@ -93,12 +93,72 @@ def initialize_database():
             """)
             # 為日誌表建立索引
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_log_source_level ON system_logs (source, level)")
-        log.info("✅ 資料庫初始化完成。`tasks` 和 `system_logs` 資料表已存在。")
+
+            # --- JULES'S NEW FEATURE: 為 App State 建立資料表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS app_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS update_app_state_updated_at
+                AFTER UPDATE ON app_state FOR EACH ROW
+                BEGIN
+                    UPDATE app_state SET updated_at = CURRENT_TIMESTAMP WHERE key = OLD.key;
+                END;
+            """)
+            # --- END ---
+
+        log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state` 資料表已存在。")
     except sqlite3.Error as e:
         log.error(f"初始化資料庫時發生錯誤: {e}")
     finally:
         if conn:
             conn.close()
+
+
+# --- JULES'S NEW FEATURE: App State 核心功能 ---
+
+def set_app_state(key: str, value: str) -> bool:
+    """
+    儲存或更新一個鍵值對到 app_state 表中 (Upsert)。
+    """
+    sql = "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return False
+    try:
+        with conn:
+            conn.execute(sql, (key, value))
+        log.info(f"✅ App state '{key}' 已更新。")
+        return True
+    except sqlite3.Error as e:
+        log.error(f"❌ 更新 app_state '{key}' 時發生錯誤: {e}", exc_info=True)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_app_state(key: str) -> str | None:
+    """
+    根據鍵從 app_state 表中獲取值。
+    """
+    sql = "SELECT value FROM app_state WHERE key = ?"
+    conn = get_db_connection()
+    if not conn: return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (key,))
+        row = cursor.fetchone()
+        return row['value'] if row else None
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取 app_state '{key}' 時發生錯誤: {e}", exc_info=True)
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 
 # --- 任務佇列核心功能 ---
 

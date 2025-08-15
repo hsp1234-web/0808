@@ -803,6 +803,127 @@
             let currentFontSize = 100;
             let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
 
+            // --- JULES'S NEW FEATURE (V2): Robust State Syncing ---
+            let appState = {
+                whisperModel: 'medium',
+                whisperLanguage: 'zh',
+                whisperBeamSize: 1,
+                downloaderUrls: '',
+                youtubeLinks: [],
+                activeTab: 'local-file-tab',
+                fontSize: 100
+            };
+
+            const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000, backoff = 2) => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(url, options);
+                        if (!response.ok) throw new Error(`伺服器錯誤: ${response.status}`);
+                        return response.json();
+                    } catch (error) {
+                        console.warn(`第 ${i + 1} 次請求 ${url} 失敗: ${error.message}. 將在 ${delay}ms 後重試...`);
+                        if (i < retries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= backoff;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+            };
+
+            const applyStateToUI = () => {
+                // Whisper
+                if (modelSelect.querySelector(`option[value="${appState.whisperModel}"]`)) modelSelect.value = appState.whisperModel;
+                modelDisplay.textContent = modelSelect.value;
+                if (languageSelect.querySelector(`option[value="${appState.whisperLanguage}"]`)) languageSelect.value = appState.whisperLanguage;
+                beamSizeInput.value = appState.whisperBeamSize;
+                // Downloader
+                downloaderUrlsInput.value = appState.downloaderUrls;
+                // YouTube
+                if (Array.isArray(appState.youtubeLinks) && appState.youtubeLinks.length > 0) {
+                    const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
+                    if (firstRow) {
+                        firstRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[0].url || '';
+                        firstRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[0].filename || '';
+                        for (let i = 1; i < appState.youtubeLinks.length; i++) {
+                            const newRow = firstRow.cloneNode(true);
+                            newRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[i].url || '';
+                            newRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[i].filename || '';
+                            youtubeLinkList.appendChild(newRow);
+                        }
+                    }
+                }
+                // UI
+                const tabToActivate = document.querySelector(`.tab-button[data-tab="${appState.activeTab}"]`);
+                if (tabToActivate) tabToActivate.click();
+                currentFontSize = appState.fontSize || 100;
+                updateFontSize();
+            };
+
+            const updateTaskLists = (tasks) => {
+                if (!Array.isArray(tasks)) return;
+
+                const taskIdsFromResponse = new Set(tasks.map(t => t.id));
+
+                // First, remove any tasks from the UI that are no longer in the backend response
+                taskElements.forEach((element, taskId) => {
+                    if (!taskIdsFromResponse.has(taskId)) {
+                        element.remove();
+                        taskElements.delete(taskId);
+                    }
+                });
+
+                // Then, update or add tasks
+                tasks.forEach(dispatchStatusUpdate);
+
+                // Finally, update the "no tasks" messages
+                noOngoingTaskMsg.style.display = ongoingTasksContainer.childElementCount > 1 ? 'none' : 'block';
+                noCompletedTaskMsg.style.display = completedTasksContainer.childElementCount > 1 ? 'none' : 'block';
+                const downloaderTasksContainer = document.getElementById('downloader-tasks');
+                document.getElementById('no-downloader-task-msg').style.display = downloaderTasksContainer.childElementCount > 1 ? 'none' : 'block';
+            };
+
+            const initialLoad = async () => {
+                logAction('initial-load-start');
+                try {
+                    const [savedState, savedTasks] = await Promise.all([
+                        fetchWithRetry('/api/app_state'),
+                        fetchWithRetry('/api/tasks')
+                    ]);
+
+                    if (savedState && typeof savedState === 'object' && Object.keys(savedState).length > 0) {
+                        Object.assign(appState, savedState);
+                        logAction('load-app-state-success');
+                    } else {
+                        logAction('load-app-state-default');
+                    }
+                    applyStateToUI();
+
+                    updateTaskLists(savedTasks);
+                    logAction('load-task-history-success', `loaded ${savedTasks.length} tasks`);
+
+                } catch (error) {
+                    console.error('❌ 初始化載入失敗:', error);
+                    showStatusMessage('無法從伺服器載入初始資料，請稍後重新整理。', true, 10000);
+                    applyStateToUI(); // Still apply default UI state
+                }
+            };
+
+            const fetchTaskHistory = async () => {
+                try {
+                    const tasks = await fetchWithRetry('/api/tasks');
+                    updateTaskLists(tasks);
+                } catch (error) {
+                    console.warn("輪詢任務歷史失敗:", error.message);
+                }
+            };
+
+            const startPolling = (interval = 10000) => {
+                logAction('start-polling', `interval: ${interval}ms`);
+                setInterval(fetchTaskHistory, interval);
+            };
+
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
              * 開啟預覽彈窗，並根據檔案類型顯示內容。
@@ -1931,8 +2052,10 @@
                 }
             };
 
-            setupWebSocket();
-            loadTaskHistory();
+            // --- JULES'S NEW FEATURE (V2): Final Setup ---
+            initialLoad();
+            setupWebSocket(); // WebSocket is still needed for real-time updates
+            startPolling(); // Start the backup polling mechanism
             updateFileDisplay();
 
             // --- 日誌檢視器邏輯 ---
