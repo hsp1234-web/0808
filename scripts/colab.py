@@ -238,9 +238,9 @@ class ServerManager:
             # --- 修復結束 ---
 
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
-            # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
+            # 修正：為了讓 Python 能夠正確解析模組，我們將工作目錄設定為 src
             # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "core/orchestrator.py", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
@@ -285,7 +285,7 @@ class ServerManager:
 
             self.server_process = subprocess.Popen(
                 launch_command,
-                cwd=str(project_path), # 在下載的專案目錄中執行
+                cwd=str(project_path / "src"), # 在 src 目錄中執行以解析模組
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
