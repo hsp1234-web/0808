@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "snapshot": "mkdir -p logs && python3 -m pip install -r requirements.txt && npx playwright install chromium && bun scripts/snapshot.js"
+    "snapshot": "bun install && mkdir -p logs && python3 -m pip install -r requirements-server.txt && npx playwright install chromium && bun scripts/snapshot.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",

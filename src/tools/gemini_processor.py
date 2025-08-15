@@ -310,6 +310,20 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
             else:
                 log.warning("⚠️ 無法執行翻譯，因為沒有可供翻譯的內容。")
 
+        if "translate_zh" in task_list:
+            log.info("執行任務: 翻譯成繁體中文")
+            text_to_translate = results.get('transcript', results.get('summary', ''))
+            if text_to_translate:
+                prompt = ALL_PROMPTS['translate_text_zh'].format(text_to_translate=text_to_translate)
+                response = model_instance.generate_content(prompt, request_options={'timeout': 1800})
+                error_msg = get_error_message_from_response(response)
+                if error_msg: raise ValueError(error_msg)
+                total_tokens_used += get_token_count(response)
+                results['translation_zh'] = response.text.strip()
+                log.info("✅ 翻譯成繁體中文完成")
+            else:
+                log.warning("⚠️ 無法執行繁體中文翻譯，因為沒有可供翻譯的內容。")
+
         # --- 格式化與儲存 ---
         sanitized_title = sanitize_filename(video_title)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -337,7 +351,9 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
             if 'transcript' in results:
                 output_content += f"--- 詳細逐字稿 ---\n{results['transcript']}\n\n"
             if 'translation' in results:
-                output_content += f"--- 英文翻譯 ---\n{results['translation']}\n\n"
+                output_content += f"--- 使用原文 ---\n{results['translation']}\n\n"
+            if 'translation_zh' in results:
+                output_content += f"--- 繁體中文翻譯 ---\n{results['translation_zh']}\n\n"
             output_path = output_dir / f"{final_filename_base}.txt"
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(output_content)

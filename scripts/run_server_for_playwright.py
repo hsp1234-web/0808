@@ -43,7 +43,7 @@ def install_dependencies():
     """安裝所有必要的 Python 依賴套件。"""
     log.info("--- 正在檢查並安裝 Python 依賴 ---")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-server.txt"])
         log.info("✅ 所有 Python 依賴都已成功安裝。")
     except subprocess.CalledProcessError as e:
         log.error(f"❌ 安裝依賴時發生錯誤: {e}")
