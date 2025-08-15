@@ -114,17 +114,38 @@ def download_media(
 
     except subprocess.CalledProcessError as e:
         log.error(f"❌ yt-dlp 執行失敗。返回碼: {e.returncode}")
+        stderr_text = e.stderr.lower()
         log.error(f"Stderr: {e.stderr}")
 
-        # 增強錯誤偵測
-        error_message = e.stderr
-        error_code = None
-        if "authentication" in error_message.lower() or "login required" in error_message.lower():
-            error_code = "AUTH_REQUIRED"
-            error_message = "此影片需要登入驗證。請提供 cookies.txt 檔案。"
+        # --- 根據計畫書，進行精細化錯誤判斷 ---
+        error_code = "DOWNLOAD_FAILED"
+        friendly_message = "下載失敗： 請確認您輸入的網址是否正確，且為一個有效的影音頁面。"
 
-        error_result = {"type": "result", "status": "failed", "error": error_message, "error_code": error_code}
-        print(json.dumps(error_result), flush=True)
+        if "this video is private" in stderr_text or "login required" in stderr_text or "authentication required" in stderr_text or "401" in stderr_text or "403" in stderr_text:
+            error_code = "AUTH_REQUIRED"
+            friendly_message = "下載失敗： 此內容可能為私人影片或需要會員資格才能存取。基於安全考量，本服務目前無法處理需要登入的內容。"
+
+        elif "this video is not available in your country" in stderr_text:
+            error_code = "GEO_RESTRICTED"
+            friendly_message = "下載失敗： 抱歉，此內容因目標網站的地區限制而無法存取。"
+
+        elif "too many requests" in stderr_text or "429" in stderr_text:
+            error_code = "RATE_LIMITED"
+            friendly_message = "下載失敗： 目標網站暫時限制了我們的存取請求，請稍後幾分鐘再試一次。"
+
+        elif "no supported format found" in stderr_text or "unable to extract" in stderr_text or "invalid url" in stderr_text:
+            error_code = "INVALID_URL"
+            friendly_message = "下載失敗： 請確認您輸入的網址是否正確，或該頁面不包含可下載的影音內容。"
+
+        # 建立結構化的錯誤回報
+        error_result = {
+            "type": "result",
+            "status": "failed",
+            "error": friendly_message, # 給前端顯示的友善訊息
+            "error_code": error_code,      # 給前端進行邏輯判斷的代碼
+            "technical_error": e.stderr  # 供內部除錯的原始錯誤訊息
+        }
+        print(json.dumps(error_result, ensure_ascii=False), flush=True)
         sys.exit(1)
     except Exception as e:
         log.error(f"❌ 下載過程中發生未預期的錯誤: {e}", exc_info=True)

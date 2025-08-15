@@ -6,6 +6,8 @@ import subprocess
 import sys
 import argparse
 import requests
+import os
+import shutil
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path
@@ -39,10 +41,51 @@ def setup_database_logging():
 
 # --- 路徑設定 ---
 TOOLS_DIR = ROOT_DIR / "src" / "tools"
-TRANSCRIPTS_DIR = ROOT_DIR / "transcripts"
+UPLOADS_DIR = ROOT_DIR / "uploads"
+TRANSCRIPTS_DIR = ROOT_DIR / "transcripts" # 舊路徑，可考慮未來重構
+# 確保上傳目錄存在
+UPLOADS_DIR.mkdir(exist_ok=True)
+
 
 # --- DB 客戶端 ---
 db_client = get_client()
+
+# --- 輔助函式 ---
+
+def convert_to_media_url(absolute_path_str: str) -> str:
+    """將絕對檔案系統路徑轉換為可公開存取的 /media URL。"""
+    try:
+        absolute_path = Path(absolute_path_str)
+        # Find the path relative to the UPLOADS_DIR
+        relative_path = absolute_path.relative_to(UPLOADS_DIR)
+        # Join with /media/ and convert backslashes to forward slashes for URL
+        return f"/media/{relative_path.as_posix()}"
+    except (ValueError, TypeError):
+        log.warning(f"無法將路徑 {absolute_path_str} 轉換為媒體 URL。回傳原始路徑。")
+        return absolute_path_str
+
+def convert_media_url_to_path(media_url: str) -> Path:
+    """將 /media URL 轉換回伺服器上的絕對檔案系統路徑。"""
+    if not media_url.startswith('/media/'):
+        raise ValueError("無效的媒體 URL，必須以 /media/ 開頭。")
+    # 移除 '/media/' 前綴並與上傳目錄合併
+    relative_path = media_url.lstrip('/media/')
+    return UPLOADS_DIR / relative_path
+
+def notify_api_server(task_id: str, status: str, result: dict):
+    """通知 API Server 任務狀態已更新，以便廣播給前端。"""
+    try:
+        # 注意：這裡假設 api_server 在 42649 port 上運行 (根據 circus.ini)
+        notify_url = "http://127.0.0.1:42649/api/internal/notify_task_update"
+        frontend_payload = {
+            "task_id": task_id,
+            "status": status,
+            "result": result
+        }
+        requests.post(notify_url, json=frontend_payload, timeout=5)
+        log.info(f"✅ 已成功發送 {status} 通知給 API Server: {task_id}")
+    except requests.exceptions.RequestException as e:
+        log.error(f"❌ 發送 {status} 通知給 API Server 失敗: {e}")
 
 def process_download_task(task: dict, use_mock: bool):
     """處理模型下載任務。"""
@@ -155,45 +198,180 @@ def process_transcription_task(task: dict, use_mock: bool):
         if process.returncode == 0:
             log.info(f"✅ 工具成功完成任務: {task_id}")
             final_transcript = output_file.read_text(encoding='utf-8').strip()
-            final_result = json.dumps({
+            result_obj = {
                 "transcript": final_transcript,
                 "transcript_path": str(output_file), # 新增此行，為下載 API 提供路徑
                 "tool_stdout": "".join(full_stdout),
-            })
-            db_client.update_task_status(task_id, 'completed', final_result)
+            }
+            db_client.update_task_status(task_id, 'completed', json.dumps(result_obj))
             log.info(f"✅ 任務 {task_id} 狀態已更新至資料庫。")
 
-            # 步驟 6: 通知 API Server 任務已完成，以便廣播給前端
-            try:
-                # 注意：這裡假設 api_server 在 42649 port 上運行 (根據 circus.ini)
-                notify_url = "http://127.0.0.1:42649/api/internal/notify_task_update"
-
-                # 我們只傳送前端 UI 更新所需的最小資訊
-                frontend_payload = {
-                    "task_id": task_id,
-                    "status": "completed",
-                    # 傳送結果，讓前端可以直接使用，例如顯示下載按鈕
-                    "result": json.loads(final_result)
-                }
-
-                requests.post(notify_url, json=frontend_payload, timeout=5)
-                log.info(f"✅ 已成功發送完成通知給 API Server: {task_id}")
-            except requests.exceptions.RequestException as e:
-                log.error(f"❌ 發送完成通知給 API Server 失敗: {e}")
+            # 步驟 6: 通知 API Server 任務已完成
+            notify_api_server(task_id, 'completed', result_obj)
 
         else:
             log.error(f"❌ 工具執行任務失敗: {task_id}。返回碼: {process.returncode}")
             error_message = "".join(full_stderr) or "".join(full_stdout) or "未知錯誤"
-            final_result = json.dumps({
+            result_obj = {
                 "error": error_message,
                 "tool_stdout": "".join(full_stdout),
                 "tool_stderr": "".join(full_stderr)
-            })
-            db_client.update_task_status(task_id, 'failed', final_result)
+            }
+            db_client.update_task_status(task_id, 'failed', json.dumps(result_obj))
+            notify_api_server(task_id, 'failed', result_obj)
 
     except Exception as e:
         log.critical(f"💥 處理任務 {task_id} 時發生未預期的嚴重錯誤: {e}", exc_info=True)
-        db_client.update_task_status(task_id, 'failed', json.dumps({"error": str(e)}))
+        result_obj = {"error": str(e)}
+        db_client.update_task_status(task_id, 'failed', json.dumps(result_obj))
+        notify_api_server(task_id, 'failed', result_obj)
+
+
+def process_youtube_chain_task(task: dict, use_mock: bool):
+    """
+    處理 YouTube 下載和 AI 分析任務鏈。
+    這將取代 api_server.py 中的 thread-based 方法。
+    """
+    task_id = task['task_id']
+    task_type = task.get('type')
+    log.info(f"🚀 開始處理 '{task_type}' 任務: {task_id}")
+
+    # --- 步驟 1: 決定工作目錄 ---
+    # 對於 gemini_process 任務，它重複使用其父任務的目錄
+    parent_task_id = task.get('depends_on')
+    work_dir_id = parent_task_id if parent_task_id else task_id
+    work_dir = UPLOADS_DIR / work_dir_id
+    work_dir.mkdir(exist_ok=True)
+    log.info(f"📁 任務 {task_id} 將使用工作目錄: {work_dir}")
+
+
+    try:
+        payload = json.loads(task['payload'])
+        # --- 步驟 2: 根據任務類型執行對應的工具 ---
+
+        if task_type in ['youtube_download', 'youtube_download_only']:
+            url = payload.get('url')
+            if not url:
+                raise ValueError("任務 payload 中缺少 'url'")
+
+            # 準備 downloader 指令
+            tool_script = TOOLS_DIR / ("mock_youtube_downloader.py" if use_mock else "youtube_downloader.py")
+            cmd = [
+                sys.executable, str(tool_script),
+                "--url", url,
+                "--output-dir", str(work_dir), # 使用隔離目錄
+                "--download-type", payload.get("download_type", "audio")
+            ]
+            if payload.get("custom_filename"):
+                cmd.extend(["--custom-filename", payload.get("custom_filename")])
+
+            cookies_path = UPLOADS_DIR / "cookies.txt"
+            if cookies_path.is_file():
+                cmd.extend(["--cookies-file", str(cookies_path)])
+
+            log.info(f"🔧 執行下載指令: {' '.join(cmd)}")
+            process = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+
+            result_data = json.loads(process.stdout)
+            if result_data.get("status") == "failed":
+                raise RuntimeError(result_data.get("error", "下載器回報了一個未知的錯誤"))
+
+            # 將結果中的檔案路徑轉換為可公開存取的 URL
+            for key in ["output_path", "html_report_path", "pdf_report_path"]:
+                if key in result_data and result_data[key]:
+                    result_data[key] = convert_to_media_url(result_data[key])
+
+            db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+            notify_api_server(task_id, 'completed', result_data)
+
+        elif task_type == 'gemini_process':
+            if not parent_task_id:
+                raise ValueError("gemini_process 任務必須依賴於一個下載任務 ('depends_on' 欄位缺失)")
+
+            # 獲取父任務的結果
+            parent_task_info = db_client.get_task_status(parent_task_id)
+            if not parent_task_info or parent_task_info.get('status') != 'completed':
+                raise RuntimeError(f"父任務 {parent_task_id} 尚未成功完成，無法繼續。")
+
+            parent_result = json.loads(parent_task_info.get('result', '{}'))
+            media_url = parent_result.get('output_path')
+            if not media_url:
+                raise ValueError(f"父任務 {parent_task_id} 的結果中找不到 'output_path'")
+
+            media_file_path = convert_media_url_to_path(media_url)
+            if not media_file_path.exists():
+                raise FileNotFoundError(f"找不到 Gemini 分析所需的媒體檔案: {media_file_path}")
+
+            # 準備 processor 指令
+            tool_script = TOOLS_DIR / ("mock_gemini_processor.py" if use_mock else "gemini_processor.py")
+            cmd = [
+                sys.executable, str(tool_script),
+                "--command", "process",
+                "--audio-file", str(media_file_path),
+                "--output-dir", str(work_dir), # 報告也輸出到同一個隔離目錄
+                "--model", payload.get("model"),
+                "--video-title", parent_result.get("video_title", "無標題"),
+                "--tasks", payload.get("tasks", "summary,transcript"),
+                "--output-format", payload.get("output_format", "html")
+            ]
+
+            log.info(f"🔧 執行 Gemini 分析指令: {' '.join(cmd)}")
+            # 注意：gemini_processor.py 可能會將進度更新寫入 stderr
+            process = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+
+            result_data = json.loads(process.stdout)
+            if result_data.get("status") == "failed":
+                raise RuntimeError(result_data.get("error", "Gemini 分析器回報了一個未知的錯誤"))
+
+            # 將結果中的檔案路徑轉換為可公開存取的 URL
+            for key in ["output_path", "html_report_path", "pdf_report_path"]:
+                if key in result_data and result_data[key]:
+                    result_data[key] = convert_to_media_url(result_data[key])
+
+            db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+            notify_api_server(task_id, 'completed', result_data)
+
+        else:
+            raise ValueError(f"在 process_youtube_chain_task 中遇到未知的任務類型: {task_type}")
+
+    except (subprocess.CalledProcessError, RuntimeError, ValueError, FileNotFoundError) as e:
+        log.error(f"❌ 處理任務 {task_id} ({task_type}) 失敗: {e}")
+        error_message = str(e)
+        if isinstance(e, subprocess.CalledProcessError):
+            error_message = e.stderr or "yt-dlp 執行失敗且未提供 stderr。"
+
+        # 嘗試從錯誤訊息中解析 JSON
+        try:
+            error_payload = json.loads(error_message)
+        except json.JSONDecodeError:
+            error_payload = {"error": error_message}
+
+        db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
+        notify_api_server(task_id, 'failed', error_payload)
+
+    except Exception as e:
+        log.critical(f"💥 處理任務 {task_id} 時發生未預期的嚴重錯誤: {e}", exc_info=True)
+        error_payload = {"error": f"Worker 內部嚴重錯誤: {e}"}
+        db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
+        notify_api_server(task_id, 'failed', error_payload)
+
+    finally:
+        # --- 步驟 3: 清理隔離目錄 ---
+        # 清理只應在任務鏈的最後一個任務完成後進行。
+        task_is_final_in_chain = task_type in ['youtube_download_only', 'gemini_process']
+
+        if task_is_final_in_chain:
+            # work_dir 是根據 parent_task_id 或 task_id 決定的，所以路徑是正確的
+            if work_dir.exists():
+                try:
+                    shutil.rmtree(work_dir)
+                    log.info(f"🗑️ 已成功清理任務鏈的隔離目錄: {work_dir}")
+                except Exception as e:
+                    log.error(f"清理隔離目錄 {work_dir} 時發生錯誤: {e}", exc_info=True)
+            else:
+                log.warning(f"想要清理的目錄 {work_dir} 不存在，可能已被提前清理。")
+        else:
+            log.info(f"ℹ️ 任務 {task_id} ({task_type}) 不是鏈的終點，跳過清理步驟。")
 
 
 def process_task(task: dict, use_mock: bool):
@@ -205,6 +383,8 @@ def process_task(task: dict, use_mock: bool):
         process_download_task(task, use_mock)
     elif task_type == 'transcribe':
         process_transcription_task(task, use_mock)
+    elif task_type in ['youtube_download', 'youtube_download_only', 'gemini_process']:
+        process_youtube_chain_task(task, use_mock)
     else:
         log.error(f"❌ 未知的任務類型: '{task_type}' (Task ID: {task['task_id']})")
         db_client.update_task_status(task['task_id'], 'failed', json.dumps({"error": f"未知的任務類型: {task_type}"}))
