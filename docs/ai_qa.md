@@ -164,3 +164,66 @@
 ### 結論：從混亂到穩定
 
 這次實踐充分證明，一個看似簡單的任務，在真實的開發環境中可能因為環境配置、依賴管理和程序狀態等問題而變得複雜。透過系統性的「假設-驗證」循環，並最終採用更穩健的工具（如 Playwright 的 `webServer` 功能），我們成功地建立了一個可靠的自動化測試基礎。這次經驗也被記錄下來，為未來更深入的 AI 視覺分析流程奠定了堅實的基礎。
+
+---
+
+## 附錄二：輕量級快照腳本的誕生：一個偵錯馬拉松
+
+在確立了 AI 驅動的品質保證策略後，我們遇到了一個新的需求：一個比完整 E2E 測試更快速、更輕量的快照擷取方案。這個方案的目標是：僅啟動伺服器，拍一張照片，然後立刻關閉。
+
+這個看似簡單的目標，卻開啟了一場涵蓋了 Python 環境、Node.js 環境、程序管理、檔案系統和 Playwright 內部機制的深度偵錯之旅。本附錄旨在詳細記錄這個過程，為未來的 AI 開發者提供一份寶貴的「踩坑地圖」。
+
+### 初始計畫：一個獨立的 Node.js 腳本
+
+我們的構想是建立一個名為 `snapshot.js` 的獨立腳本，它將：
+1.  以子程序 (child process) 的形式啟動 Python 後端伺服器。
+2.  監聽伺服器的日誌輸出，直到看見代表「就緒」的訊息。
+3.  啟動 Playwright，導航至首頁並擷取快照。
+4.  發送一個終止信號給伺服器子程序，令其優雅關閉。
+5.  整合一個「看門狗」(watchdog) 計時器，若伺服器在指定時間內無日誌輸出，則強制終止，防止程序掛起。
+
+### 連續遭遇的挑戰與解決方案
+
+以下是我們在實現此目標過程中，如俄羅斯套娃般層層揭開的問題：
+
+1.  **挑戰一：Python 依賴問題 (psutil)**
+    *   **現象**：`snapshot.js` 首次執行時，Python 子程序立即失敗，報錯 `ModuleNotFoundError: No module named 'psutil'`。
+    *   **分析**：雖然啟動伺服器的 Python 腳本 `run_server_for_playwright.py` 內部有安裝依賴的函數，但它在執行該函數之前，就需要 `import psutil`。這是一個「雞生蛋，蛋生雞」的問題。
+    *   **解決方案**：修改 `package.json` 中的 `snapshot` 指令，在執行 Node.js 腳本 *之前*，先強制執行 `python3 -m pip install -r requirements.txt`，確保 Python 環境預先準備就緒。
+
+2.  **挑戰二：日誌目錄遺失**
+    *   **現象**：解決依賴問題後，`circus` 服務管理器啟動失敗。檢查 `circus.log` 發現錯誤 `FileNotFoundError: [Errno 2] No such file or directory: '/app/logs/api_server.log'`。
+    *   **分析**：`circus.ini` 設定檔要求將日誌寫入 `/app/logs` 目錄，但該目錄並不存在。
+    *   **解決方案**：再次修改 `package.json` 的 `snapshot` 指令，在所有操作的最前面加入 `mkdir -p logs`，確保日誌目錄永遠存在。
+
+3.  **挑戰三：`circus.ini` 範本變數未替換**
+    *   **現象**：`circus` 依然無法啟動其管理的服務。`circus.log` 顯示錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
+    *   **分析**：`run_server_for_playwright.py` 腳本只是簡單地複製了 `circus.ini.template`，並未將 `%%PYTHON_EXEC%%` 這個預留位置替換為實際的 Python 直譯器路徑。
+    *   **解決方案**：修改 `run_server_for_playwright.py`，將簡單的檔案複製操作，改為讀取範本內容、執行字串替換 (`.replace("%%PYTHON_EXEC%%", sys.executable)`)、然後再寫入新的 `circus.ini` 檔案。
+
+4.  **挑戰四：頑固的 `PYTHONPATH` 問題**
+    *   **現象**：`circus` 終於能嘗試啟動服務了，但服務立即失敗。檢查 `logs/api_server.err` 發現 `ModuleNotFoundError: No module named 'db'`。
+    *   **分析**：即使 `run_server_for_playwright.py` 腳本設定了正確的 `sys.path`，這個設定並不會被 `circus` 產生的子程序繼承。`api_server.py` 在執行時，無法找到位於 `src` 目錄下的其他模組。
+    *   **第一次嘗試 (失敗)**：在 `circus.ini.template` 中為 watcher 加入 `env.PYTHONPATH = /app`。結果無效，錯誤依舊。
+    *   **第二次嘗試 (失敗)**：意識到路徑應為 `/app/src`，修正後再次嘗試。結果依然無效，顯示 `circus` 的 `env` 設定在當前環境下可能並未如預期般運作。
+    *   **最終解決方案**：放棄 `PYTHONPATH`，改用更穩健的 Python 模組化執行方式。修改 `circus.ini.template`，將 `working_dir` 改為 `/app/src`，並將指令從 `python src/api/api_server.py` 改為 `python -m api.api_server`。這利用了 Python 的 `-m` 旗標會自動將當前目錄加入到搜尋路徑的特性，從根本上解決了模組導入問題。
+
+5.  **挑戰五：Playwright 首次啟動的「沉默」**
+    *   **現象**：伺服器終於成功就緒！`snapshot.js` 也偵測到了就緒訊息。但隨後腳本便卡住，直到被看門狗計時器終止。
+    *   **分析**：這是最隱蔽的一個問題。`await chromium.launch()` 在首次執行時，如果對應的瀏覽器執行檔不存在，它會**在背景靜默下載**，這個過程可能長達數十秒且**不會有任何日誌輸出**。我們的看門狗因此被「欺騙」，誤以為程序已無回應。
+    *   **解決方案**：在 `package.json` 的 `snapshot` 指令中，再次加入一個步驟：`npx playwright install chromium`。在執行主腳本前，先確保瀏覽器依賴已明確安裝。
+
+6.  **挑戰六：最後一公里的細節錯誤**
+    *   **現象**：在解決了 Playwright 瀏覽器下載問題後，腳本依然失敗，但這次我們得到了更清晰的錯誤訊息。
+    *   **子問題 A：錯誤的「就緒」信號檢測**：腳本無法從日誌中判斷伺服器已就緒。經查，Python 腳本輸出的是中文日誌 `伺服器已在埠...`，而 `snapshot.js` 中檢查的是英文 `Server is ready`。
+        *   **解決方案**：將檢查條件改為一個語言無關的獨特標記 `✅✅✅`。
+    *   **子問題 B：錯誤的 Playwright 選擇器**：在修復了信號檢測後，Playwright 報錯 `TimeoutError: waiting for locator('#tabs') to be visible`。
+        *   **解決方案**：檢查目標頁面 `mp3.html`，發現其中並無 `#tabs` 元素。將選擇器改為頁面中肯定存在且穩定的 `h1` 標籤。
+
+### 最終成果
+
+在經歷了上述所有挑戰後，`bun run snapshot` 指令終於能夠穩定、可靠地完成其任務。這個過程雖然漫長，但它產生了兩個寶貴的成果：
+1.  一個功能強大且包含完整環境設定的輕量級快照腳本。
+2.  一系列對專案底層環境的加固與修復，大幅提升了未來所有自動化任務的穩定性。
+
+這次偵錯歷程充分說明，在複雜的軟體專案中，一個看似簡單的功能點，背後可能牽動著整個技術棧的各個層面。唯有透過系統性的分析、大膽的假設、小心的驗證，以及不厭其煩的迭代，才能最終抵達成功的彼岸。

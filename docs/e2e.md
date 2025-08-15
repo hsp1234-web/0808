@@ -1,7 +1,7 @@
 # 📖 前端 UI 端對端 (E2E) 測試指南
 
 **文件作者：** Jules (AI 軟體工程師)
-**最後更新：** 2025年8月12日
+**最後更新：** 2025年8月15日
 
 ---
 
@@ -9,69 +9,78 @@
 
 本專案的前端使用者介面 (UI) 端對端測試採用 **Playwright** 框架。測試案例使用 **JavaScript** 編寫，存放於 `tests/` 目錄下，並以 `.spec.js` 為副檔名。
 
-這些測試旨在模擬真實使用者在瀏覽器中的操作，以驗證 `static/mp3.html` 頁面上的各項功能是否如預期般運作，包括：
-*   頁面基本互動 (如分頁切換、縮放)
-*   媒體下載器功能
-*   YouTube 報告功能
-*   日誌檢視器
+這些測試旨在模擬真實使用者在瀏覽器中的操作，以驗證 `static/mp3.html` 頁面上的各項功能是否如預期般運作。
 
 主要的測試檔案是 `tests/e2e-full-ui-validation.spec.js`。
 
 ---
 
-## 二、 如何執行 UI 測試
+## 二、 如何執行 UI 測試 (新版流程)
 
-執行 UI 測試需要兩個主要部分：**一個運作中的後端服務**，以及**執行 Playwright 測試指令**。
+過去，執行 UI 測試需要手動安裝多種依賴、啟動後端服務、然後再執行測試指令。這個過程繁瑣且容易出錯。
 
-### 步驟 1: 環境準備 (首次執行)
+現在，我們引入了一個統一的**環境設定與驗證腳本**，極大地簡化了這個流程。
 
-如果您是第一次執行測試，需要安裝必要的依賴。
+### 步驟 1: 環境設定與驗證 (推薦的唯一入口)
+
+無論您是首次設定環境，還是想要執行任何測試，都請先從這個指令開始。它會處理所有事情。
 
 ```bash
-# 安裝 Node.js 依賴 (包含 Playwright)
-npm install
-
-# 安裝 Playwright 所需的瀏覽器執行檔與系統依賴
-# (此指令可能需要 sudo 權限來安裝系統套件)
-npx playwright install --with-deps
+# 此指令會安裝所有依賴 (Python & Node.js)、啟動伺服器、
+# 擷取一張快照以驗證 UI 可達性，然後自動關閉所有服務。
+bun run snapshot
 ```
 
-### 步驟 2: 啟動後端服務
+**請務必先成功執行此指令。** 如果 `bun run snapshot` 成功，代表您的環境已準備就緒，可以執行更具體的 Playwright 測試。
 
-UI 測試需要一個持續運行的後端伺服器。請勿使用 `local_run.py`，因为它會自動關閉。請使用 `circus` 來啟動服務。
+關於此指令的詳細說明，請參閱根目錄下的 **`AGENTS.md`** 文件。
+
+### 步驟 2: 執行特定的 Playwright 測試
+
+在成功執行過 `bun run snapshot` 後，您的後端伺服器和環境已經被證明是可用的。現在，您可以手動啟動後端服務，並執行完整的 E2E 測試套件。
+
+**1. 啟動後端服務**
+
+在一個終端中，使用 `circus` 啟動一個持續運行的後端服務。
 
 ```bash
-# (首次執行前) 確保 logs 目錄存在
-mkdir -p logs
-
-# 在一個終端中啟動所有後端服務
+# 確保您位於專案根目錄
 python -m circus.circusd circus.ini
 ```
-此時，API 伺服器應該會在 `http://127.0.0.1:42649` 上運行。您可以將此終端視窗保持開啟，或在背景執行它。
 
-### 步驟 3: 執行 Playwright 測試
+**2. 執行 Playwright 測試**
 
-開啟**另一個新的終端視窗**，執行以下指令來啟動所有測試：
+開啟**另一個新的終端視窗**，執行 Playwright 指令。
 
 ```bash
-# 執行所有位於 tests/ 目錄下的 .spec.js 測試
+# 執行所有 UI 測試
 npx playwright test
-```
 
-如果您只想執行特定的測試檔案，可以指定路徑：
-```bash
+# 或僅執行某個特定的測試檔案
 npx playwright test tests/e2e-full-ui-validation.spec.js
 ```
 
-### 步驟 4: 清理
+### 步驟 3: 清理
 
-完成測試後，您可以回到啟動 `circus` 的終端，或使用以下指令來關閉所有後端服務：
+測試完成後，關閉後端服務：
 ```bash
 python -m circus.circusctl quit
 ```
+
 ---
 
 ## 三、 疑難排解
 
-*   **`FileNotFoundError: /app/logs/...`**: 這表示您在啟動 `circus` 之前忘記建立 `logs` 目錄。請執行 `mkdir -p logs`。
-*   **Playwright 測試無法連線**: 請確認您已在另一個終端中成功執行 `python -m circus.circusd circus.ini`，並且沒有看到任何錯誤訊息。您可以透過 `curl http://127.0.0.1:42649/api/health` 來確認伺服器是否正在運行。
+由於新的 `snapshot` 腳本處理了大部分舊的環境問題，現在的疑難排解更為簡單：
+
+*   **`bun run snapshot` 失敗**:
+    *   這是最根本的問題。請仔細閱讀該指令輸出的錯誤日誌。
+    *   **不要**嘗試手動執行 `npm install` 或 `pip install`。`snapshot` 腳本的失敗通常指向更深層的設定問題。
+    *   請依序檢查 `AGENTS.md` 中提到的「重要文件檢查清單」，特別是 `circus.log` 和 `api_server.err`。
+
+*   **`npx playwright test` 失敗，但 `snapshot` 成功**:
+    *   這表示您的基礎環境是好的，但問題出在 E2E 測試腳本 (`*.spec.js`) 的邏輯本身。
+    *   使用 Playwright 的 UI 模式來進行互動式除錯，這非常有效：
+        ```bash
+        npx playwright test --ui
+        ```
