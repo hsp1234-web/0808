@@ -138,6 +138,43 @@ else:
 from urllib.parse import unquote
 from fastapi.responses import FileResponse
 
+
+# --- JULES'S NEW FEATURE: App State API Endpoints ---
+
+@app.get("/api/app_state", response_class=JSONResponse)
+async def get_app_state_endpoint():
+    """
+    獲取應用程式的 UI 狀態。
+    """
+    try:
+        # 我們將所有 UI 狀態儲存在一個鍵 'ui_settings' 下
+        state_json = db_client.get_app_state(key='ui_settings')
+        if state_json:
+            # 如果資料庫中有資料，解析並回傳
+            return JSONResponse(content=json.loads(state_json))
+        # 如果資料庫中沒有，回傳一個空的預設物件
+        return JSONResponse(content={})
+    except Exception as e:
+        log.error(f"獲取 app_state 時 API 發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="無法獲取應用程式狀態")
+
+@app.post("/api/app_state", status_code=200)
+async def set_app_state_endpoint(request: Request):
+    """
+    儲存應用程式的 UI 狀態。
+    """
+    try:
+        new_state = await request.json()
+        # 將收到的 JSON 物件轉換為字串以便儲存
+        state_json = json.dumps(new_state)
+        db_client.set_app_state(key='ui_settings', value=state_json)
+        return {"status": "success", "message": "應用程式狀態已儲存"}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="無效的 JSON 格式。")
+    except Exception as e:
+        log.error(f"儲存 app_state 時 API 發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="無法儲存應用程式狀態")
+
 @app.get("/media/{file_path:path}")
 async def serve_media_files(file_path: str):
     """

@@ -142,6 +142,19 @@ class DBClient:
         """
         return self._send_request("find_dependent_task", {"parent_task_id": parent_task_id})
 
+    # JULES'S NEW FEATURE: App State methods
+    def get_app_state(self, key: str) -> str | None:
+        """
+        從資料庫獲取一個應用程式狀態值。
+        """
+        return self._send_request("get_app_state", {"key": key})
+
+    def set_app_state(self, key: str, value: str) -> bool:
+        """
+        在資料庫中設定一個應用程式狀態值。
+        """
+        return self._send_request("set_app_state", {"key": key, "value": value})
+
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
 
