@@ -17,12 +17,15 @@ export default defineConfig({
   // Reporter to use. See https://playwright.dev/docs/test-reporters
   reporter: 'list',
 
-  // JULES'S FIX: Let Playwright manage the server for stability.
+  // 修正：使用自訂的 shell 腳本來啟動和關閉後端服務，以解決子進程殘留的問題。
+  // 這個腳本確保當 Playwright 結束測試時，所有相關的服務都會被優雅地終止。
   webServer: {
-    command: 'python -m circus.circusd config/circus.ini',
+    command: 'bash scripts/run_server_for_e2e.sh',
     url: 'http://127.0.0.1:42649/api/health',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes to start
+    timeout: 120 * 1000, // 2 分鐘啟動超時
+    // 增加一個關閉超時，讓我們的 trap 有時間執行
+    killTimeout: 5000,
   },
 
   use: {
