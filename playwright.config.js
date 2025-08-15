@@ -17,15 +17,17 @@ export default defineConfig({
   // Reporter to use. See https://playwright.dev/docs/test-reporters
   reporter: 'list',
 
-  // 修正：使用自訂的 shell 腳本來啟動和關閉後端服務，以解決子進程殘留的問題。
-  // 這個腳本確保當 Playwright 結束測試時，所有相關的服務都會被優雅地終止。
+  // JULES'S FIX: 使用一個穩健的 Python 腳本來管理後端服務的完整生命週期。
+  // 這個腳本從 local_run.py 借鑒了經驗，包含了事前清理、依賴安裝、
+  // 使用 Circus 進行程序管理，以及優雅的信號處理和關閉機制。
+  // 這將從根本上解決服務啟動不穩定和掛起的問題。
   webServer: {
-    command: 'bash scripts/run_server_for_e2e.sh',
+    command: 'python scripts/run_server_for_playwright.py',
     url: 'http://127.0.0.1:42649/api/health',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 分鐘啟動超時
-    // 增加一個關閉超時，讓我們的 trap 有時間執行
-    killTimeout: 5000,
+    // 我們的 Python 腳本內部有 60 秒的超時，這裡設定一個稍長的時間
+    timeout: 70 * 1000,
+    // 新腳本透過信號處理來進行優雅關閉，不再需要 killTimeout
   },
 
   use: {
