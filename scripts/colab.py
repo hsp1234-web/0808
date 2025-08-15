@@ -238,9 +238,9 @@ class ServerManager:
             # --- 修復結束 ---
 
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
-            # 修正：為了讓 Python 能夠正確解析模組，我們將工作目錄設定為 src
+            # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
             # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "core/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
@@ -283,9 +283,18 @@ class ServerManager:
                 self._log_manager.log("WARN", "YouTube 相關功能將被停用。請設定 Colab Secret 或在專案中提供 config.json 以啟用完整功能。")
             # --- 金鑰讀取邏輯結束 ---
 
+            # --- JULES'S FINAL FIX (2025-08-15) ---
+            # 明確設定 PYTHONPATH，以解決子進程中的 ModuleNotFoundError。
+            # 這是確保子進程找到模組最可靠的方法。
+            src_path_str = str((project_path / "src").resolve())
+            existing_python_path = process_env.get('PYTHONPATH', '')
+            process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{existing_python_path}".strip(os.pathsep)
+            self._log_manager.log("INFO", f"正在設定子程序的 PYTHONPATH: {process_env['PYTHONPATH']}")
+            # --- 修正結束 ---
+
             self.server_process = subprocess.Popen(
                 launch_command,
-                cwd=str(project_path / "src"), # 在 src 目錄中執行以解析模組
+                cwd=str(project_path), # 在下載的專案目錄中執行
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
