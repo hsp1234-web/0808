@@ -119,3 +119,48 @@
 ## 結論與展望
 
 此次探索之歷程，促使品質保證流程從一種被動、遲緩之狀態，演進至一個主動、迅捷且智慧化之新境界。一個以 Playwright 為執行器、多模態人工智慧為分析核心、Bun 為加速器之黃金技術棧已被確立。未來之目標在於將此套策略完全整合至持續整合與持續部署 (CI/CD) 之流程中，藉此建立一個不僅能發現問題，更能自主診斷、輔助修復之高度自動化開發體系，從而將品質保證之角色，由開發流程之瓶頸，轉化為驅動創新之強大引擎。
+
+---
+
+## 附錄：AI 助理實踐日誌：從環境設定到首次快照
+
+本章節旨在記錄 AI 助理在實際操作中，為達成「啟動本地伺服器並擷取首張UI快照」此一目標所經歷的完整偵錯與解決問題的歷程。這不僅是技術操作的流水帳，更是展現問題解決策略與系統韌性思維的具體實例。
+
+### 初始目標：驗證本地端 UI
+
+任務非常明確：啟動專案的後端伺服器，並透過 Playwright 擷取前端頁面 (`mp3.html`) 的一張螢幕快照，以作為後續所有視覺化測試的基礎。
+
+### 遭遇的挑戰與解決方案
+
+過程並非一帆風順，遭遇了一系列環環相扣的環境與設定問題：
+
+1.  **挑戰一：Python 依賴缺失**
+    *   **現象**：首次嘗試啟動伺服器 (`python -m circus.circusd ...`) 時，系統立即報錯 `ModuleNotFoundError: No module named 'circus'`。
+    *   **分析**：這是典型的 Python 環境問題，執行的環境中並未安裝必要的依賴套件。
+    *   **解決方案**：透過執行 `pip install -r requirements.txt`，將專案所需的所有 Python 套件安裝至當前環境。
+
+2.  **挑戰二：設定檔遺失**
+    *   **現象**：解決了依賴問題後，伺服器依然啟動失敗，錯誤訊息轉變為 `OSError: the configuration file 'config/circus.ini' does not exist`。
+    *   **分析**：程式碼庫中僅提供了一個範本檔案 `config/circus.ini.template`，而程式預期讀取的是 `config/circus.ini`。
+    *   **解決方案**：執行 `cp config/circus.ini.template config/circus.ini`，從範本複製一份正式的設定檔。
+
+3.  **挑戰三：設定檔預留位置未被替換**
+    *   **現象**：伺服器日誌中出現了新的錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
+    *   **分析**：`circus.ini` 設定檔中使用了一個預留位置 `%%PYTHON_EXEC%%`，它需要被替換為當前環境中 Python 直譯器的確切路徑。
+    *   **解決方案**：透過 `which python` 找到 Python 路徑，並使用 `sed` 指令將其寫入設定檔，例如：`sed -i "s|%%PYTHON_EXEC%%|/path/to/python|g" config/circus.ini`。
+
+4.  **挑戰四：Node.js 依賴缺失**
+    *   **現象**：在伺服器問題看似解決後，執行 Playwright 測試 (`npx playwright test ...`) 時，出現了前端錯誤 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test'`。
+    *   **分析**：與 Python 類似，Node.js 的環境也需要安裝其專案依賴。
+    *   **解決方案**：執行 `npm install`，安裝 `package.json` 中定義的所有開發與執行依賴。
+
+5.  **挑戰五：頑固的連接埠衝突**
+    *   **現象**：最令人困惑的問題隨之而來。即使所有設定都已正確，測試仍然頻繁失敗，錯誤為 `net::ERR_CONNECTION_REFUSED`，同時伺服器日誌顯示 `Address already in use`。這表示即使先前的程序已終止，仍有殭屍程序佔用著連接埠。
+    *   **分析**：手動管理伺服器啟動與關閉的過程非常不穩定，尤其是在自動化腳本中。
+    *   **最終解決方案**：
+        1.  **授權給 Playwright**：修改 `playwright.config.js`，加入 `webServer` 設定。這讓 Playwright 自身負責在測試前啟動伺服器、檢查其健康狀態，並在測試結束後關閉它，從根本上解決了手動管理的穩定性問題。
+        2.  **確保狀態純淨**：為了解決殭屍程序問題，最終採用了「在執行測試的同一個指令中，先強制清理再啟動」的策略：`pkill -9 -f circus; npx playwright test ...`。這確保了每次執行都是在一個絕對乾淨的狀態下開始。
+
+### 結論：從混亂到穩定
+
+這次實踐充分證明，一個看似簡單的任務，在真實的開發環境中可能因為環境配置、依賴管理和程序狀態等問題而變得複雜。透過系統性的「假設-驗證」循環，並最終採用更穩健的工具（如 Playwright 的 `webServer` 功能），我們成功地建立了一個可靠的自動化測試基礎。這次經驗也被記錄下來，為未來更深入的 AI 視覺分析流程奠定了堅實的基礎。

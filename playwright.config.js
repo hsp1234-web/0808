@@ -17,8 +17,16 @@ export default defineConfig({
   // Reporter to use. See https://playwright.dev/docs/test-reporters
   reporter: 'list',
 
+  // JULES'S FIX: Let Playwright manage the server for stability.
+  webServer: {
+    command: 'python -m circus.circusd config/circus.ini',
+    url: 'http://127.0.0.1:42649/api/health',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000, // 2 minutes to start
+  },
+
   use: {
-    // JULES'S FIX: Set the correct baseURL for the test server
+    // The base URL is now provided by the webServer option.
     baseURL: 'http://127.0.0.1:42649',
 
     // Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer
