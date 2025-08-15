@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "7.6.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "7.6.5" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -201,7 +201,7 @@ class ServerManager:
             # 採用「混合式安裝」策略，以最快速度讓伺服器上線
 
             # 1. 安裝輕量的核心伺服器依賴 (使用 pip)
-            server_reqs_path = project_path / "src" / "requirements-server.txt"
+            server_reqs_path = project_path / "requirements-server.txt"
             if server_reqs_path.is_file():
                 self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
                 add_system_log("colab_setup", "INFO", "Installing server dependencies...")
@@ -240,7 +240,7 @@ class ServerManager:
             # 注意：這裡不再傳遞 port，因為新架構中 api_server 使用的是固定埠號 8001
             # 修正：由於 cwd 已經是 project_path，這裡的腳本路徑應該是相對於 project_path 的
             # 在 Colab 環境中，我們總是希望以真實模式運行
-            launch_command = [sys.executable, "src/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
 
             # --- JULES 於 2025-08-10 的修改與增強：從 Colab Secrets 或 config.json 讀取 API 金鑰 ---
             process_env = os.environ.copy()
@@ -296,7 +296,7 @@ class ServerManager:
             self._log_manager.log("INFO", f"協調器子進程已啟動 (PID: {self.server_process.pid})，正在等待握手信號...")
 
             # 3. 在背景執行緒中安裝大型依賴 (使用 uv)
-            worker_reqs_path = project_path / "src" / "requirements-worker.txt"
+            worker_reqs_path = project_path / "requirements-worker.txt"
             background_install_thread = threading.Thread(
                 target=self._install_worker_deps,
                 args=(worker_reqs_path,),
