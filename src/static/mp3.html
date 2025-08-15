@@ -1139,13 +1139,16 @@
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
 
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.className = 'task-checkbox';
-                        checkbox.value = payload.task_id;
-                        checkbox.style.marginRight = '15px';
-                        checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
-                        taskElement.prepend(checkbox);
+                        // JULES'S FIX: 在新增勾選框前，先檢查是否已存在
+                        if (!taskElement.querySelector('.task-checkbox')) {
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'task-checkbox';
+                            checkbox.value = payload.task_id;
+                            checkbox.style.marginRight = '15px';
+                            checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
+                            taskElement.prepend(checkbox);
+                        }
 
                         // 問題三：為完成的任務加上圖示
                         const result = payload.result || {};
@@ -1308,13 +1311,16 @@
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                     }
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.className = 'task-checkbox';
-                    checkbox.value = payload.task_id;
-                    checkbox.style.marginRight = '15px';
-                    checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
-                    taskElement.prepend(checkbox);
+                    // JULES'S FIX: 在新增勾選框前，先檢查是否已存在
+                    if (!taskElement.querySelector('.task-checkbox')) {
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'task-checkbox';
+                        checkbox.value = payload.task_id;
+                        checkbox.style.marginRight = '15px';
+                        checkbox.addEventListener('change', () => logAction('toggle-task-checkbox', payload.task_id));
+                        taskElement.prepend(checkbox);
+                    }
                     if(isDownloaderTask) {
                         document.getElementById('zip-download-btn').disabled = false;
                     }
