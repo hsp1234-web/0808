@@ -53,6 +53,14 @@ def _install_deps_with_uv(requirements_file: str):
 
     # 安裝指定的 Python 依賴
     uv_command = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", requirements_file]
+
+    # [JULES'S FIX] 優化大型 AI 套件下載
+    if "heavy" in requirements_file:
+        log.info("偵測到大型依賴檔案，將新增 PyTorch CPU 專用索引進行優化。")
+        uv_command.extend([
+            "--extra-index-url", "https://download.pytorch.org/whl/cpu"
+        ])
+
     try:
         subprocess.check_call(uv_command)
         log.info(f"✅ 成功安裝 {requirements_file} 中的依賴。")
@@ -190,4 +198,17 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # [JULES'S FIX] 全域超時保護
+    main_thread = threading.Thread(target=main)
+    main_thread.daemon = True
+    log.info(f"--- 啟動主執行緒，並設定 120 秒超時保護 ---")
+    main_thread.start()
+    main_thread.join(timeout=120)
+
+    if main_thread.is_alive():
+        log.critical("💥 主執行緒超時 (120秒)！腳本可能已掛起。正在強制終止...")
+        # 強制退出以防止 CI/CD 或本地開發掛起
+        # 注意：這是一個強硬的退出方式，但對於防止掛起是必要的
+        os._exit(1)
+    else:
+        log.info("✅ 主執行緒在時限內成功完成。")
