@@ -217,7 +217,15 @@ class ServerManager:
             self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
             git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
             result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
+            if result.returncode != 0:
+                error_message = f"""Git clone 失敗! 返回碼: {result.returncode}
+--- STDOUT ---
+{result.stdout}
+--- STDERR ---
+{result.stderr}
+"""
+                self._log_manager.log("CRITICAL", error_message)
+                return
 
             self._log_manager.log("INFO", "✅ Git 倉庫下載完成。")
             project_src_path = project_path / "src"
@@ -229,12 +237,22 @@ class ServerManager:
             initialize_database()
             add_system_log("colab_setup", "INFO", "Git repository cloned successfully.")
 
-            server_reqs_path = project_path / "requirements-server.txt"
+            server_reqs_path = project_path / "requirements" / "server.txt"
             if server_reqs_path.is_file():
                 self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
                 pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(server_reqs_path)]
-                subprocess.run(pip_command, check=True, capture_output=True, text=True, encoding='utf-8')
-                self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
+                try:
+                    subprocess.run(pip_command, check=True, capture_output=True, text=True, encoding='utf-8')
+                    self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
+                except subprocess.CalledProcessError as e:
+                    error_message = f"""核心依賴安裝失敗！返回碼: {e.returncode}
+--- STDOUT ---
+{e.stdout}
+--- STDERR ---
+{e.stderr}
+"""
+                    self._log_manager.log("CRITICAL", error_message)
+                    raise  # 重新引發異常以停止執行
 
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
             launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
@@ -244,7 +262,7 @@ class ServerManager:
 
             self.server_process = subprocess.Popen(launch_command, cwd=str(project_path), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid, env=process_env)
 
-            worker_reqs_path = project_path / "requirements-worker.txt"
+            worker_reqs_path = project_path / "requirements" / "transcriber.txt"
             background_install_thread = threading.Thread(target=self._install_worker_deps, args=(worker_reqs_path,), daemon=True)
             background_install_thread.start()
 
@@ -266,21 +284,39 @@ class ServerManager:
                 if self.port and server_ready:
                     self.server_ready_event.set()
 
-            self.server_process.wait()
+            return_code = self.server_process.wait()
             if not self.server_ready_event.is_set():
                 self._stats['status'] = "❌ 伺服器啟動失敗"
-                self._log_manager.log("CRITICAL", "協調器進程在就緒前已終止。")
+                self._log_manager.log("CRITICAL", f"協調器進程在就緒前已終止，返回碼: {return_code}。請檢查上方日誌以了解詳細錯誤。")
         except Exception as e: self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally: self._stats['status'] = "⏹️ 已停止"
 
     def _install_worker_deps(self, requirements_path: Path):
         try:
             self._log_manager.log("INFO", "步驟 3/3: [背景] 開始安裝大型任務依賴...")
-            if not requirements_path.is_file(): return
+            if not requirements_path.is_file():
+                self._log_manager.log("INFO", "[背景] 未找到 worker 依賴檔案，跳過安裝。")
+                return
+
+            # 安裝 uv
+            self._log_manager.log("INFO", "[背景] 正在安裝 uv...")
             subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True, capture_output=True)
+            self._log_manager.log("SUCCESS", "[背景] ✅ uv 安裝成功。")
+
+            # 安裝 worker 依賴
+            self._log_manager.log("INFO", f"[背景] 正在從 {requirements_path} 安裝依賴...")
             subprocess.run([sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(requirements_path)], check=True, capture_output=True)
             self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
-        except Exception as e: self._log_manager.log("CRITICAL", f"[背景] 安裝執行緒發生未預期錯誤: {e}")
+        except subprocess.CalledProcessError as e:
+            error_message = f"""[背景] 依賴安裝失敗！返回碼: {e.returncode}
+--- STDOUT ---
+{e.stdout.decode('utf-8', 'ignore')}
+--- STDERR ---
+{e.stderr.decode('utf-8', 'ignore')}
+"""
+            self._log_manager.log("CRITICAL", error_message)
+        except Exception as e:
+            self._log_manager.log("CRITICAL", f"[背景] 安裝執行緒發生未預期錯誤: {e}")
 
     def start(self): self._thread.start()
     def stop(self):

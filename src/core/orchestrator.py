@@ -1,4 +1,3 @@
-# orchestrator.py
 import time
 import subprocess
 import sys
@@ -9,25 +8,13 @@ from pathlib import Path
 import socket
 import os
 
-# --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
-# 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
-# 最早期階段就將時區環境變數設定為 'Asia/Taipei'。
 os.environ['TZ'] = 'Asia/Taipei'
 if sys.platform != 'win32':
     time.tzset()
-# --- 時區設定結束 ---
 
-# 將專案根目錄加入 sys.path
-# 因為此檔案現在位於 src/core/ 中，所以根目錄是其上上層目錄
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-# sys.path hack 不再需要，因為我們現在使用 `pip install -e .`
-# sys.path.insert(0, str(ROOT_DIR))
+from db.client import DBClient, get_client
 
-# from db import database # REMOVED: No longer used directly
-from db.client import get_client
-
-# --- 日誌設定 ---
-# 使用 stdout，以便外部程序可以捕捉心跳信號和子程序日誌
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -35,262 +22,159 @@ logging.basicConfig(
 )
 log = logging.getLogger('orchestrator')
 
+# Global variable to hold the listener
+log_listener = None
+
 def setup_database_logging():
-    """設定資料庫日誌處理器。"""
+    global log_listener
     try:
         from db.log_handler import DatabaseLogHandler
+        from logging.handlers import QueueHandler, QueueListener
+        import queue
+
+        log_queue = queue.Queue(-1)
+        db_handler = DatabaseLogHandler(source='orchestrator_db_writer')
+
+        if log_listener is None:
+            log_listener = QueueListener(log_queue, db_handler)
+            log_listener.start()
+
         root_logger = logging.getLogger()
-        if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
-            root_logger.addHandler(DatabaseLogHandler(source='orchestrator'))
-            log.info("資料庫日誌處理器設定完成 (source: orchestrator)。")
+
+        for handler in root_logger.handlers[:]:
+            if isinstance(handler, DatabaseLogHandler):
+                root_logger.removeHandler(handler)
+
+        if not any(isinstance(h, QueueHandler) for h in root_logger.handlers):
+            queue_handler = QueueHandler(log_queue)
+            root_logger.addHandler(queue_handler)
+            log.info("✅ 非阻塞的資料庫日誌系統已設定完成。")
+
     except Exception as e:
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
+def stop_database_logging():
+    global log_listener
+    if log_listener:
+        log.info("⏳ 正在停止日誌監聽器...")
+        log_listener.stop()
+        log_listener = None
+
 def stream_reader(stream, prefix, ready_event=None, ready_signal=None):
-    """
-    一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。
-    可選地，它可以監聽一個特定的「就緒信號」並設置一個 threading.Event。
-    """
     for line in iter(stream.readline, ''):
-        clean_line = line.strip()
-        log.info(f"[{prefix}] {clean_line}")
-        if ready_event and ready_signal and not ready_event.is_set():
-            if ready_signal in clean_line:
-                log.info(f"✅ 偵測到來自 '{prefix}' 的就緒信號 '{ready_signal}'！")
-                ready_event.set()
+        stripped_line = line.strip()
+        log.info(f"[{prefix}] {stripped_line}")
+        if ready_event and not ready_event.is_set() and ready_signal and ready_signal in stripped_line:
+            ready_event.set()
+            log.info(f"✅ 偵測到來自 '{prefix}' 的就緒信號 '{ready_signal}'！")
     stream.close()
 
 def find_free_port() -> int:
-    """尋找一個空閒的 TCP 埠號。"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
         return s.getsockname()[1]
 
-def wait_for_service(port: int, timeout: int = 15) -> bool:
-    """
-    在指定的超時時間內，等待特定埠號上的網路服務啟動。
-
-    :param port: 要檢查的 TCP 埠號。
-    :param timeout: 等待的總秒數。
-    :return: 如果服務在超時內就緒，則返回 True，否則返回 False。
-    """
-    log.info(f"正在等待 127.0.0.1:{port} 的服務就緒 (超時: {timeout}秒)...")
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            # 使用 create_connection 嘗試建立連線，並設定短暫的內部超時
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                log.info(f"✅ 服務 127.0.0.1:{port} 已成功連線。")
-                return True
-        except (ConnectionRefusedError, socket.timeout):
-            # 服務尚未就緒，短暫等待後重試
-            time.sleep(0.25)
-            continue
-    log.error(f"❌ 等待服務 127.0.0.1:{port} 超時 ({timeout}秒)。")
-    return False
-
-def get_db_manager_port() -> int:
-    """
-    返回資料庫管理者伺服器的硬編碼埠號。
-    這個改動是為了消除因讀取 .port 檔案而引起的競爭條件。
-    """
-    # JULES' FIX: 直接返回硬編碼的埠號，以匹配 db/manager.py 的設定
-    hardcoded_port = 49999
-    log.info(f"使用硬編碼的 DB Manager 埠號: {hardcoded_port}")
-    return hardcoded_port
-
 def main():
-    """
-    系統的「大腦」，負責啟動、監控所有服務，並發送心跳。
-    """
     parser = argparse.ArgumentParser(description="系統協調器。")
-    parser.add_argument(
-        "--mock",
-        action="store_true",
-        default=True, # 將模擬模式設為預設值
-        help="如果設置，則 worker 將以模擬模式運行。預設為啟用。"
-    )
-    parser.add_argument(
-        "--no-mock",
-        action="store_false",
-        dest="mock",
-        help="如果設置，則 worker 將以真實模式運行。"
-    )
-    parser.add_argument(
-        "--no-worker",
-        action="store_true",
-        help="如果設置，則不啟動 worker 程序。"
-    )
-    parser.add_argument(
-        "--heartbeat-interval",
-        type=int,
-        default=5,
-        help="心跳及健康檢查的間隔時間（秒）。"
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=None,
-        help="指定 API 伺服器運行的固定埠號。如果未提供，將會隨機指派。"
-    )
+    parser.add_argument("--mock", action="store_true", help="如果設置，則 worker 將以模擬模式運行。")
+    parser.add_argument("--port", type=int, default=None, help="指定 API 伺服器運行的固定埠號。")
     args = parser.parse_args()
 
-    # DB Manager 會處理初始化，所以這裡不需要再呼叫
-    # database.initialize_database()
-    # setup_database_logging() # 將在 DB Manager 就緒後呼叫
-
-    log.info(f"🚀 協調器啟動。模式: {'模擬 (Mock)' if args.mock else '真實 (Real)'}")
+    mode_string = "模擬 (Mock)" if args.mock else "真實 (Real)"
+    log.info(f"🚀 協調器啟動。模式: {mode_string}")
 
     processes = []
     threads = []
-    db_manager_proc = None
+    db_client = None
+
     try:
-        # 1. 啟動資料庫管理者服務並等待其就緒
+        # 1. 啟動資料庫管理器
         log.info("🔧 正在啟動資料庫管理者服務...")
-
-        # --- JULES' FIX START ---
-        # 修復：在啟動前，先清理上一次執行可能遺留的 port 檔案
-        port_file_path = ROOT_DIR / "src" / "db" / "db_manager.port"
-        if port_file_path.exists():
-            log.warning(f"偵測到舊的埠號檔案，正在清理: {port_file_path}")
-            try:
-                port_file_path.unlink()
-            except OSError as e:
-                log.error(f"清理舊的埠號檔案時發生錯誤: {e}")
-        # --- JULES' FIX END ---
-
         db_manager_cmd = [sys.executable, "src/db/manager.py"]
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
         log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
 
-        # JULES'S FIX (2025-08-30): 建立一個 Event 來等待 DB Manager 的明確就緒信號
-        db_manager_ready_event = threading.Event()
-        # 將 DB Manager 的日誌也流式輸出，並讓 stream_reader 監聽就緒信號
-        db_manager_log_thread = threading.Thread(
-            target=stream_reader,
-            args=(db_manager_proc.stdout, 'db_manager', db_manager_ready_event, 'DB_MANAGER_READY')
-        )
-        db_manager_log_thread.daemon = True
-        db_manager_log_thread.start()
-        threads.append(db_manager_log_thread)
+        db_ready_event = threading.Event()
+        db_stdout_thread = threading.Thread(target=stream_reader, args=(db_manager_proc.stdout, 'db_manager', db_ready_event, "DB_MANAGER_READY"))
+        db_stdout_thread.daemon = True
+        db_stdout_thread.start()
+        threads.append(db_stdout_thread)
 
-        # 1a. 獲取 DB Manager 的硬編碼埠號
-        db_manager_port = get_db_manager_port()
-
-        # 1b. 確認 DB Manager 服務已在監聽埠號 (第一階段確認)
-        if not wait_for_service(db_manager_port):
-            raise RuntimeError(f"DB Manager 服務在埠號 {db_manager_port} 上未能及時就緒，啟動中止。")
-
-        # 1c. 等待來自 DB Manager 的明確「就緒信號」 (第二階段確認)
-        log.info(f"埠號 {db_manager_port} 已開啟，正在等待資料庫初始化完成的明確信號 ('DB_MANAGER_READY')...")
-        ready_signal_received = db_manager_ready_event.wait(timeout=15) # Wait up to 15s
-        if not ready_signal_received:
-            raise RuntimeError("等待 DB Manager 的 'DB_MANAGER_READY' 信號超時。")
-
+        log.info(f"正在等待資料庫管理者就緒 (超時: 30秒)...")
+        if not db_ready_event.wait(timeout=30):
+            raise RuntimeError("資料庫管理者服務啟動超時。")
         log.info("✅ 資料庫管理者服務已完全就緒。")
 
-        # --- JULES' FIX START ---
-        # 修復：在 DB Manager 就緒後，再設定資料庫日誌，以避免 race condition
-        setup_database_logging()
-        log.info("Orchestrator's database logging is now configured.")
-        # --- JULES' FIX END ---
+        # JULES'S FIX (2025-08-30): 加入一個微小的延遲，以解決競爭條件。
+        # 即使 db_manager 已發出就緒信號，作業系統可能仍需極短時間來完全開啟監聽埠。
+        # 沒有這個延遲，api_server 在啟動時的日誌系統可能會因為無法立即連線到 db_manager 而掛起。
+        time.sleep(1)
 
-        # 2. 獲取資料庫客戶端
-        # 此時，我們已確認服務就緒，get_client() 應能立即成功
+        # 2. 資料庫就緒後，建立客戶端並設定日誌系統
         db_client = get_client()
+        setup_database_logging()
 
-        # 3. 根據參數決定埠號並啟動 API 伺服器
-        if args.port:
-            api_port = args.port
-            log.info(f"使用指定的固定埠號: {api_port}")
-        else:
-            api_port = find_free_port()
-            log.info(f"找到一個隨機的空閒埠號: {api_port}")
-
+        # 3. 啟動 API 伺服器
+        log.info("🔧 正在啟動 API 伺服器...")
+        api_port = args.port if args.port else find_free_port()
         api_server_cmd = [sys.executable, "src/api/api_server.py", "--port", str(api_port)]
         if args.mock:
             api_server_cmd.append("--mock")
-        log.info(f"🔧 正在啟動 API 伺服器: {' '.join(api_server_cmd)}")
+
         api_proc = subprocess.Popen(api_server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         processes.append(api_proc)
         log.info(f"✅ API 伺服器已啟動，PID: {api_proc.pid}，埠號: {api_port}")
-        # --- JULES' FIX for BATTLE Environment ---
-        # 根據 BATTLE 測試環境的新要求，修改握手信號的輸出格式，
-        # 從 "API_PORT:..." 改為 "PROXY_URL:..."。
+
         proxy_url = f"http://127.0.0.1:{api_port}"
         print(f"PROXY_URL: {proxy_url}", flush=True)
         log.info(f"已向外部監聽器報告代理 URL: {proxy_url}")
 
-
-        # 4. 根據旗標決定是否啟動背景工作處理器
-        # --- JULES 於 2025-08-09 的修改 ---
-        # 註解：
-        # 根據最新的架構審查，系統已全面轉向由 api_server.py 透過 WebSocket
-        # 觸發並在執行緒中處理轉錄任務的模式。舊的 worker.py 程序會與此新模式
-        # 產生衝突（例如，搶佔任務），導致前端出現 WebSocket 連線錯誤和不一致的行為。
-        #
-        # 解決方案：
-        # 因此，我們在此處永久性地停用 worker 程序，以確保只有 api_server
-        # 一個服務在處理任務。--no-worker 旗標雖然保留，但此處的程式碼將不再理會它。
-        log.info("🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。")
-        worker_proc = None
-        # (Worker launch code remains commented out)
-
-        # 5. 啟動剩餘的日誌流式讀取執行緒
-        # 為 api_server 子程序的 stdout 和 stderr 建立執行緒
-        api_stdout_thread = threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server'))
-        api_stderr_thread = threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr'))
+        api_stdout_thread = threading.Thread(target=stream_reader, args=(api_proc.stdout, 'api_server', None, None))
+        api_stderr_thread = threading.Thread(target=stream_reader, args=(api_proc.stderr, 'api_server_stderr', None, None))
         threads.extend([api_stdout_thread, api_stderr_thread])
+        for t in [api_stdout_thread, api_stderr_thread]:
+            t.daemon = True
+            t.start()
 
-        # 啟動所有尚未啟動的執行緒
-        for t in threads:
-            if not t.is_alive():
-                t.daemon = True
-                t.start()
-
-        # 6. 進入主監控與心跳迴圈
+        log.info("🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。")
         log.info("--- [協調器進入監控模式] ---")
+
+        last_heartbeat_time = 0
         while True:
-            # 健康檢查
-            # Note: we check all processes except the current one
             for proc in processes:
                 if proc.poll() is not None:
-                    raise RuntimeError(f"子程序 {proc.args[0]} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
+                    raise RuntimeError(f"子程序 {proc.args} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
 
-            # 心跳檢查
-            if db_client.are_tasks_active():
-                log.info("HEARTBEAT: RUNNING")
-            else:
-                log.info("HEARTBEAT: IDLE")
+            # 4. 心跳檢查
+            if time.time() - last_heartbeat_time > 5:
+                try:
+                    active_tasks = db_client.are_tasks_active()
+                    log.info(f"HEARTBEAT: RUNNING {'(TASKS ACTIVE)' if active_tasks else ''}")
+                    last_heartbeat_time = time.time()
+                except Exception as e:
+                    log.error(f"心跳檢查失敗: {e}", exc_info=True)
 
-            time.sleep(args.heartbeat_interval)
+            time.sleep(1)
 
     except (KeyboardInterrupt, RuntimeError) as e:
         if isinstance(e, RuntimeError):
             log.error(f"協調器因錯誤而終止: {e}")
         else:
             log.info("\n🛑 收到中斷信號，正在優雅關閉所有服務...")
-
     finally:
         for proc in reversed(processes):
             if proc.poll() is None:
-                log.info(f"⏳ 正在終止子程序 {proc.args[1]} (PID: {proc.pid})...")
+                log.info(f"⏳ 正在終止子程序 (PID: {proc.pid})...")
                 proc.terminate()
                 try:
                     proc.wait(timeout=5)
-                    log.info(f"✅ 子程序 {proc.pid} 已終止。")
                 except subprocess.TimeoutExpired:
-                    log.warning(f"⚠️ 子程序 {proc.pid} 未能正常終止，將強制擊殺 (kill)。")
+                    log.warning(f"⚠️ 子程序 {proc.pid} 未能正常終止，將強制擊殺。")
                     proc.kill()
 
-        # 等待日誌執行緒結束
-        for t in threads:
-            if t.is_alive():
-                t.join(timeout=2)
-
+        stop_database_logging()
         log.info("👋 協調器已關閉。")
-
 
 if __name__ == "__main__":
     main()
