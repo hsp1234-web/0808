@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    ✨🐺 善狼一鍵啟動器 (v21.1) 🐺                                 ✨🐺 ║
+# ║    ✨🐺 善狼一鍵啟動器 (v22.2) 🐺                                 ✨🐺 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V21.1 更新日誌:                                                    ║
-# ║   - **介面優化**: 為可折疊的詳細日誌區塊，在內容的上方和下方都增加了 ║
-# ║     「複製完整日誌」按鈕，方便使用者在滾動後進行操作。             ║
+# ║ - V22.2 更新日誌 (2025-08-31):                                       ║
+# ║   - **依賴修正**: 將 YouTube 下載依賴加入安裝列表，解決下載失敗問題。║
+# ║   - **金鑰修正**: 修正了 Gemini API 金鑰的處理邏輯，使其在驗證後可  ║
+# ║     被後續的模型列表功能使用。                                     ║
+# ║   - **介面優化**: 將 Whisper 模型的預設選項調整為 'tiny'。         ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title ✨🐺 善狼一鍵啟動器 (v21.1) 🐺 { vertical-output: true, display-mode: "form" }
+#@title ✨🐺 善狼一鍵啟動器 (v22.2) 🐺 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -19,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "861" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "866" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -237,34 +239,50 @@ class ServerManager:
             initialize_database()
             add_system_log("colab_setup", "INFO", "Git repository cloned successfully.")
 
-            server_reqs_path = project_path / "requirements" / "server.txt"
-            if server_reqs_path.is_file():
-                self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
-                pip_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(server_reqs_path)]
-                try:
-                    subprocess.run(pip_command, check=True, capture_output=True, text=True, encoding='utf-8')
-                    self._log_manager.log("SUCCESS", "✅ 核心依賴安裝完成。")
-                except subprocess.CalledProcessError as e:
-                    error_message = f"""核心依賴安裝失敗！返回碼: {e.returncode}
---- STDOUT ---
-{e.stdout}
---- STDERR ---
-{e.stderr}
-"""
-                    self._log_manager.log("CRITICAL", error_message)
-                    raise  # 重新引發異常以停止執行
+            # --- 統一依賴安裝 ---
+            self._log_manager.log("INFO", "步驟 1/2: 正在統一安裝所有後端依賴...")
+            requirements_to_install = [
+                project_path / "requirements" / "server.txt",
+                project_path / "requirements" / "transcriber.txt",
+                project_path / "requirements" / "youtube.txt" # 修正：加入 youtube 依賴
+            ]
+            merged_reqs_path = project_path / "requirements_merged_colab.txt"
+            with open(merged_reqs_path, "w", encoding="utf-8") as outfile:
+                for req_path in requirements_to_install:
+                    if req_path.is_file():
+                        outfile.write(req_path.read_text(encoding="utf-8"))
+                        outfile.write("\n")
+                    else:
+                        self._log_manager.log("WARN", f"找不到依賴檔案，已跳過: {req_path}")
 
-            self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
+            try:
+                # 優先使用 uv 以加速安裝
+                pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_reqs_path)]
+                try:
+                    subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self._log_manager.log("INFO", "偵測到 'uv'，將使用它進行快速安裝。")
+                    pip_command = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(merged_reqs_path)]
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    self._log_manager.log("INFO", "未找到 'uv'，將退回使用 'pip'。")
+
+                subprocess.check_call(pip_command)
+                self._log_manager.log("SUCCESS", "✅ 所有後端依賴安裝完成。")
+            except subprocess.CalledProcessError as e:
+                error_message = f"依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
+                self._log_manager.log("CRITICAL", error_message)
+                raise
+            finally:
+                if merged_reqs_path.exists():
+                    merged_reqs_path.unlink()
+
+
+            self._log_manager.log("INFO", "步驟 2/2: 正在啟動後端服務...")
+            launch_command = [sys.executable, "src/core/orchestrator.py"]
             process_env = os.environ.copy()
             src_path_str = str((project_path / "src").resolve())
             process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{process_env.get('PYTHONPATH', '')}".strip(os.pathsep)
 
             self.server_process = subprocess.Popen(launch_command, cwd=str(project_path), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid, env=process_env)
-
-            worker_reqs_path = project_path / "requirements" / "transcriber.txt"
-            background_install_thread = threading.Thread(target=self._install_worker_deps, args=(worker_reqs_path,), daemon=True)
-            background_install_thread.start()
 
             port_pattern = re.compile(r"PROXY_URL: http://127.0.0.1:(\d+)")
             uvicorn_ready_pattern = re.compile(r"Uvicorn running on")
@@ -290,33 +308,6 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"協調器進程在就緒前已終止，返回碼: {return_code}。請檢查上方日誌以了解詳細錯誤。")
         except Exception as e: self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally: self._stats['status'] = "⏹️ 已停止"
-
-    def _install_worker_deps(self, requirements_path: Path):
-        try:
-            self._log_manager.log("INFO", "步驟 3/3: [背景] 開始安裝大型任務依賴...")
-            if not requirements_path.is_file():
-                self._log_manager.log("INFO", "[背景] 未找到 worker 依賴檔案，跳過安裝。")
-                return
-
-            # 安裝 uv
-            self._log_manager.log("INFO", "[背景] 正在安裝 uv...")
-            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True, capture_output=True)
-            self._log_manager.log("SUCCESS", "[背景] ✅ uv 安裝成功。")
-
-            # 安裝 worker 依賴
-            self._log_manager.log("INFO", f"[背景] 正在從 {requirements_path} 安裝依賴...")
-            subprocess.run([sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(requirements_path)], check=True, capture_output=True)
-            self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
-        except subprocess.CalledProcessError as e:
-            error_message = f"""[背景] 依賴安裝失敗！返回碼: {e.returncode}
---- STDOUT ---
-{e.stdout.decode('utf-8', 'ignore')}
---- STDERR ---
-{e.stderr.decode('utf-8', 'ignore')}
-"""
-            self._log_manager.log("CRITICAL", error_message)
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"[背景] 安裝執行緒發生未預期錯誤: {e}")
 
     def start(self): self._thread.start()
     def stop(self):

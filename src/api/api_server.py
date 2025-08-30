@@ -647,7 +647,10 @@ async def validate_api_key(request: Request):
         result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=env, check=False)
 
         if result.returncode == 0:
-            log.info(f"API 金鑰驗證成功。")
+            log.info(f"API 金鑰驗證成功。將其設定為當前工作階段的環境變數。")
+            # 關鍵修復：將驗證成功的金鑰設定到環境變數中
+            # 這樣，後續對 get_youtube_models 的呼叫才能使用此金鑰
+            os.environ["GOOGLE_API_KEY"] = api_key
             return {"valid": True}
         else:
             log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
