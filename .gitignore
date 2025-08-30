@@ -63,3 +63,9 @@ config.json
 
 # Generated config files
 circus.ini
+
+# Backup files
+*.bak
+
+# Custom test report directories
+ai_test_reports/

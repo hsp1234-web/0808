@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    ✨🐺 善狼一鍵啟動器 (v21.1) 🐺                                 ✨🐺 ║
+# ║    ✨🐺 善狼一鍵啟動器 (v22) 🐺                                   ✨🐺 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V21.1 更新日誌:                                                    ║
-# ║   - **介面優化**: 為可折疊的詳細日誌區塊，在內容的上方和下方都增加了 ║
-# ║     「複製完整日誌」按鈕，方便使用者在滾動後進行操作。             ║
+# ║ - V22 更新日誌 (2025-08-31):                                         ║
+# ║   - **版本同步**: 將預設後端版本標籤更新至 "866"。                  ║
+# ║   - **專案清理**: 移除了過時的測試腳本與暫存檔案。                 ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title ✨🐺 善狼一鍵啟動器 (v21.1) 🐺 { vertical-output: true, display-mode: "form" }
+#@title ✨🐺 善狼一鍵啟動器 (v22) 🐺 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "861" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "866" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
