@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    ✨🐺 善狼一鍵啟動器 (v22) 🐺                                   ✨🐺 ║
+# ║    ✨🐺 善狼一鍵啟動器 (v22.1) 🐺                                 ✨🐺 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V22 更新日誌 (2025-08-31):                                         ║
-# ║   - **版本同步**: 將預設後端版本標籤更新至 "866"。                  ║
-# ║   - **專案清理**: 移除了過時的測試腳本與暫存檔案。                 ║
+# ║ - V22.1 更新日誌 (2025-08-31):                                       ║
+# ║   - **錯誤修復**: 移除了啟動協調器時傳遞的不支援參數 `--no-mock`，   ║
+# ║     解決了因參數錯誤導致的啟動失敗問題。                           ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title ✨🐺 善狼一鍵啟動器 (v22) 🐺 { vertical-output: true, display-mode: "form" }
+#@title ✨🐺 善狼一鍵啟動器 (v22.1) 🐺 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -255,7 +255,7 @@ class ServerManager:
                     raise  # 重新引發異常以停止執行
 
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/core/orchestrator.py"]
             process_env = os.environ.copy()
             src_path_str = str((project_path / "src").resolve())
             process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{process_env.get('PYTHONPATH', '')}".strip(os.pathsep)
