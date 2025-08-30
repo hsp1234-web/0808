@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-#@title 📥🐺 善狼一鍵啟動器 (v18) 🐺
+#@title 📥🐺 善狼一鍵啟動器 (v17.0) 🐺
 #@markdown ---
 #@markdown ### **(1) 專案來源設定**
 #@markdown > **請提供 Git 倉庫的網址、要下載的分支或標籤，以及本地資料夾名稱。**
 #@markdown ---
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
-REPOSITORY_URL = "https://github.com/hsp1234-web/wolf_0816.git" #@param {type:"string"}
+REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "750.2" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "838" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -43,8 +43,6 @@ TIMEZONE = "Asia/Taipei" #@param {type:"string"}
 #@markdown **自動清理畫面 (ENABLE_CLEAR_OUTPUT)**
 #@markdown > **勾選後，儀表板會自動刷新，介面較為清爽。取消勾選則會保留所有日誌，方便除錯。**
 ENABLE_CLEAR_OUTPUT = True #@param {type:"boolean"}
-#@markdown **日誌歸檔資料夾 (LOG_ARCHIVE_ROOT_FOLDER)**
-LOG_ARCHIVE_ROOT_FOLDER = "paper" #@param {type:"string"}
 #@markdown ---
 #@markdown > **確認所有設定無誤後，點擊此儲存格左側的「執行」按鈕來啟動所有程序。**
 #@markdown ---
@@ -53,17 +51,17 @@ LOG_ARCHIVE_ROOT_FOLDER = "paper" #@param {type:"string"}
 # ==                                  開發者日誌                                  ==
 # ======================================================================================
 #
-# 版本: 18 (架構: 善狼之心)
-# 日期: 2025-08-30
+# 版本: 17.0 (架構: 資料庫中心化)
+# 日期: 2025-08-27T19:36:11+08:00
 #
-# 本次變更重點 (由 Jules 整合):
-# - **版本號升級**: 根據使用者要求，將版本號更新至 v18。
-# - **檔案重新命名**: 將此腳本從 `scripts/colab.py` 複製並重命名為 `colabPro.py`，
-#   作為專案新的主要 Colab 啟動器。
-# - **v17.1 變更繼承**:
-#   - **併發通道**: 引入了 `TunnelManager`，可以同時開啟多個代理通道。
-#   - **HTML 報告**: 在腳本結束時生成可互動的 HTML 日誌報告。
-#   - **保留歸檔**: 保留了將日誌歸檔至 "paper" 資料夾的 `archive_reports` 功能。
+# 本次變更重點:
+# 1. **核心架構遷移**: 從 v16 的「門面伺服器」模型，遷移至以資料庫為中心的 v17 新架構。
+# 2. **服務化啟動**: 啟動器現在會協調啟動三個獨立的常駐服務：
+#    - `src/db/manager.py`: 資料庫管理器，確保對 SQLite 的安全並發訪問。
+#    - `src/api_server.py`: 統一的 API 伺服器，處理所有 HTTP 和 WebSocket 請求。
+#    - `workers/transcription_worker.py`: 背景工作者，主動從資料庫輪詢任務。
+# 3. **移除舊元件**: 舊的 `facade_server.py` 和 `background_installer.py` 已被新架構取代並封存。
+# 4. **依賴問題修復**: 更新 `faster-whisper` 版本以解決 `av` 套件的編譯問題。
 #
 # ======================================================================================
 
@@ -161,7 +159,7 @@ class DisplayManager:
     def print_ui(self):
         if ENABLE_CLEAR_OUTPUT: ipy_clear_output(wait=True)
 
-        output = ["🚀 善狼一鍵啟動器 v18 🚀", ""]
+        output = ["🚀 善狼一鍵啟動器 v13 🚀", ""]
 
         # 顯示日誌
         for log_item in self._log_deque:
@@ -322,6 +320,7 @@ class TunnelManager:
 
         if not racers:
             self._log("WARN", "所有代理通道均未啟用，將無法生成公開存取網址。")
+            # 注意：狀態管理的責任已移至 launch_application
             return
 
         self._log("INFO", f"🚀 開始併發獲取 {len(racers)} 個已啟用的代理網址...")
@@ -334,7 +333,7 @@ class TunnelManager:
         for t in self.threads: t.join(timeout=1)
 
 def create_log_viewer_html(log_manager):
-    """ 產生最終的 HTML 日誌報告。 """
+    """ 產生最終的 HTML 日誌報告，樣式與 v10 版本完全一致。 """
     try:
         log_history = log_manager.get_full_log_history()
         log_to_copy = log_history[-LOG_COPY_MAX_LINES:]
@@ -350,27 +349,6 @@ def create_log_viewer_html(log_manager):
         return f'''<details style="margin-top: 15px; margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 12px; border-radius: 8px; background-color: #fafafa;"><summary style="cursor: pointer; font-weight: bold; color: #333;">點此展開/收合最近 {num_logs} 條詳細日誌</summary><div style="margin-top: 12px;">{textarea_html}{button_html}<pre style="background-color: #fff; padding: 12px; border: 1px solid #e0e0e0; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; font-size: 13px; color: #444;"><code>{escaped_log_for_display}</code></pre>{button_html}</div></details>'''
     except Exception as e:
         return f"<p>❌ 產生最終日誌報告時發生錯誤: {html.escape(str(e))}</p>"
-
-def archive_reports(log_manager, start_time, end_time, status):
-    """ 將日誌歸檔至 'paper' 資料夾。"""
-    print("\n\n" + "="*60 + "\n--- 任務結束，開始執行自動歸檔 ---\n" + "="*60)
-    try:
-        root_folder = Path(LOG_ARCHIVE_ROOT_FOLDER)
-        root_folder.mkdir(exist_ok=True)
-        ts_folder_name = start_time.strftime('%Y-%m-%dT%H-%M-%S%z')
-        report_dir = root_folder / ts_folder_name
-        report_dir.mkdir(exist_ok=True)
-        log_history = log_manager.get_full_log_history()
-        # The new log_history is a list of strings, so we can join them directly.
-        detailed_log_content = f"# 詳細日誌\n\n```\n" + "\n".join(log_history) + "\n```"
-        (report_dir / "詳細日誌.md").write_text(detailed_log_content, encoding='utf-8')
-        duration = end_time - start_time
-        perf_report_content = f"# 效能報告\n\n- **任務狀態**: {status}\n- **開始時間**: `{start_time.isoformat()}`\n- **結束時間**: `{end_time.isoformat()}`\n- **總耗時**: `{str(duration)}`\n"
-        (report_dir / "效能報告.md").write_text(perf_report_content.strip(), encoding='utf-8')
-        (report_dir / "綜合報告.md").write_text(f"# 綜合報告\n\n{perf_report_content}\n{detailed_log_content}", encoding='utf-8')
-        print(f"✅ 報告已成功歸檔至: {report_dir}")
-    except Exception as e:
-        print(f"❌ 歸檔報告時發生錯誤: {e}")
 
 # ==============================================================================
 # PART 3: 主啟動器邏輯
@@ -514,7 +492,6 @@ if __name__ == '__main__':
         "all_tunnels_done": False
     }
     log_manager_main = DisplayManager(shared_state_main)
-    start_time = datetime.now(pytz.timezone(TIMEZONE))
 
     try:
         # 步驟 1: 下載或更新專案程式碼
@@ -525,8 +502,21 @@ if __name__ == '__main__':
         # 步驟 2: 安裝門面伺服器所需的最基本依賴
         log_manager_main.log("INFO", "正在安裝門面伺服器所需的基本依賴...")
         requirements_path = Path(project_path) / "src" / "requirements_light.txt"
-        if not requirements_path.exists():
-            raise FileNotFoundError(f"找不到輕量級依賴檔案: {requirements_path}")
+
+        # [JULES'S FIX] 加入重試迴圈以處理檔案系統延遲造成的競爭條件
+        max_retries = 5
+        wait_time = 1 # 秒
+        requirements_found = False
+        for i in range(max_retries):
+            if requirements_path.exists():
+                requirements_found = True
+                log_manager_main.log("INFO", f"✅ 成功找到依賴檔案: {requirements_path}")
+                break
+            log_manager_main.log("WARN", f"找不到依賴檔案，可能為檔案系統延遲。將在 {wait_time} 秒後重試... ({i+1}/{max_retries})")
+            time.sleep(wait_time)
+
+        if not requirements_found:
+            raise FileNotFoundError(f"在 {max_retries} 次嘗試後，仍找不到輕量級依賴檔案: {requirements_path}")
 
         pip_install_command = [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)]
         subprocess.run(pip_install_command, check=True, capture_output=True, text=True)
@@ -541,10 +531,8 @@ if __name__ == '__main__':
         log_manager_main.log("CRITICAL", traceback.format_exc())
     finally:
         log_manager_main.log("INFO", "--- 啟動器執行結束 ---")
+        # 確保最終的 UI 狀態被打印
         log_manager_main.print_ui()
-        end_time = datetime.now(pytz.timezone(TIMEZONE))
-
-        # [JULES'S MERGE] Call both the new HTML logger and the preserved archive function
+        # 確保最終的日誌報告被顯示
         if 'project_path' in locals() and locals()['project_path']:
              display(HTML(create_log_viewer_html(log_manager_main)))
-             archive_reports(log_manager_main, start_time, end_time, shared_state_main.get('status', '未知'))
