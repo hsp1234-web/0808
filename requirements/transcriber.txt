@@ -1,0 +1,5 @@
+torch==2.8.0+cu126
+faster-whisper==1.1.1
+opencc-python-reimplemented==0.1.7
+pydub==0.25.1
+WeasyPrint==66.0

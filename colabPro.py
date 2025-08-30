@@ -353,6 +353,85 @@ def create_log_viewer_html(log_manager):
 # ==============================================================================
 # PART 3: 主啟動器邏輯
 # ==============================================================================
+def _install_ffmpeg_if_needed(log_manager: DisplayManager):
+    """檢查並安裝系統級的 FFmpeg 依賴。"""
+    log_manager.log("INFO", "檢查系統級依賴 FFmpeg...")
+    if shutil.which("ffmpeg"):
+        log_manager.log("SUCCESS", "✅ FFmpeg 已安裝。")
+        return
+
+    log_manager.log("WARN", "未偵測到 FFmpeg，開始從 apt 安裝...")
+    try:
+        subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
+        subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "ffmpeg"], check=True)
+        log_manager.log("SUCCESS", "✅ FFmpeg 安裝成功。")
+
+        # 記錄版本以供除錯
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+        version_info = result.stdout.splitlines()[0]
+        log_manager.log("INFO", f"FFmpeg 版本: {version_info}")
+
+    except Exception as e:
+        log_manager.log("CRITICAL", f"❌ 安裝 FFmpeg 時發生錯誤: {e}")
+        # 根據情境，這裡可以選擇拋出例外或僅記錄錯誤
+        # 暫時僅記錄，讓啟動流程繼續
+
+def _install_if_needed(requirements_path: Path, log_manager: DisplayManager, prefix: str = ""):
+    """
+    一個智慧安裝函式，只安裝尚未被安裝或版本不符的套件。
+    """
+    log_manager.log("INFO", f"{prefix} 正在分析依賴檔案: {requirements_path.name}")
+
+    # 1. 獲取當前環境已安裝的套件
+    try:
+        pip_list_result = subprocess.run([sys.executable, "-m", "pip", "list"], capture_output=True, text=True, check=True)
+        installed_packages = {line.split()[0].lower(): line.split()[1] for line in pip_list_result.stdout.splitlines()[2:]}
+    except Exception as e:
+        log_manager.log("ERROR", f"{prefix} 無法獲取已安裝套件列表: {e}")
+        # 如果無法獲取列表，為求穩定，直接嘗試安裝所有套件
+        install_command = [sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)]
+        subprocess.run(install_command, check=True)
+        return
+
+    # 2. 讀取並解析需求檔案
+    with open(requirements_path, 'r') as f:
+        required_lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
+    required_packages = {}
+    for line in required_lines:
+        match = re.match(r"([^=<>!~]+)", line)
+        if match:
+            name = match.group(1).lower()
+            required_packages[name] = line
+
+    # 3. 比較並找出需要安裝的套件
+    packages_to_install = []
+    for name, full_requirement in required_packages.items():
+        if name not in installed_packages:
+            packages_to_install.append(full_requirement)
+        else:
+            # 簡單的版本號檢查，只處理 '=='
+            if '==' in full_requirement:
+                req_name, req_version = full_requirement.split('==')
+                if installed_packages[name] != req_version:
+                    packages_to_install.append(full_requirement)
+
+    # 4. 執行安裝
+    if packages_to_install:
+        log_manager.log("INFO", f"{prefix} 偵測到 {len(packages_to_install)} 個需要安裝/更新的套件: {', '.join(packages_to_install)}")
+        # 建議使用 uv 以提升速度
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "uv"], check=True)
+            install_command = [sys.executable, "-m", "uv", "pip", "install", "-q"] + packages_to_install
+            subprocess.run(install_command, check=True)
+            log_manager.log("SUCCESS", f"{prefix} ✅ 智慧安裝完成。")
+        except Exception as e:
+            log_manager.log("ERROR", f"{prefix} ❌ 智慧安裝失敗: {e}")
+            raise e
+    else:
+        log_manager.log("SUCCESS", f"{prefix} ✅ 所有依賴均已滿足，無需安裝。")
+
+
 def _log_subprocess_output(server_proc, log_manager, shared_state):
     """在一個獨立的執行緒中持續讀取和記錄子程序的輸出。"""
     if not server_proc or not server_proc.stdout:
@@ -370,10 +449,38 @@ def _log_subprocess_output(server_proc, log_manager, shared_state):
             except (ValueError, IndexError):
                 log_manager.log("ERROR", f"無法從行 '{line}' 中解析埠號。")
 
+def _background_dependency_installer(project_path: Path, log_manager: DisplayManager, shared_state: dict):
+    """在背景執行緒中，依序智慧安裝額外的、大型的依賴套件。"""
+    try:
+        dependency_queue = {
+            "YouTube": "youtube.txt",
+            "Gemini": "gemini.txt",
+            "Transcriber": "transcriber.txt",
+        }
+
+        for name, filename in dependency_queue.items():
+            shared_state["status"] = f"背景安裝: {name} 依賴..."
+            req_file = project_path / "requirements" / filename
+            if not req_file.is_file():
+                log_manager.log("WARN", f"[背景] 找不到依賴檔案 {filename}，跳過安裝。")
+                continue
+
+            # 使用智慧安裝函式
+            _install_if_needed(req_file, log_manager, prefix=f"[{name} 背景]")
+
+        shared_state["status"] = "✅ 所有背景依賴安裝完成"
+        log_manager.log("SUCCESS", "✅ 所有背景依賴項均已成功安裝！")
+
+    except Exception as e:
+        log_manager.log("CRITICAL", f"[背景] 依賴安裝執行緒發生致命錯誤: {e}")
+        shared_state["status"] = "❌ 背景依賴安裝失敗"
+
+
 def launch_application(project_path_str: str, log_manager: DisplayManager):
     project_path = Path(project_path_str)
     shared_state = log_manager._state
     manager_proc, tunnel_manager = None, None
+    background_install_thread = None
 
     try:
         # --- 步驟 1: 啟動後端服務 ---
@@ -383,6 +490,13 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
         if LIGHT_MODE:
             manager_env["LIGHT_MODE"] = "1"
             log_manager.log("INFO", "輕量測試模式已啟用。")
+
+        # 整合來自舊版的穩健 PYTHONPATH 設定
+        src_path_str = str((project_path / "src").resolve())
+        existing_python_path = manager_env.get('PYTHONPATH', '')
+        manager_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{existing_python_path}".strip(os.pathsep)
+        log_manager.log("INFO", f"為子程序設定 PYTHONPATH: {manager_env['PYTHONPATH']}")
+
         manager_command = [sys.executable, str(project_path / "scripts" / "run_services.py")]
         manager_proc = subprocess.Popen(
             manager_command, cwd=project_path, text=True,
@@ -424,16 +538,14 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
                 shared_state["status"] = f"❌ 後端服務已停止 (返回碼: {manager_proc.poll()})"
                 raise RuntimeError("後端服務在通道建立期間意外終止。")
 
-            # 處理佇列中的新 URL
             try:
                 name, data = results_queue.get_nowait()
                 shared_state["urls"][name] = data
                 if "錯誤" not in data.get("url", ""):
                     urls_to_check.append(data["url"])
             except Empty:
-                pass # 佇列為空，繼續執行
+                pass
 
-            # 如果尚未通過健康檢查，且有新的 URL 可供檢查
             if not health_check_passed and urls_to_check:
                 shared_state["status"] = "正在驗證服務健康度..."
                 url_to_test = urls_to_check.pop(0)
@@ -445,6 +557,15 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
                         log_manager.log("SUCCESS", f"✅ 健康檢查通過！服務在 {url_to_test} 上已就緒。")
                         shared_state["status"] = "✅ 應用程式已就緒"
                         health_check_passed = True
+                        # --- 健康檢查通過後，啟動背景依賴安裝 ---
+                        log_manager.log("INFO", "伺服器已上線，準備啟動背景依賴安裝程序...")
+                        background_install_thread = threading.Thread(
+                            target=_background_dependency_installer,
+                            args=(project_path, log_manager, shared_state),
+                            daemon=True
+                        )
+                        background_install_thread.start()
+
                 except requests.exceptions.RequestException as e:
                     log_manager.log("WARN", f"健康檢查請求失敗: {e}，將繼續嘗試其他網址...")
 
@@ -453,7 +574,6 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
 
         shared_state["all_tunnels_done"] = True
 
-        # --- 步驟 4: 最終狀態顯示與等待 ---
         if not health_check_passed:
             shared_state["status"] = "❌ 健康檢查失敗"
             log_manager.log("CRITICAL", "❌ 未能在指定時間內通過健康檢查。")
@@ -472,6 +592,9 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
         log_manager.print_ui()
         if tunnel_manager:
             tunnel_manager.stop_tunnels()
+        if background_install_thread and background_install_thread.is_alive():
+            log_manager.log("INFO", "等待背景安裝執行緒結束...")
+            # 背景執行緒是 daemon，會隨主程式退出，此處無需 join
         if manager_proc and manager_proc.poll() is None:
             log_manager.log("INFO", "正在終止後端服務總管...")
             manager_proc.terminate()
@@ -499,28 +622,17 @@ if __name__ == '__main__':
         if not project_path:
             raise RuntimeError("專案下載失敗，請檢查日誌。")
 
-        # 步驟 2: 安裝門面伺服器所需的最基本依賴
-        log_manager_main.log("INFO", "正在安裝門面伺服器所需的基本依賴...")
-        requirements_path = Path(project_path) / "src" / "requirements_light.txt"
+        # 步驟 1.5: 安裝系統級依賴 (FFmpeg)
+        _install_ffmpeg_if_needed(log_manager_main)
 
-        # [JULES'S FIX] 加入重試迴圈以處理檔案系統延遲造成的競爭條件
-        max_retries = 5
-        wait_time = 1 # 秒
-        requirements_found = False
-        for i in range(max_retries):
-            if requirements_path.exists():
-                requirements_found = True
-                log_manager_main.log("INFO", f"✅ 成功找到依賴檔案: {requirements_path}")
-                break
-            log_manager_main.log("WARN", f"找不到依賴檔案，可能為檔案系統延遲。將在 {wait_time} 秒後重試... ({i+1}/{max_retries})")
-            time.sleep(wait_time)
+        # 步驟 2: 安裝核心伺服器依賴
+        log_manager_main.log("INFO", "正在安裝核心伺服器依賴...")
+        requirements_path = Path(project_path) / "requirements" / "server.txt"
 
-        if not requirements_found:
-            raise FileNotFoundError(f"在 {max_retries} 次嘗試後，仍找不到輕量級依賴檔案: {requirements_path}")
+        if not requirements_path.is_file():
+            raise FileNotFoundError(f"核心伺服器依賴檔案不存在: {requirements_path}")
 
-        pip_install_command = [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)]
-        subprocess.run(pip_install_command, check=True, capture_output=True, text=True)
-        log_manager_main.log("SUCCESS", "✅ 基本依賴安裝完成。")
+        _install_if_needed(requirements_path, log_manager_main, prefix="[主]")
 
         # 步驟 3: 啟動新的應用程式架構
         launch_application(project_path, log_manager_main)
