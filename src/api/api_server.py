@@ -979,29 +979,38 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 cmd_dl.extend(["--cookies-file", str(cookies_path)])
 
             proc_env = os.environ.copy()
-            process_dl = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env)
+            # JULES'S FIX (2025-08-30): 重構 I/O 處理以解決死鎖問題
+            # 舊的寫法是逐行讀取 stderr，但如果 stdout 的緩衝區被填滿，子程序會被阻塞，
+            # 而父程序卻在等待 stderr，從而導致死鎖。
+            #
+            # 新的寫法使用 communicate()，它會安全地讀取兩個流直到程序結束，
+            # 雖然會失去即時的進度回報，但能完全避免死鎖，確保任務能正確完成。
+            # 這是根據 POC 成功案例的模式進行的重構。
+            process_dl = subprocess.Popen(
+                cmd_dl,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                env=proc_env
+            )
 
-            # JULES'S FIX: 讀取 stderr 以獲取即時進度更新，與 Gemini 處理器保持一致
-            if process_dl.stderr:
-                for line in iter(process_dl.stderr.readline, ''):
-                    line = line.strip()
-                    if not line: continue
-                    try:
-                        progress_data = json.loads(line)
-                        if progress_data.get("type") == "progress":
-                             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                                "type": "YOUTUBE_STATUS",
-                                "payload": { "task_id": task_id, "status": "downloading", "message": progress_data.get("description", "下載中..."), "progress": progress_data.get("percent", 0), "task_type": task_type }
-                            }), loop)
-                    except json.JSONDecodeError:
-                        log.debug(f"[stderr from youtube_downloader]: {line}")
-
-
+            # communicate() 會讀取所有輸出直到程序結束，並返回結果。
+            # 這能有效避免緩衝區填滿導致的死鎖。
             stdout_output, stderr_output = process_dl.communicate()
 
+            # 在程序結束後，檢查返回碼
             if process_dl.returncode != 0:
-                raise RuntimeError(f"YouTube downloader failed. stderr: {stderr_output}")
+                # 將 stderr 的內容包含在錯誤訊息中，以便除錯
+                log.error(f"❌ [執行緒] youtube_downloader.py 執行失敗。Stderr: {stderr_output}")
+                # 我們從 stdout 中解析 JSON，因為即使失敗，腳本也會輸出一個錯誤 JSON
+                # 但如果 stdout 是空的，就使用 stderr 作為錯誤訊息
+                if stdout_output:
+                    raise RuntimeError(stdout_output)
+                else:
+                    raise RuntimeError(f"youtube_downloader.py 執行失敗，返回碼 {process_dl.returncode}。錯誤: {stderr_output}")
 
+            # 如果成功，stdout 應該包含最終的 JSON 結果
             download_result = json.loads(stdout_output)
             media_file_path = download_result['output_path'] # This is an absolute path
             video_title = download_result.get('video_title', '無標題影片')
