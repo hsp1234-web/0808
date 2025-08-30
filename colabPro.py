@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V19 穩定版通用啟動器                         🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V20 穩定版通用啟動器                         🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V19 更新日誌:                                                      ║
-# ║   - **架構回歸**：恢復 V66 的線程化 (threading) 穩定架構。       ║
-# ║   - **功能恢復**：重新引入 HTML 日誌複製與多通道備援功能。       ║
-# ║   - **版本同步**：後端版本指向最新的 `860` 分支。                  ║
+# ║ - V20 更新日誌:                                                      ║
+# ║   - **啟動修復**：後端版本指向 `861` 分支，解決協調器啟動時的      ║
+# ║     資料庫競爭條件 (race condition) 錯誤。                       ║
+# ║   - **介面優化**：將在下一階段優化 HTML 日誌複製按鈕的樣式。       ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 - V19 穩定版通用啟動器 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 - V20 穩定版通用啟動器 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -20,7 +20,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "860" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "861" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -97,6 +97,7 @@ import threading
 from collections import deque
 import re
 import json
+import html
 from IPython.display import clear_output
 from google.colab import output as colab_output, userdata
 
@@ -150,7 +151,7 @@ class DisplayManager:
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def _build_output_buffer(self) -> list[str]:
-        output_buffer = ["🐦‍🔥 鳳凰之心 - V19 作戰指揮中心 🐦‍🔥", ""]
+        output_buffer = ["🐦‍🔥 鳳凰之心 - V20 作戰指揮中心 🐦‍🔥", ""]
         logs_to_display = self._log_manager.get_display_logs()
         for log in logs_to_display:
             ts = log['timestamp'].strftime('%H:%M:%S')
@@ -559,6 +560,61 @@ class TunnelManager:
 # SECTION 2: 核心功能函式
 # ==============================================================================
 
+def create_log_viewer_html(log_manager, display_manager):
+    """ 產生最終的 HTML 日誌報告，樣式與 v17 版本一致。 """
+    try:
+        # Get logs for display
+        full_log_history = log_manager.get_full_history()
+        log_to_copy = [f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history]
+
+        # Get screen output for display
+        screen_output = "\n".join(display_manager._build_output_buffer())
+
+        num_logs = len(log_to_copy)
+
+        # Escape for HTML
+        # Taking only the last 10000 characters for display to avoid browser freeze
+        escaped_log_for_display = html.escape("\n".join(log_to_copy)[-10000:])
+
+        # Prepare for JavaScript
+        escaped_log_for_js = json.dumps("\n".join(log_to_copy))
+        escaped_screen_for_js = json.dumps(screen_output)
+
+        return f'''
+            <style>
+                .collapsible-log {{ margin-top: 15px; margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 12px; border-radius: 8px; background-color: #fafafa; }}
+                .collapsible-log summary {{ cursor: pointer; font-weight: bold; color: #333; }}
+                .collapsible-log pre {{ background-color: #fff; padding: 12px; border: 1px solid #e0e0e0; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; font-size: 13px; color: #444; max-height: 400px; overflow-y: auto; }}
+                .copy-button {{ padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ccc; border-radius: 5px; background-color: #f0f0f0; font-family: sans-serif; }}
+                .copy-button:hover {{ background-color: #e0e0e0; }}
+            </style>
+            <script>
+                function copyLogToClipboard(text, button) {{
+                    navigator.clipboard.writeText(text).then(() => {{
+                        const originalText = button.innerText;
+                        button.innerText = "✅ 已複製!";
+                        setTimeout(() => {{ button.innerText = originalText; }}, 2000);
+                    }}, (err) => {{
+                        button.innerText = "❌ 複製失敗";
+                        console.error('複製失敗: ', err);
+                    }});
+                }}
+            </script>
+            <div>
+                <button class="copy-button" onclick="copyLogToClipboard({escaped_screen_for_js}, this)">📋 複製上方最終畫面</button>
+            </div>
+            <details class="collapsible-log">
+                <summary>點此展開/收合最近 {num_logs} 條詳細日誌</summary>
+                <div style="margin-top: 12px;">
+                    <button class="copy-button" onclick="copyLogToClipboard({escaped_log_for_js}, this)">📄 複製下方完整日誌</button>
+                    <pre><code>{escaped_log_for_display}</code></pre>
+                    <button class="copy-button" onclick="copyLogToClipboard({escaped_log_for_js}, this)">📄 複製下方完整日誌</button>
+                </div>
+            </details>
+        '''
+    except Exception as e:
+        return f"<p>❌ 產生最終日誌報告時發生錯誤: {html.escape(str(e))}</p>"
+
 def archive_reports(log_manager, start_time, end_time, status):
     print("\n\n" + "="*60 + "\n--- 任務結束，開始執行自動歸檔 ---\n" + "="*60)
     try:
@@ -646,12 +702,7 @@ def main():
             print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
             from IPython.display import display, HTML
             import json
-            full_log_history = log_manager.get_full_history()
-            js_screen = json.dumps("\n".join(display_manager._build_output_buffer()))
-            js_logs = json.dumps("\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history]))
-            display(HTML(f"""<script>function copyToClipboard(text) {{navigator.clipboard.writeText(text);}}</script>
-                <button onclick='copyToClipboard({js_screen})'>📋 複製上方儲存格輸出</button>
-                <button onclick='copyToClipboard({js_logs})'>📄 複製完整詳細日誌</button>"""))
+            display(HTML(create_log_viewer_html(log_manager, display_manager)))
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
 if __name__ == "__main__":
