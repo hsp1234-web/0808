@@ -353,29 +353,6 @@ def create_log_viewer_html(log_manager):
 # ==============================================================================
 # PART 3: 主啟動器邏輯
 # ==============================================================================
-def _install_ffmpeg_if_needed(log_manager: DisplayManager):
-    """檢查並安裝系統級的 FFmpeg 依賴。"""
-    log_manager.log("INFO", "檢查系統級依賴 FFmpeg...")
-    if shutil.which("ffmpeg"):
-        log_manager.log("SUCCESS", "✅ FFmpeg 已安裝。")
-        return
-
-    log_manager.log("WARN", "未偵測到 FFmpeg，開始從 apt 安裝...")
-    try:
-        subprocess.run(["sudo", "apt-get", "update", "-qq"], check=True)
-        subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "ffmpeg"], check=True)
-        log_manager.log("SUCCESS", "✅ FFmpeg 安裝成功。")
-
-        # 記錄版本以供除錯
-        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
-        version_info = result.stdout.splitlines()[0]
-        log_manager.log("INFO", f"FFmpeg 版本: {version_info}")
-
-    except Exception as e:
-        log_manager.log("CRITICAL", f"❌ 安裝 FFmpeg 時發生錯誤: {e}")
-        # 根據情境，這裡可以選擇拋出例外或僅記錄錯誤
-        # 暫時僅記錄，讓啟動流程繼續
-
 def _install_if_needed(requirements_path: Path, log_manager: DisplayManager, prefix: str = ""):
     """
     一個智慧安裝函式，只安裝尚未被安裝或版本不符的套件。
@@ -497,7 +474,7 @@ def launch_application(project_path_str: str, log_manager: DisplayManager):
         manager_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{existing_python_path}".strip(os.pathsep)
         log_manager.log("INFO", f"為子程序設定 PYTHONPATH: {manager_env['PYTHONPATH']}")
 
-        manager_command = [sys.executable, str(project_path / "scripts" / "run_services.py")]
+        manager_command = [sys.executable, str(project_path / "src" / "core" / "orchestrator.py"), "--no-mock"]
         manager_proc = subprocess.Popen(
             manager_command, cwd=project_path, text=True,
             encoding='utf-8', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -621,9 +598,6 @@ if __name__ == '__main__':
         project_path = download_repository(log_manager_main)
         if not project_path:
             raise RuntimeError("專案下載失敗，請檢查日誌。")
-
-        # 步驟 1.5: 安裝系統級依賴 (FFmpeg)
-        _install_ffmpeg_if_needed(log_manager_main)
 
         # 步驟 2: 安裝核心伺服器依賴
         log_manager_main.log("INFO", "正在安裝核心伺服器依賴...")
