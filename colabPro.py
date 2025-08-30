@@ -255,7 +255,7 @@ class ServerManager:
                     raise  # 重新引發異常以停止執行
 
             self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
-            launch_command = [sys.executable, "src/core/orchestrator.py", "--no-mock"]
+            launch_command = [sys.executable, "src/core/orchestrator.py"]
             process_env = os.environ.copy()
             src_path_str = str((project_path / "src").resolve())
             process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{process_env.get('PYTHONPATH', '')}".strip(os.pathsep)
