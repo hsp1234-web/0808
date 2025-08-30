@@ -46,10 +46,18 @@ def setup_database_logging():
     except Exception as e:
         log.error(f"整合資料庫日誌時發生錯誤: {e}", exc_info=True)
 
-def stream_reader(stream, prefix):
-    """一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。"""
+def stream_reader(stream, prefix, ready_event=None, ready_signal=None):
+    """
+    一個在執行緒中運行的函數，用於讀取並打印流（stdout/stderr）。
+    可選地，它可以監聽一個特定的「就緒信號」並設置一個 threading.Event。
+    """
     for line in iter(stream.readline, ''):
-        log.info(f"[{prefix}] {line.strip()}")
+        clean_line = line.strip()
+        log.info(f"[{prefix}] {clean_line}")
+        if ready_event and ready_signal and not ready_event.is_set():
+            if ready_signal in clean_line:
+                log.info(f"✅ 偵測到來自 '{prefix}' 的就緒信號 '{ready_signal}'！")
+                ready_event.set()
     stream.close()
 
 def find_free_port() -> int:
@@ -155,20 +163,30 @@ def main():
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
         log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
-        # 將 DB Manager 的日誌也流式輸出
-        db_manager_log_thread = threading.Thread(target=stream_reader, args=(db_manager_proc.stdout, 'db_manager'))
+
+        # JULES'S FIX (2025-08-30): 建立一個 Event 來等待 DB Manager 的明確就緒信號
+        db_manager_ready_event = threading.Event()
+        # 將 DB Manager 的日誌也流式輸出，並讓 stream_reader 監聽就緒信號
+        db_manager_log_thread = threading.Thread(
+            target=stream_reader,
+            args=(db_manager_proc.stdout, 'db_manager', db_manager_ready_event, 'DB_MANAGER_READY')
+        )
         db_manager_log_thread.daemon = True
         db_manager_log_thread.start()
         threads.append(db_manager_log_thread)
 
         # 1a. 獲取 DB Manager 的硬編碼埠號
         db_manager_port = get_db_manager_port()
-        # Note: The check for a null port is no longer needed as the function
-        # now always returns a hardcoded port or fails internally.
 
-        # 1b. 確認 DB Manager 服務已在監聽埠號
+        # 1b. 確認 DB Manager 服務已在監聽埠號 (第一階段確認)
         if not wait_for_service(db_manager_port):
             raise RuntimeError(f"DB Manager 服務在埠號 {db_manager_port} 上未能及時就緒，啟動中止。")
+
+        # 1c. 等待來自 DB Manager 的明確「就緒信號」 (第二階段確認)
+        log.info(f"埠號 {db_manager_port} 已開啟，正在等待資料庫初始化完成的明確信號 ('DB_MANAGER_READY')...")
+        ready_signal_received = db_manager_ready_event.wait(timeout=15) # Wait up to 15s
+        if not ready_signal_received:
+            raise RuntimeError("等待 DB Manager 的 'DB_MANAGER_READY' 信號超時。")
 
         log.info("✅ 資料庫管理者服務已完全就緒。")
 
