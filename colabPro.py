@@ -419,12 +419,16 @@ def _log_subprocess_output(server_proc, log_manager, shared_state):
             continue
         log_manager.log("RUNNER", line)
         # 同時檢查埠號，並更新共享狀態
-        if line.startswith("APP_PORT:"):
-            try:
-                port = int(line.split(":")[1].strip())
-                shared_state['app_port'] = port
-            except (ValueError, IndexError):
-                log_manager.log("ERROR", f"無法從行 '{line}' 中解析埠號。")
+        # JULES'S FIX (2025-08-30): 更新握手信號邏輯以匹配 orchestrator.py 的 PROXY_URL 輸出
+        if 'app_port' not in shared_state: # 僅在尚未找到埠號時進行搜索
+            match = re.search(r"PROXY_URL: http://127.0.0.1:(\d+)", line)
+            if match:
+                try:
+                    port = int(match.group(1))
+                    shared_state['app_port'] = port
+                    log_manager.log("SUCCESS", f"✅ 成功從握手信號中解析出埠號: {port}")
+                except (ValueError, IndexError):
+                    log_manager.log("ERROR", f"從 '{line}' 解析埠號失敗。")
 
 def _background_dependency_installer(project_path: Path, log_manager: DisplayManager, shared_state: dict):
     """在背景執行緒中，依序智慧安裝額外的、大型的依賴套件。"""
