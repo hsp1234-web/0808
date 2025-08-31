@@ -21,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "866" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "901" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -45,7 +45,7 @@ ENABLE_CLOUDFLARE = True #@param {type:"boolean"}
 #@markdown **儀表板更新頻率 (秒) (UI_REFRESH_SECONDS)**
 UI_REFRESH_SECONDS = 0.5 #@param {type:"number"}
 #@markdown **日誌顯示行數 (LOG_DISPLAY_LINES)**
-LOG_DISPLAY_LINES = 30 #@param {type:"integer"}
+LOG_DISPLAY_LINES = 10 #@param {type:"integer"}
 #@markdown **時區設定 (TIMEZONE)**
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
 
@@ -207,6 +207,22 @@ class ServerManager:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self.port = None
 
+    def _ensure_uv_installed(self):
+        """檢查並在需要時安裝 uv。"""
+        try:
+            subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._log_manager.log("INFO", "[依賴檢查] uv 已安裝。")
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self._log_manager.log("INFO", "[依賴檢查] 未找到 uv，正在嘗試安裝...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
+                self._log_manager.log("SUCCESS", "[依賴檢查] ✅ uv 安裝成功。")
+                return True
+            except Exception as e:
+                self._log_manager.log("ERROR", f"[依賴檢查] uv 安裝失敗: {e}")
+                return False
+
     def _run(self):
         try:
             self._stats['status'] = "🚀 呼叫核心協調器..."
@@ -239,52 +255,101 @@ class ServerManager:
             initialize_database()
             add_system_log("colab_setup", "INFO", "Git repository cloned successfully.")
 
-            # --- 統一依賴安裝 ---
-            self._log_manager.log("INFO", "步驟 1/2: 正在統一安裝所有後端依賴...")
-            requirements_to_install = [
-                project_path / "requirements" / "server.txt",
-                project_path / "requirements" / "transcriber.txt",
-                project_path / "requirements" / "youtube.txt" # 修正：加入 youtube 依賴
-            ]
-            merged_reqs_path = project_path / "requirements_merged_colab.txt"
-            with open(merged_reqs_path, "w", encoding="utf-8") as outfile:
-                for req_path in requirements_to_install:
-                    if req_path.is_file():
-                        outfile.write(req_path.read_text(encoding="utf-8"))
-                        outfile.write("\n")
-                    else:
-                        self._log_manager.log("WARN", f"找不到依賴檔案，已跳過: {req_path}")
+            # --- JULES: 重構為兩階段依賴安裝 ---
 
-            try:
-                # 優先使用 uv 以加速安裝
-                pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_reqs_path)]
+            def install_requirements(req_files, log_prefix=""):
+                """幫助函式：智慧地安裝指定的 requirements 檔案列表，避免重複安裝。"""
+                self._log_manager.log("INFO", f"[{log_prefix}] 開始檢查依賴...")
+
+                # 1. 合併所有需求到一個暫存檔案
+                merged_req_path = project_path / f"requirements_merged_{log_prefix.lower().replace(' ', '_')}.txt"
+                with open(merged_req_path, "w", encoding="utf-8") as outfile:
+                    for req_path in req_files:
+                        if req_path.is_file():
+                            outfile.write(req_path.read_text(encoding="utf-8").strip() + "\n")
+                        else:
+                            self._log_manager.log("WARN", f"[{log_prefix}] 找不到依賴檔案: {req_path}")
+
+                if not merged_req_path.read_text().strip():
+                    self._log_manager.log("INFO", f"[{log_prefix}] 沒有需要檢查的依賴。")
+                    if merged_req_path.exists(): merged_req_path.unlink()
+                    return
+
+                # 2. 呼叫 check_deps.py 找出缺失的套件
+                check_script_path = project_path / "scripts" / "check_deps.py"
+                check_proc = subprocess.run(
+                    [sys.executable, str(check_script_path), str(merged_req_path)],
+                    capture_output=True, text=True, encoding='utf-8'
+                )
+
+                if check_proc.returncode != 0:
+                    self._log_manager.log("ERROR", f"[{log_prefix}] 依賴檢查腳本執行失敗: {check_proc.stderr}")
+                    # 作為後備，直接安裝所有套件
+                    missing_reqs_content = merged_req_path.read_text(encoding='utf-8')
+                else:
+                    missing_reqs_content = check_proc.stdout.strip()
+
+                # 3. 如果有缺失的套件，則只安裝它們
+                if not missing_reqs_content:
+                    self._log_manager.log("SUCCESS", f"✅ [{log_prefix}] 所有依賴均已安裝，無需操作。")
+                    if merged_req_path.exists(): merged_req_path.unlink()
+                    return
+
+                self._log_manager.log("INFO", f"[{log_prefix}] 發現缺失的依賴，準備安裝...")
+                missing_req_path = project_path / f"requirements_missing_{log_prefix.lower().replace(' ', '_')}.txt"
+                missing_req_path.write_text(missing_reqs_content, encoding='utf-8')
+
                 try:
-                    subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    self._log_manager.log("INFO", "偵測到 'uv'，將使用它进行快速安裝。")
-                    # 在 Colab 環境中，我們需要確保套件被安裝到系統的 site-packages 中，
-                    # 以便由 sys.executable 啟動的子程序能夠找到它們。
-                    pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(merged_reqs_path)]
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    self._log_manager.log("INFO", "未找到 'uv'，將退回使用 'pip'。")
+                    pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(missing_req_path)]
+                    try:
+                        subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(missing_req_path)]
+                        self._log_manager.log("INFO", f"[{log_prefix}] 使用 'uv' 進行快速安裝...")
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        self._log_manager.log("INFO", f"[{log_prefix}] 未找到 'uv'，退回使用 'pip'。")
 
-                subprocess.check_call(pip_command)
-                self._log_manager.log("SUCCESS", "✅ 所有後端依賴安裝完成。")
-            except subprocess.CalledProcessError as e:
-                error_message = f"依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
-                self._log_manager.log("CRITICAL", error_message)
-                raise
-            finally:
-                if merged_reqs_path.exists():
-                    merged_reqs_path.unlink()
+                    subprocess.check_call(pip_command)
+                    self._log_manager.log("SUCCESS", f"✅ {log_prefix} 缺失的依賴安裝完成。")
+                except subprocess.CalledProcessError as e:
+                    error_message = f"[{log_prefix}] 依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
+                    self._log_manager.log("CRITICAL", error_message)
+                    raise
+                finally:
+                    if merged_req_path.exists(): merged_req_path.unlink()
+                    if missing_req_path.exists(): missing_req_path.unlink()
 
+            # --- 階段 1: 同步安裝核心依賴 ---
+            self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
+            core_requirements = [
+                project_path / "requirements" / "server.txt",
+                project_path / "requirements" / "youtube.txt"
+            ]
+            install_requirements(core_requirements, "核心依賴")
 
-            self._log_manager.log("INFO", "步驟 2/2: 正在啟動後端服務...")
+            # --- 階段 2: 啟動後端服務 (這會立即發生，以便使用者盡快取得 URL) ---
+            self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
             launch_command = [sys.executable, "src/core/orchestrator.py"]
             process_env = os.environ.copy()
             src_path_str = str((project_path / "src").resolve())
             process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{process_env.get('PYTHONPATH', '')}".strip(os.pathsep)
 
             self.server_process = subprocess.Popen(launch_command, cwd=str(project_path), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid, env=process_env)
+
+            # --- 階段 3: 在背景安裝大型依賴 ---
+            def background_install():
+                self._log_manager.log("INFO", "步驟 3/3: [背景] 開始安裝大型任務依賴...")
+                large_requirements = [
+                    project_path / "requirements" / "transcriber.txt",
+                    project_path / "requirements" / "gemini.txt"
+                ]
+                try:
+                    install_requirements(large_requirements, "背景大型任務")
+                    self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
+                except Exception as e:
+                    self._log_manager.log("CRITICAL", f"[背景] 大型依賴安裝失敗: {e}")
+
+            bg_install_thread = threading.Thread(target=background_install, daemon=True)
+            bg_install_thread.start()
 
             port_pattern = re.compile(r"PROXY_URL: http://127.0.0.1:(\d+)")
             uvicorn_ready_pattern = re.compile(r"Uvicorn running on")

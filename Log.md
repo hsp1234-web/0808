@@ -1535,3 +1535,142 @@ D. 進行事前檢查 (可選)：如果測試需要啟動一個已知的記憶�
 
 - **遭遇工具鏈問題**: 在開發過程中，多次遇到 `replace_with_git_merge_diff` 工具的功能異常，導致檔案被錯誤修改或損毀。最終採用 `overwrite_file_with_block` 作為備用方案才成功修復檔案 (`stores/tasks.js`)。
 - **測試驅動除錯**: 在整合測試階段遭遇了持續的執行逾時。透過為測試腳本 (`run_e2e_test.py`) 增加詳細的時間戳記日誌，成功排除了建置和依賴安裝階段的問題，並最終將問題鎖定在前端應用的啟動穩定性上，進而找到並修復了根本的 Bug。
+
+## 899號 - 2025-08-31T18:12:28+08:00
+
+### fix(core): 修正 API 金鑰驗證與啟動競速條件
+
+- **動機**: 解決了兩個獨立但影響使用者體驗的核心問題：1) API 金鑰驗證提供誤導性的「假性成功」回饋。 2) 使用者能在後端依賴（如 ）完全安裝就緒前點擊功能按鈕，導致競速條件錯誤。
+
+- **核心變更**:
+    - **API 金鑰驗證修正**:
+        - **後端 ()**: 增強了金鑰驗證邏輯，使其在失敗時能提供更具體的錯誤原因，例如「Google 拒絕存取」。
+        - **前端 ()**: 徹底重構了驗證流程。現在，點擊「儲存金鑰」會直接嘗試使用該金鑰呼叫 Google 的「列出模型」API。此操作的成功與否將作為金鑰是否有效的唯一、準確的判斷依據，並即時更新 UI，徹底解決了先前的「假性成功」問題。
+    - **競速條件修正**:
+        - **後端 ()**: 新增了一個  端點。此端點會檢查  等核心依賴是否已安裝並在系統路徑中可用。
+        - **前端 ()**: 新增了啟動時的系統就緒檢查流程。頁面載入後，會立即禁用所有依賴後端的功能按鈕，並開始輪詢  端點。只有在後端回報「就緒」後，按鈕才會被啟用，從而確保使用者無法在系統準備好之前執行任何操作。
+
+- **成果**: 此次提交顯著提升了應用的健壯性和使用者體驗。API 金鑰的驗證現在是即時且準確的，而啟動時的競速條件問題也已從根本上被消除。
+
+## 899號 - 2025-08-31T18:12:58+08:00
+
+### fix(core): 修正 API 金鑰驗證與啟動競速條件
+
+- **動機**: 解決了兩個獨立但影響使用者體驗的核心問題：1) API 金鑰驗證提供誤導性的「假性成功」回饋。 2) 使用者能在後端依賴（如 `yt-dlp`）完全安裝就緒前點擊功能按鈕，導致競速條件錯誤。
+
+- **核心變更**:
+    - **API 金鑰驗證修正**:
+        - **後端 (`gemini_processor.py`)**: 增強了金鑰驗證邏輯，使其在失敗時能提供更具體的錯誤原因，例如「Google 拒絕存取」。
+        - **前端 (`mp3.html`)**: 徹底重構了驗證流程。現在，點擊「儲存金鑰」會直接嘗試使用該金鑰呼叫 Google 的「列出模型」API。此操作的成功與否將作為金鑰是否有效的唯一、準確的判斷依據，並即時更新 UI，徹底解決了先前的「假性成功」問題。
+    - **競速條件修正**:
+        - **後端 (`api_server.py`)**: 新增了一個 `/api/system/readiness` 端點。此端點會檢查 `yt-dlp` 等核心依賴是否已安裝並在系統路徑中可用。
+        - **前端 (`mp3.html`)**: 新增了啟動時的系統就緒檢查流程。頁面載入後，會立即禁用所有依賴後端的功能按鈕，並開始輪詢 `/api/system/readiness` 端點。只有在後端回報「就緒」後，按鈕才會被啟用，從而確保使用者無法在系統準備好之前執行任何操作。
+
+- **成果**: 此次提交顯著提升了應用的健壯性和使用者體驗。API 金鑰的驗證現在是即時且準確的，而啟動時的競速條件問題也已從根本上被消除。
+## 901號 - 2025-09-01T00:10:00+08:00
+
+### feat(deps): 實現智慧依賴安裝以加速啟動
+
+- **動機**: 解決因每次啟動都重新安裝所有 Python 套件，導致啟動時間過長的問題。
+- **核心變更**:
+    - **新增依賴檢查腳本 ()**: 建立了一個新的輔助腳本，該腳本可以接收一個  檔案，並透過嘗試  的方式，回報哪些套件在當前環境中是真正缺失的。
+    - **改造  安裝流程**:
+        -  函式被重構，現在它會先呼叫 。
+        - 只有在檢查到有缺失的套件時，才會動態產生一個僅包含這些缺失套件的臨時需求檔案，並只對該檔案執行
+Usage:
+  pip <command> [options]
+
+Commands:
+  install                     Install packages.
+  lock                        Generate a lock file.
+  download                    Download packages.
+  uninstall                   Uninstall packages.
+  freeze                      Output installed packages in requirements format.
+  inspect                     Inspect the python environment.
+  list                        List installed packages.
+  show                        Show information about installed packages.
+  check                       Verify installed packages have compatible dependencies.
+  config                      Manage local and global configuration.
+  search                      Search PyPI for packages.
+  cache                       Inspect and manage pip's wheel cache.
+  index                       Inspect information available from package indexes.
+  wheel                       Build wheels from your requirements.
+  hash                        Compute hashes of package archives.
+  completion                  A helper command used for command completion.
+  debug                       Show information useful for debugging.
+  help                        Show help for commands.
+
+General Options:
+  -h, --help                  Show help.
+  --debug                     Let unhandled exceptions propagate outside the
+                              main subroutine, instead of logging them to
+                              stderr.
+  --isolated                  Run pip in an isolated mode, ignoring
+                              environment variables and user configuration.
+  --require-virtualenv        Allow pip to only run in a virtual environment;
+                              exit with an error otherwise.
+  --python <python>           Run pip with the specified Python interpreter.
+  -v, --verbose               Give more output. Option is additive, and can be
+                              used up to 3 times.
+  -V, --version               Show version and exit.
+  -q, --quiet                 Give less output. Option is additive, and can be
+                              used up to 3 times (corresponding to WARNING,
+                              ERROR, and CRITICAL logging levels).
+  --log <path>                Path to a verbose appending log.
+  --no-input                  Disable prompting for input.
+  --keyring-provider <keyring_provider>
+                              Enable the credential lookup via the keyring
+                              library if user input is allowed. Specify which
+                              mechanism to use [auto, disabled, import,
+                              subprocess]. (default: auto)
+  --proxy <proxy>             Specify a proxy in the form
+                              scheme://[user:passwd@]proxy.server:port.
+  --retries <retries>         Maximum attempts to establish a new HTTP
+                              connection. (default: 5)
+  --timeout <sec>             Set the socket timeout (default 15 seconds).
+  --exists-action <action>    Default action when a path already exists:
+                              (s)witch, (i)gnore, (w)ipe, (b)ackup, (a)bort.
+  --trusted-host <hostname>   Mark this host or host:port pair as trusted,
+                              even though it does not have valid or any HTTPS.
+  --cert <path>               Path to PEM-encoded CA certificate bundle. If
+                              provided, overrides the default. See 'SSL
+                              Certificate Verification' in pip documentation
+                              for more information.
+  --client-cert <path>        Path to SSL client certificate, a single file
+                              containing the private key and the certificate
+                              in PEM format.
+  --cache-dir <dir>           Store the cache data in <dir>.
+  --no-cache-dir              Disable the cache.
+  --disable-pip-version-check
+                              Don't periodically check PyPI to determine
+                              whether a new version of pip is available for
+                              download. Implied with --no-index.
+  --no-color                  Suppress colored output.
+  --use-feature <feature>     Enable new functionality, that may be backward
+                              incompatible.
+  --use-deprecated <feature>  Enable deprecated functionality, that will be
+                              removed in the future.
+  --resume-retries <resume_retries>
+                              Maximum attempts to resume or restart an
+                              incomplete download. (default: 0) 或  安裝。
+        - 如果所有依賴都已存在，則會完全跳過安裝步驟，並在日誌中顯示一條成功訊息，從而極大地縮短了冷啟動之後的啟動時間。
+    - **配置更新**:
+        - 根據使用者要求，將預設的  更新為 。
+        - 將  的預設值更新為 。
+- **成果**: 啟動器現在更加智慧，能夠避免不必要的重複安裝工作，顯著提升了開發和使用的效率。
+
+## 901號 - 2025-09-01T00:10:00+08:00
+
+### feat(deps): 實現智慧依賴安裝以加速啟動
+
+- **動機**: 解決因每次啟動都重新安裝所有 Python 套件，導致啟動時間過長的問題。
+- **核心變更**:
+    - **新增依賴檢查腳本 (`scripts/check_deps.py`)**: 建立了一個新的輔助腳本，該腳本可以接收一個 `requirements.txt` 檔案，並透過嘗試 `import` 的方式，回報哪些套件在當前環境中是真正缺失的。
+    - **改造 `colabPro.py` 安裝流程**:
+        - `install_requirements` 函式被重構，現在它會先呼叫 `check_deps.py`。
+        - 只有在檢查到有缺失的套件時，才會動態產生一個僅包含這些缺失套件的臨時需求檔案，並只對該檔案執行 `pip` 或 `uv` 安裝。
+        - 如果所有依賴都已存在，則會完全跳過安裝步驟，並在日誌中顯示一條成功訊息，從而極大地縮短了冷啟動之後的啟動時間。
+    - **配置更新**:
+        - 根據使用者要求，將預設的 `TARGET_BRANCH_OR_TAG` 更新為 `901`。
+        - 將 `LOG_DISPLAY_LINES` 的預設值更新為 `10`。
+- **成果**: 啟動器現在更加智慧，能夠避免不必要的重複安裝工作，顯著提升了開發和使用的效率。

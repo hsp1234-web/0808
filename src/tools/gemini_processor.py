@@ -136,19 +136,30 @@ def validate_key():
     如果失敗，以 non-zero exit code 退出，並在 stderr 中提供錯誤訊息。
     """
     try:
+        # JULES: 導入 Google API 核心例外，以便進行更精確的錯誤處理
+        import google.api_core.exceptions
+
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set.")
+            # 保持這個錯誤，因為金鑰不存在是客戶端的問題
+            print("錯誤：未在環境變數中提供 GOOGLE_API_KEY。", file=sys.stderr, flush=True)
+            sys.exit(1)
+
         genai.configure(api_key=api_key)
 
         # list_models 是一個相對輕量級的驗證操作
         genai.list_models()
-        log.info("✅ API key validation successful.")
+        # 成功時，stdout 不應有任何輸出，僅透過 exit code 0 表示成功
+        log.info("✅ API 金鑰驗證成功。")
         sys.exit(0)
+    except google.api_core.exceptions.PermissionDenied as e:
+        # 這是最常見的「金鑰無效」錯誤
+        print("金鑰驗證失敗：Google 拒絕存取。請檢查您的 API 金鑰是否正確且已啟用。", file=sys.stderr, flush=True)
+        sys.exit(1)
     except Exception as e:
+        # 處理其他可能的錯誤，例如網路問題
         # 將具體的錯誤訊息輸出到 stderr
-        # Google API 錯誤通常有自己的詳細描述
-        print(f"API key not valid. Reason: {e}", file=sys.stderr, flush=True)
+        print(f"金鑰驗證時發生未預期的錯誤：{e}", file=sys.stderr, flush=True)
         sys.exit(1)
 
 
