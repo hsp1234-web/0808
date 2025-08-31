@@ -128,7 +128,8 @@ class TestYoutubeDownloader:
         with pytest.raises(SystemExit) as e:
              youtube_downloader.download_media(TEST_URL, TEST_OUTPUT_DIR)
 
-        assert e.type == SystemExit
+        # pytest.raises(SystemExit) 已經確保了異常類型是 SystemExit，
+        # 我們只需要檢查退出碼。
         assert e.value.code == 1
 
         # 驗證輸出的 JSON 包含正確的錯誤碼

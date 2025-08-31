@@ -18,8 +18,8 @@ def run_playwright_tests():
     Target function to run Playwright tests in a subprocess.
     """
     log.info("Subprocess started: Running Playwright tests...")
-    # Focusing on the main validation test
-    command = ["npx", "playwright", "test", "src/tests/e2e_main_validation.spec.js"]
+    # Focusing on the youtube report test to reproduce the hanging issue
+    command = ["npx", "playwright", "test", "src/tests/e2e_youtube_report_full.spec.cjs"]
     try:
         subprocess.run(command, check=True, text=True, encoding='utf-8')
         sys.exit(0)
