@@ -14,6 +14,13 @@ if sys.platform != 'win32':
     time.tzset()
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+# --- 修正模組匯入路徑 ---
+# 將專案的 src 目錄新增到 Python 的搜尋路徑中，
+# 這樣才能正確找到 db.client 等模組。
+SRC_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SRC_DIR))
+
 from db.client import DBClient, get_client
 
 logging.basicConfig(
@@ -109,24 +116,27 @@ def main():
         processes.append(db_manager_proc)
         log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
 
-        db_ready_event = threading.Event()
-        db_manager_port_list = [None]
+        db_manager_port_list = [None] # 用於從執行緒接收埠號的列表
         db_stdout_thread = threading.Thread(
             target=stream_reader,
-            args=(db_manager_proc.stdout, 'db_manager', db_ready_event, "DB_MANAGER_READY"),
+            args=(db_manager_proc.stdout, 'db_manager'),
             kwargs={'port_list': db_manager_port_list, 'port_regex': r"DB_MANAGER_PORT: (\d+)"}
         )
         db_stdout_thread.daemon = True
         db_stdout_thread.start()
         threads.append(db_stdout_thread)
 
-        log.info(f"正在等待資料庫管理者就緒 (超時: 30秒)...")
-        if not db_ready_event.wait(timeout=30):
-            raise RuntimeError("資料庫管理者服務啟動超時。")
+        log.info(f"正在等待資料庫管理者提供埠號 (超時: 30秒)...")
+        start_time = time.time()
+        while db_manager_port_list[0] is None:
+            if time.time() - start_time > 30:
+                raise RuntimeError("等待資料庫管理者埠號超時。")
+            # 檢查子程序是否意外終止
+            if db_manager_proc.poll() is not None:
+                raise RuntimeError(f"資料庫管理者程序在啟動期間意外終止，返回碼: {db_manager_proc.returncode}")
+            time.sleep(0.1) # 短暫等待，避免 CPU 資源浪費
 
         db_manager_port = db_manager_port_list[0]
-        if db_manager_port is None:
-            raise RuntimeError("無法從資料庫管理者獲取埠號。")
         log.info(f"✅ 資料庫管理者服務已就緒，監聽埠號為: {db_manager_port}")
 
         # 2. 資料庫就緒後，建立客戶端並設定日誌系統

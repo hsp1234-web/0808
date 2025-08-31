@@ -18,6 +18,13 @@ from typing import Optional, Dict, List
 
 # 匯入新的資料庫客戶端
 # from db import database # REMOVED: No longer used directly
+
+# --- 修正模組匯入路徑 ---
+# 將專案的 src 目錄新增到 Python 的搜尋路徑中，
+# 這樣才能正確找到 db.client 等模組。
+SRC_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SRC_DIR))
+
 from db.client import get_client
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---

@@ -146,8 +146,6 @@ def run_server():
         log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
         database.initialize_database()
         log.info("✅ 資料庫初始化成功。")
-        # JULES'S FIX (2025-08-30): 發送明確的就緒信號，解決 orchestrator 的競爭條件問題
-        print("DB_MANAGER_READY", flush=True)
     except sqlite3.Error as e:
         log.critical(f"❌ 資料庫初始化失敗，伺服器無法啟動: {e}")
         # 在這種嚴重錯誤下，我們應該讓程序以非零代碼退出
@@ -163,6 +161,9 @@ def run_server():
 
         # JULES'S FIX (2025-08-31): 將選擇的埠號輸出，以便協調器可以讀取
         print(f"DB_MANAGER_PORT: {actual_port}", flush=True)
+        # JULES'S FIX (2025-08-30): 發送明確的就緒信號，解決 orchestrator 的競爭條件問題
+        # 這個信號必須在埠號被印出之後發送
+        print("DB_MANAGER_READY", flush=True)
 
         try:
             # 啟動伺服器，它將一直運行直到被中斷 (例如 Ctrl+C)
