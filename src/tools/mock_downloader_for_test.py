@@ -38,7 +38,7 @@ def main():
         # 準備並印出模擬的成功 JSON 輸出
         final_result = {
             "type": "result",
-            "status": "completed",
+            "status": "已完成",
             "output_path": str(final_path),
             "video_title": video_title,
             "duration_seconds": 123 # 模擬的時長

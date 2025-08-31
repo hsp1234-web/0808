@@ -155,6 +155,12 @@ class DBClient:
         """
         return self._send_request("set_app_state", {"key": key, "value": value})
 
+    def clear_all_tasks(self) -> bool:
+        """
+        [僅供測試] 清空資料庫中的所有任務。
+        """
+        return self._send_request("clear_all_tasks")
+
 # 可選：提供一個簡單的方式來獲取客戶端實例
 _client_instance = None
 

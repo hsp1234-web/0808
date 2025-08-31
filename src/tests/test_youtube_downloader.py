@@ -110,7 +110,7 @@ class TestYoutubeDownloader:
         )
         # 驗證最終輸出的 JSON
         final_json_output = json.loads(mock_print.call_args[0][0])
-        assert final_json_output['status'] == 'completed'
+        assert final_json_output['status'] == '已完成'
         assert final_json_output['output_path'] == str(expected_filepath)
 
     @patch('builtins.print')
@@ -184,7 +184,7 @@ class TestYoutubeDownloader:
         )
 
         final_json_output = json.loads(mock_print.call_args[0][0])
-        assert final_json_output['status'] == 'completed'
+        assert final_json_output['status'] == '已完成'
         # 斷言最終路徑是我們預期找到的那個，而不是 yt-dlp 回報的那個
         assert final_json_output['output_path'] == str(expected_filepath)
 

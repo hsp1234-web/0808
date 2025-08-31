@@ -56,7 +56,7 @@ def main():
         # 產出最終的成功結果 JSON
         result = {
             "type": "result",
-            "status": "completed",
+            "status": "已完成",
             "output_path": str(target_path),
             "video_title": f"'{args.url}' 的模擬影片標題",
             "duration_sec": 123,

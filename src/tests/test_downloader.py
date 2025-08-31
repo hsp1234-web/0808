@@ -35,7 +35,7 @@ def mock_db_client(mocker):
         "task_id": TEST_TASK_ID,
         "type": "youtube_download_only",
         "payload": fake_task_payload,
-        "status": "pending"
+        "status": "處理中"
     }
 
     # 使用 mocker.patch 來取代 api_server 模組中的 db_client
@@ -52,7 +52,7 @@ def mock_subprocess(mocker):
     # youtube_downloader.py 腳本在成功時會輸出一個 JSON 結果
     download_result_json = json.dumps({
         "type": "result",
-        "status": "completed",
+        "status": "已完成",
         "output_path": MOCK_AUDIO_PATH,
         "video_title": MOCK_VIDEO_TITLE
     })
@@ -133,7 +133,7 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
     # 我們預期有兩次廣播：一次是 'downloading'，一次是 'completed'
     final_download_result = {
         "type": "result",
-        "status": "completed",
+        "status": "已完成",
         "output_path": MOCK_AUDIO_PATH,
         "video_title": MOCK_VIDEO_TITLE
     }
@@ -154,7 +154,7 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
             "type": "YOUTUBE_STATUS",
             "payload": {
                 "task_id": TEST_TASK_ID,
-                "status": "completed",
+                "status": "已完成",
                 "result": final_download_result,
                 "task_type": "download_only"
             }
@@ -164,7 +164,7 @@ def test_trigger_youtube_processing_success(mock_db_client, mock_subprocess, moc
     mock_websocket_manager.broadcast_json.assert_has_calls(expected_calls, any_order=False)
 
     # 斷言資料庫任務狀態最終被更新為 'completed'
-    final_db_update_call = call(TEST_TASK_ID, 'completed', json.dumps(final_download_result))
+    final_db_update_call = call(TEST_TASK_ID, '已完成', json.dumps(final_download_result))
     mock_db_client.update_task_status.assert_has_calls([final_db_update_call])
 
 def test_mock_youtube_downloader_script(tmp_path):
@@ -220,7 +220,7 @@ def test_mock_youtube_downloader_script(tmp_path):
 
     # 斷言 JSON 內容
     assert output_json.get("type") == "result"
-    assert output_json.get("status") == "completed"
+    assert output_json.get("status") == "已完成"
     assert "output_path" in output_json
     assert "video_title" in output_json
 

@@ -485,7 +485,7 @@ async def download_transcript(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
 
-    if task['status'] != 'completed':
+    if task['status'] != '已完成':
         raise HTTPException(status_code=400, detail="任務尚未完成，無法下載。")
 
     try:
@@ -553,7 +553,7 @@ async def rename_task_file(task_id: str, request: Request):
         task = db_client.get_task_status(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="找不到指定的任務 ID。")
-        if task['status'] != 'completed':
+        if task['status'] != '已完成':
             raise HTTPException(status_code=400, detail="只能重新命名已完成的任務。")
 
         result_data = json.loads(task['result'])
@@ -592,7 +592,7 @@ async def rename_task_file(task_id: str, request: Request):
         result_data["output_path"] = convert_to_media_url(str(new_path))
         result_data["video_title"] = new_filename_base
 
-        db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
+        db_client.update_task_status(task_id, '已完成', json.dumps(result_data))
         log.info(f"已更新資料庫中任務 {task_id} 的結果。")
 
         return {"status": "success", "message": "檔案重新命名成功。", "new_filename": new_filename_base}
@@ -888,7 +888,7 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                 log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
                 message = {
                     "type": "DOWNLOAD_STATUS",
-                    "payload": {"model": model_size, "status": "completed", "progress": 100}
+                    "payload": {"model": model_size, "status": "已完成", "progress": 100}
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
@@ -987,12 +987,12 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                     "transcript_path": convert_to_media_url(str(output_file_path)),
                     "output_path": convert_to_media_url(str(output_file_path)) # 增加一個通用的 output_path
                 }
-                db_client.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
+                db_client.update_task_status(task_id, '已完成', json.dumps(final_result_obj))
                 log.info(f"✅ [執行緒] 已將任務 {task_id} 的狀態和結果更新至資料庫。")
 
                 final_message = {
                     "type": "TRANSCRIPTION_STATUS",
-                    "payload": {"task_id": task_id, "status": "completed", "result": final_result_obj}
+                    "payload": {"task_id": task_id, "status": "已完成", "result": final_result_obj}
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
@@ -1096,15 +1096,15 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             if task_type == 'youtube_download_only':
                 # 問題二：將檔案系統路徑轉換為可存取的 URL
                 download_result['output_path'] = convert_to_media_url(download_result['output_path'])
-                db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+                db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
                 log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
                 asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                     "type": "YOUTUBE_STATUS",
-                    "payload": {"task_id": task_id, "status": "completed", "result": download_result, "task_type": "download_only"}
+                    "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
                 }), loop)
                 return
 
-            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+            db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
             dependent_task_id = db_client.find_dependent_task(task_id)
             if not dependent_task_id:
                 raise ValueError(f"找不到依賴於下載任務 {task_id} 的 gemini_process 任務")
@@ -1146,23 +1146,20 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env
             )
 
-            if process_gemini.stderr:
-                for line in iter(process_gemini.stderr.readline, ''):
-                    line = line.strip()
-                    if not line: continue
-                    try:
-                        progress_data = json.loads(line)
-                        if progress_data.get("type") == "progress":
-                            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                                "type": "YOUTUBE_STATUS",
-                                "payload": { "task_id": dependent_task_id, "status": "processing", "message": progress_data.get("detail", "AI 分析中..."), "task_type": "gemini_process", "progress_code": progress_data.get("status") }
-                            }), loop)
-                    except json.JSONDecodeError:
-                        log.debug(f"[stderr from gemini_processor]: {line}")
+            # JULES'S FIX (2025-09-01): Refactor I/O handling to prevent deadlocks.
+            # Reading stderr line-by-line while stdout buffer might fill up is a classic deadlock scenario.
+            # The safer approach is to use communicate() to get both streams after the process finishes.
+            # This sacrifices real-time progress updates for stability and correctness, which is the right trade-off here.
+            stdout_output, stderr_output = process_gemini.communicate()
 
-            stdout_output, _ = process_gemini.communicate()
             if process_gemini.returncode != 0:
-                raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stdout_output}")
+                # Log the full stderr for debugging purposes, then raise the error with stdout,
+                # as the tool is designed to put the final error JSON in stdout.
+                log.error(f"❌ [執行緒] gemini_processor.py 執行失敗。Stderr: {stderr_output}")
+                if stdout_output:
+                    raise RuntimeError(stdout_output)
+                else:
+                    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stderr_output}")
 
             process_result = json.loads(stdout_output)
             # 問題二：將結果中的所有檔案路徑轉換為 URL
@@ -1170,12 +1167,12 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                  if key in process_result and process_result[key]:
                     process_result[key] = convert_to_media_url(process_result[key])
 
-            db_client.update_task_status(dependent_task_id, 'completed', json.dumps(process_result))
+            db_client.update_task_status(dependent_task_id, '已完成', json.dumps(process_result))
             log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                 "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "completed", "result": process_result, "task_type": "gemini_process"}
+                "payload": {"task_id": dependent_task_id, "status": "已完成", "result": process_result, "task_type": "gemini_process"}
             }), loop)
 
         except Exception as e:
@@ -1199,6 +1196,22 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
     thread = threading.Thread(target=_process_in_thread)
     thread.start()
 
+
+@app.post("/api/debug/clear_tasks", status_code=200)
+async def clear_all_tasks_endpoint():
+    """
+    [僅供測試] 清除所有任務，用於重置測試環境。
+    """
+    log.warning("⚠️ [僅供測試] 收到請求，將清除所有任務...")
+    try:
+        success = db_client.clear_all_tasks()
+        if success:
+            return {"status": "success", "message": "所有任務已成功清除。"}
+        else:
+            raise HTTPException(status_code=500, detail="在伺服器端清理任務時發生錯誤。")
+    except Exception as e:
+        log.error(f"❌ 清理任務的 API 端點發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/debug/latest_frontend_action_log")
 async def get_latest_frontend_action_log():

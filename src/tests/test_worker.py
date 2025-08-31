@@ -90,7 +90,7 @@ def test_worker_main_loop_full_workflow(
     # 我們需要檢查最後一次呼叫，因為可能會有進度更新
     final_status_call = mock_db_client.update_task_status.call_args
     assert final_status_call.args[0] == TEST_TASK_ID
-    assert final_status_call.args[1] == 'completed'
+    assert final_status_call.args[1] == '已完成'
     # 檢查結果是否包含正確的 transcript
     result_json = json.loads(final_status_call.args[2])
     assert result_json['transcript'] == "這是模擬的轉錄文字。"
@@ -112,5 +112,5 @@ def test_worker_main_loop_full_workflow(
     assert request_args[0] == "http://127.0.0.1:42649/api/internal/notify_task_update"
     sent_payload = request_kwargs['json']
     assert sent_payload['task_id'] == TEST_TASK_ID
-    assert sent_payload['status'] == 'completed'
+    assert sent_payload['status'] == '已完成'
     assert sent_payload['result']['transcript'] == "這是模擬的轉錄文字。"

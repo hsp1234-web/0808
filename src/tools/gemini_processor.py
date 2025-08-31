@@ -180,7 +180,8 @@ def upload_to_gemini(genai_module, audio_path: Path, display_filename: str):
         audio_file_resource = genai_module.upload_file(
             path=str(audio_path),
             display_name=display_filename,
-            mime_type=mime_type
+            mime_type=mime_type,
+            request_options={'timeout': 300} # JULES'S FINAL FIX: Add timeout to file upload
         )
         log.info(f"✅ Upload successful. Gemini File URI: {audio_file_resource.uri}")
         print_progress("upload_complete", "音訊上傳成功。")
@@ -199,7 +200,7 @@ def get_summary_and_transcript(genai_module, gemini_file_resource, model_api_nam
     prompt = ALL_PROMPTS['get_summary_and_transcript'].format(original_filename=original_filename, video_title=video_title)
     try:
         model = genai_module.GenerativeModel(model_api_name)
-        response = model.generate_content([prompt, gemini_file_resource], request_options={'timeout': 3600})
+        response = model.generate_content([prompt, gemini_file_resource], request_options={'timeout': 300})
         full_response_text = response.text
 
         summary_match = re.search(r"\[重點摘要開始\](.*?)\[重點摘要結束\]", full_response_text, re.DOTALL)
@@ -233,7 +234,7 @@ def generate_html_report(genai_module, summary_text: str, transcript_text: str, 
     )
     try:
         model = genai_module.GenerativeModel(model_api_name)
-        response = model.generate_content(prompt, request_options={'timeout': 1800})
+        response = model.generate_content(prompt, request_options={'timeout': 300})
         generated_html = response.text
 
         if generated_html.strip().startswith("```html"):
@@ -384,7 +385,7 @@ def process_audio_file(audio_path: Path, model: str, video_title: str, output_di
 
         final_result = {
             "type": "result",
-            "status": "completed",
+            "status": "已完成",
             "output_path": str(output_path),
             "video_title": video_title,
             "total_tokens_used": total_tokens_used,

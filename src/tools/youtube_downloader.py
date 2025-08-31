@@ -106,7 +106,7 @@ def download_media(
 
         final_result = {
             "type": "result",
-            "status": "completed",
+            "status": "已完成",
             "output_path": str(final_path),
             "video_title": video_info.get("title", "Unknown Title"),
             "duration_seconds": video_info.get("duration", 0)

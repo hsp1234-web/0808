@@ -95,7 +95,7 @@ def main():
         # JULES'S FIX: Add the video_title and other missing fields to the final JSON output
         result = {
             "type": "result",
-            "status": "completed",
+            "status": "已完成",
             "output_path": str(output_path),
             "video_title": process_args.video_title,
             "total_tokens_used": 1234,  # Mock value

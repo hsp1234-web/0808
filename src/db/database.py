@@ -43,7 +43,7 @@ def initialize_database():
                 CREATE TABLE IF NOT EXISTS tasks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL UNIQUE,
-                    status TEXT NOT NULL DEFAULT 'pending',
+                    status TEXT NOT NULL DEFAULT '處理中',
                     progress INTEGER DEFAULT 0,
                     payload TEXT,
                     result TEXT,
@@ -172,7 +172,7 @@ def add_task(task_id: str, payload: str, task_type: str = 'transcribe', depends_
     :param depends_on: 此任務所依賴的另一個任務的 task_id。
     :return: 如果成功新增則回傳 True，否則回傳 False。
     """
-    sql = "INSERT INTO tasks (task_id, payload, status, type, depends_on) VALUES (?, ?, 'pending', ?, ?)"
+    sql = "INSERT INTO tasks (task_id, payload, status, type, depends_on) VALUES (?, ?, '處理中', ?, ?)"
     conn = get_db_connection()
     if not conn: return False
     log.info(f"DB:{DB_FILE} 準備新增 '{task_type}' 任務: {task_id} (依賴: {depends_on or '無'})")
@@ -212,9 +212,9 @@ def fetch_and_lock_task() -> dict | None:
             sql = """
                 SELECT id, task_id, payload, type
                 FROM tasks
-                WHERE status = 'pending' AND (
+                WHERE status = '處理中' AND (
                     depends_on IS NULL OR
-                    depends_on IN (SELECT task_id FROM tasks WHERE status = 'completed')
+                    depends_on IN (SELECT task_id FROM tasks WHERE status = '已完成')
                 )
                 ORDER BY depends_on NULLS FIRST, created_at
                 LIMIT 1
@@ -267,7 +267,7 @@ def update_task_status(task_id: str, status: str, result: str = None):
     更新一個任務的狀態和結果。
 
     :param task_id: 要更新的任務 ID。
-    :param status: 新的狀態 ('completed', 'failed')。
+    :param status: 新的狀態 ('已完成', 'failed')。
     :param result: 任務的結果或錯誤訊息。
     """
     sql = "UPDATE tasks SET status = ?, result = ? WHERE task_id = ?"
@@ -330,12 +330,12 @@ def find_dependent_task(parent_task_id: str) -> str | None:
 
 def are_tasks_active() -> bool:
     """
-    檢查是否有任何正在處理中 (processing) 或待處理 (pending) 的任務。
+    檢查是否有任何正在處理中 (processing) 或待處理 (處理中) 的任務。
     這對於協調器的 IDLE 狀態檢測至關重要。
 
     :return: 如果有活動中任務則回傳 True，否則回傳 False。
     """
-    sql = "SELECT 1 FROM tasks WHERE status IN ('pending', 'processing') LIMIT 1"
+    sql = "SELECT 1 FROM tasks WHERE status IN ('處理中', 'processing') LIMIT 1"
     conn = get_db_connection()
     if not conn: return False # 如果無法連線，假設沒有活動任務以避免死鎖
 
@@ -434,6 +434,27 @@ def get_system_logs_by_filter(levels: list[str] = None, sources: list[str] = Non
         if conn:
             conn.close()
 
+
+def clear_all_tasks():
+    """
+    [僅供測試] 清空 `tasks` 資料表中的所有紀錄。
+    """
+    sql = "DELETE FROM tasks"
+    conn = get_db_connection()
+    if not conn:
+        log.error("無法建立資料庫連線，清理任務失敗。")
+        return False
+    try:
+        with conn:
+            conn.execute(sql)
+        log.info("✅ 已成功清空所有任務。")
+        return True
+    except sqlite3.Error as e:
+        log.error(f"❌ 清理任務時發生錯誤: {e}", exc_info=True)
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     # 直接執行此檔案時，會進行初始化
