@@ -19,11 +19,11 @@ def main():
 
     try:
         # 模擬下載進度 (JULES'S FIX: Print all to stdout)
-        print(json.dumps({"type": "progress", "percent": 10, "description": "正在連接模擬伺服器..."}), flush=True)
+        print(json.dumps({"type": "progress", "percent": 10, "description": "正在連接模擬伺服器..."}), flush=True, file=sys.stderr)
         time.sleep(0.3)
-        print(json.dumps({"type": "progress", "percent": 50, "description": "正在下載模擬音訊流..."}), flush=True)
+        print(json.dumps({"type": "progress", "percent": 50, "description": "正在下載模擬音訊流..."}), flush=True, file=sys.stderr)
         time.sleep(0.5)
-        print(json.dumps({"type": "progress", "percent": 100, "description": "正在完成模擬音訊檔案..."}), flush=True)
+        print(json.dumps({"type": "progress", "percent": 100, "description": "正在完成模擬音訊檔案..."}), flush=True, file=sys.stderr)
         time.sleep(0.3)
 
         # 建立一個假的輸出檔案，透過複製測試治具 (fixture)
