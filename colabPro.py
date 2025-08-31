@@ -21,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "866" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "902" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -45,7 +45,7 @@ ENABLE_CLOUDFLARE = True #@param {type:"boolean"}
 #@markdown **儀表板更新頻率 (秒) (UI_REFRESH_SECONDS)**
 UI_REFRESH_SECONDS = 0.5 #@param {type:"number"}
 #@markdown **日誌顯示行數 (LOG_DISPLAY_LINES)**
-LOG_DISPLAY_LINES = 30 #@param {type:"integer"}
+LOG_DISPLAY_LINES = 10 #@param {type:"integer"}
 #@markdown **時區設定 (TIMEZONE)**
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
 
@@ -242,27 +242,49 @@ class ServerManager:
             # --- JULES: 重構為兩階段依賴安裝 ---
 
             def install_requirements(req_files, log_prefix=""):
-                """幫助函式：合併並安裝指定的 requirements 檔案列表。"""
-                # 為每次安裝建立唯一的合併檔案，避免衝突
-                merged_path = project_path / f"requirements_merged_{log_prefix.lower().replace(' ', '_')}.txt"
-                with open(merged_path, "w", encoding="utf-8") as outfile:
-                    for req_path in req_files:
-                        if req_path.is_file():
-                            outfile.write(req_path.read_text(encoding="utf-8").strip() + "\n")
-                        else:
-                            self._log_manager.log("WARN", f"[{log_prefix}] 找不到依賴檔案: {req_path}")
+                """幫助函式：智慧地檢查並只安裝缺失的依賴。"""
+                self._log_manager.log("INFO", f"[{log_prefix}] 開始檢查依賴...")
 
-                if not merged_path.read_text().strip():
-                    self._log_manager.log("INFO", f"[{log_prefix}] 沒有需要安裝的依賴。")
-                    if merged_path.exists(): merged_path.unlink()
+                checker_script = project_path / "scripts" / "check_deps.py"
+                if not checker_script.is_file():
+                    self._log_manager.log("CRITICAL", f"[{log_prefix}] 依賴檢查腳本 'check_deps.py' 不存在！")
+                    raise FileNotFoundError("Dependency checker script not found.")
+
+                # 將檔案路徑轉換為字串列表以供 subprocess 使用
+                req_file_paths = [str(p.resolve()) for p in req_files if p.is_file()]
+
+                if not req_file_paths:
+                    self._log_manager.log("INFO", f"[{log_prefix}] 找不到任何有效的依賴檔案。")
                     return
 
+                # 執行依賴檢查腳本
+                check_command = [sys.executable, str(checker_script.resolve())] + req_file_paths
+                result = subprocess.run(check_command, capture_output=True, text=True, encoding='utf-8')
+
+                if result.returncode != 0:
+                    self._log_manager.log("ERROR", f"[{log_prefix}] 依賴檢查腳本執行失敗: {result.stderr}")
+                    # 作為備用方案，直接安裝所有套件
+                    missing_packages = [p.read_text(encoding='utf-8') for p in req_files]
+                else:
+                    missing_packages = result.stdout.strip().splitlines()
+
+                if not missing_packages:
+                    self._log_manager.log("SUCCESS", f"✅ [{log_prefix}] 所有依賴均已滿足，無需安裝。")
+                    return
+
+                self._log_manager.log("INFO", f"[{log_prefix}] 偵測到 {len(missing_packages)} 個缺失的套件，開始安裝...")
+
+                # 將缺失的套件寫入臨時檔案
+                temp_req_path = project_path / f"requirements_missing_{log_prefix.lower().replace(' ', '_')}.txt"
+                with open(temp_req_path, "w", encoding="utf-8") as f:
+                    for pkg in missing_packages:
+                        f.write(pkg + "\n")
+
                 try:
-                    pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_path)]
+                    pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(temp_req_path)]
                     try:
-                        # 嘗試使用 uv 以加速
                         subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(merged_path)]
+                        pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(temp_req_path)]
                         self._log_manager.log("INFO", f"[{log_prefix}] 使用 'uv' 進行快速安裝...")
                     except (subprocess.CalledProcessError, FileNotFoundError):
                         self._log_manager.log("INFO", f"[{log_prefix}] 未找到 'uv'，退回使用 'pip'。")
@@ -272,10 +294,10 @@ class ServerManager:
                 except subprocess.CalledProcessError as e:
                     error_message = f"[{log_prefix}] 依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
                     self._log_manager.log("CRITICAL", error_message)
-                    raise  # 拋出例外以停止主執行緒
+                    raise
                 finally:
-                    if merged_path.exists():
-                        merged_path.unlink()
+                    if temp_req_path.exists():
+                        temp_req_path.unlink()
 
             # --- 階段 1: 同步安裝核心依賴 ---
             self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
