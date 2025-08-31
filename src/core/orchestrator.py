@@ -99,7 +99,7 @@ def main():
     parser = argparse.ArgumentParser(description="系統協調器。")
     parser.add_argument("--mock", action="store_true", help="如果設置，則 worker 將以模擬模式運行。")
     parser.add_argument("--port", type=int, default=None, help="指定 API 伺服器運行的固定埠號。")
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     mode_string = "模擬 (Mock)" if args.mock else "真實 (Real)"
     log.info(f"🚀 協調器啟動。模式: {mode_string}")
