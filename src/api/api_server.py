@@ -674,9 +674,17 @@ async def validate_api_key(request: Request):
         raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
 
 
-@app.get("/api/youtube/models")
-async def get_youtube_models():
-    """獲取可用的 Gemini 模型列表。"""
+from pydantic import BaseModel
+
+class ApiKeyPayload(BaseModel):
+    api_key: str
+
+@app.post("/api/youtube/models")
+async def get_youtube_models(payload: ApiKeyPayload):
+    """
+    獲取可用的 Gemini 模型列表。
+    現在接收一個包含 API 金鑰的 POST 請求。
+    """
     # 在模擬模式下，回傳一個固定的假列表
     if IS_MOCK_MODE:
         return {
@@ -687,14 +695,18 @@ async def get_youtube_models():
         }
 
     # 真實模式下，從 gemini_processor.py 獲取
-    # 注意：此端點現在依賴於一個有效的 GOOGLE_API_KEY 環境變數
     try:
-        if not os.environ.get("GOOGLE_API_KEY"):
-             raise HTTPException(status_code=401, detail="後端尚未設定有效的 Google API 金鑰。")
+        if not payload.api_key:
+            raise HTTPException(status_code=400, detail="請求中未提供 API 金鑰。")
 
         tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
         cmd = [sys.executable, str(tool_script_path), "--command=list_models"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+
+        # 將接收到的金鑰設定為子程序的環境變數
+        env = os.environ.copy()
+        env["GOOGLE_API_KEY"] = payload.api_key
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', env=env)
         models = json.loads(result.stdout)
         return {"models": models}
     except subprocess.CalledProcessError as e:
