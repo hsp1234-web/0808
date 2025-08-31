@@ -155,6 +155,12 @@ class DBClient:
         """
         return self._send_request("set_app_state", {"key": key, "value": value})
 
+    def get_all_app_states(self) -> dict[str, str]:
+        """
+        從資料庫獲取所有應用程式狀態值。
+        """
+        return self._send_request("get_all_app_states")
+
     def clear_all_tasks(self) -> bool:
         """
         [僅供測試] 清空資料庫中的所有任務。

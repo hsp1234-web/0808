@@ -1283,6 +1283,40 @@ async def health_check():
     return {"status": "ok", "message": "API Server is running."}
 
 
+class AppStatePayload(BaseModel):
+    key: str
+    value: str
+
+@app.post("/api/app_state", status_code=200)
+async def set_app_state_endpoint(payload: AppStatePayload):
+    """
+    設定一個應用程式狀態值。
+    """
+    try:
+        success = db_client.set_app_state(payload.key, payload.value)
+        if success:
+            # 廣播狀態變更
+            await manager.broadcast_json({"type": "APP_STATE_UPDATE", "payload": {payload.key: payload.value}})
+            return {"status": "success", "key": payload.key, "value": payload.value}
+        else:
+            raise HTTPException(status_code=500, detail="無法在資料庫中設定應用程式狀態。")
+    except Exception as e:
+        log.error(f"❌ 設定應用程式狀態時 API 出錯: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="設定應用程式狀態時發生內部錯誤。")
+
+@app.get("/api/app_state", response_class=JSONResponse)
+async def get_all_app_states_endpoint():
+    """
+    獲取所有應用程式狀態值。
+    """
+    try:
+        states = db_client.get_all_app_states()
+        return JSONResponse(content=states)
+    except Exception as e:
+        log.error(f"❌ 獲取所有應用程式狀態時 API 出錯: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取所有應用程式狀態時發生內部錯誤。")
+
+
 @app.post("/api/internal/notify_task_update", status_code=200)
 async def notify_task_update(payload: Dict):
     """

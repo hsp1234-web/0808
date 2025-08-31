@@ -61,6 +61,7 @@ ACTION_MAP = {
     # JULES'S NEW FEATURE: Add app state actions
     "get_app_state": database.get_app_state,
     "set_app_state": database.set_app_state,
+    "get_all_app_states": database.get_all_app_states,
     # For testing:
     "clear_all_tasks": database.clear_all_tasks,
 }

@@ -16,6 +16,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "cross-env": "^10.0.0",
     "wav": "^1.0.2"
   }
 }

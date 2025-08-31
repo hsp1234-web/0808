@@ -2,12 +2,13 @@ const { test, expect } = require('@playwright/test');
 const { spawn } = require('child_process');
 const path = require('path');
 
-// TEMPORARY: Hardcoding the key to get around environment variable issues.
-// This will be reverted immediately after the test run.
-const GOOGLE_API_KEY = "AIzaSyCR4gdpWDk9evli0iULcfkiOinL_vKdFnU";
+// 從環境變數讀取 API 金鑰，確保安全性。
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
 if (!GOOGLE_API_KEY) {
-  throw new Error("測試執行失敗：API 金鑰未設定。");
+  // 為了讓本地測試與 CI/CD 環境都能順利執行，如果找不到環境變數，
+  // 我們給予一個明確的提示，而不是讓測試因未定義的變數而神秘失敗。
+  throw new Error("測試執行失敗：環境變數 'GOOGLE_API_KEY' 未被設定。請在執行測試時提供此變數。");
 }
 
 const YOUTUBE_URL = "https://youtube.com/shorts/mG5z-pfhIiA?si=rIHZPsD_VpbgGeFt";

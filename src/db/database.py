@@ -456,6 +456,45 @@ def clear_all_tasks():
         if conn:
             conn.close()
 
+def get_all_app_states() -> dict[str, str]:
+    """
+    從 app_state 表中獲取所有的鍵值對。
+    """
+    sql = "SELECT key, value FROM app_state"
+    conn = get_db_connection()
+    if not conn: return {}
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {row['key']: row['value'] for row in rows}
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取所有 app_state 時發生錯誤: {e}", exc_info=True)
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_app_states() -> dict[str, str]:
+    """
+    從 app_state 表中獲取所有的鍵值對。
+    """
+    sql = "SELECT key, value FROM app_state"
+    conn = get_db_connection()
+    if not conn: return {}
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {row['key']: row['value'] for row in rows}
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取所有 app_state 時發生錯誤: {e}", exc_info=True)
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     # 直接執行此檔案時，會進行初始化
     initialize_database()
