@@ -239,52 +239,76 @@ class ServerManager:
             initialize_database()
             add_system_log("colab_setup", "INFO", "Git repository cloned successfully.")
 
-            # --- 統一依賴安裝 ---
-            self._log_manager.log("INFO", "步驟 1/2: 正在統一安裝所有後端依賴...")
-            requirements_to_install = [
-                project_path / "requirements" / "server.txt",
-                project_path / "requirements" / "transcriber.txt",
-                project_path / "requirements" / "youtube.txt" # 修正：加入 youtube 依賴
-            ]
-            merged_reqs_path = project_path / "requirements_merged_colab.txt"
-            with open(merged_reqs_path, "w", encoding="utf-8") as outfile:
-                for req_path in requirements_to_install:
-                    if req_path.is_file():
-                        outfile.write(req_path.read_text(encoding="utf-8"))
-                        outfile.write("\n")
-                    else:
-                        self._log_manager.log("WARN", f"找不到依賴檔案，已跳過: {req_path}")
+            # --- JULES: 重構為兩階段依賴安裝 ---
 
-            try:
-                # 優先使用 uv 以加速安裝
-                pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_reqs_path)]
+            def install_requirements(req_files, log_prefix=""):
+                """幫助函式：合併並安裝指定的 requirements 檔案列表。"""
+                # 為每次安裝建立唯一的合併檔案，避免衝突
+                merged_path = project_path / f"requirements_merged_{log_prefix.lower().replace(' ', '_')}.txt"
+                with open(merged_path, "w", encoding="utf-8") as outfile:
+                    for req_path in req_files:
+                        if req_path.is_file():
+                            outfile.write(req_path.read_text(encoding="utf-8").strip() + "\n")
+                        else:
+                            self._log_manager.log("WARN", f"[{log_prefix}] 找不到依賴檔案: {req_path}")
+
+                if not merged_path.read_text().strip():
+                    self._log_manager.log("INFO", f"[{log_prefix}] 沒有需要安裝的依賴。")
+                    if merged_path.exists(): merged_path.unlink()
+                    return
+
                 try:
-                    subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    self._log_manager.log("INFO", "偵測到 'uv'，將使用它进行快速安裝。")
-                    # 在 Colab 環境中，我們需要確保套件被安裝到系統的 site-packages 中，
-                    # 以便由 sys.executable 啟動的子程序能夠找到它們。
-                    pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(merged_reqs_path)]
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    self._log_manager.log("INFO", "未找到 'uv'，將退回使用 'pip'。")
+                    pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_path)]
+                    try:
+                        # 嘗試使用 uv 以加速
+                        subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(merged_path)]
+                        self._log_manager.log("INFO", f"[{log_prefix}] 使用 'uv' 進行快速安裝...")
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        self._log_manager.log("INFO", f"[{log_prefix}] 未找到 'uv'，退回使用 'pip'。")
 
-                subprocess.check_call(pip_command)
-                self._log_manager.log("SUCCESS", "✅ 所有後端依賴安裝完成。")
-            except subprocess.CalledProcessError as e:
-                error_message = f"依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
-                self._log_manager.log("CRITICAL", error_message)
-                raise
-            finally:
-                if merged_reqs_path.exists():
-                    merged_reqs_path.unlink()
+                    subprocess.check_call(pip_command)
+                    self._log_manager.log("SUCCESS", f"✅ {log_prefix} 依賴安裝完成。")
+                except subprocess.CalledProcessError as e:
+                    error_message = f"[{log_prefix}] 依賴安裝失敗！返回碼: {e.returncode}\n--- STDOUT ---\n{e.stdout}\n--- STDERR ---\n{e.stderr}"
+                    self._log_manager.log("CRITICAL", error_message)
+                    raise  # 拋出例外以停止主執行緒
+                finally:
+                    if merged_path.exists():
+                        merged_path.unlink()
 
+            # --- 階段 1: 同步安裝核心依賴 ---
+            self._log_manager.log("INFO", "步驟 1/3: 正在快速安裝核心伺服器依賴...")
+            core_requirements = [
+                project_path / "requirements" / "server.txt",
+                project_path / "requirements" / "youtube.txt"
+            ]
+            install_requirements(core_requirements, "核心依賴")
 
-            self._log_manager.log("INFO", "步驟 2/2: 正在啟動後端服務...")
+            # --- 階段 2: 啟動後端服務 (這會立即發生，以便使用者盡快取得 URL) ---
+            self._log_manager.log("INFO", "步驟 2/3: 正在啟動後端服務...")
             launch_command = [sys.executable, "src/core/orchestrator.py"]
             process_env = os.environ.copy()
             src_path_str = str((project_path / "src").resolve())
             process_env['PYTHONPATH'] = f"{src_path_str}{os.pathsep}{process_env.get('PYTHONPATH', '')}".strip(os.pathsep)
 
             self.server_process = subprocess.Popen(launch_command, cwd=str(project_path), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid, env=process_env)
+
+            # --- 階段 3: 在背景安裝大型依賴 ---
+            def background_install():
+                self._log_manager.log("INFO", "步驟 3/3: [背景] 開始安裝大型任務依賴...")
+                large_requirements = [
+                    project_path / "requirements" / "transcriber.txt",
+                    project_path / "requirements" / "gemini.txt"
+                ]
+                try:
+                    install_requirements(large_requirements, "背景大型任務")
+                    self._log_manager.log("SUCCESS", "[背景] ✅ 所有大型任務依賴均已成功安裝！")
+                except Exception as e:
+                    self._log_manager.log("CRITICAL", f"[背景] 大型依賴安裝失敗: {e}")
+
+            bg_install_thread = threading.Thread(target=background_install, daemon=True)
+            bg_install_thread.start()
 
             port_pattern = re.compile(r"PROXY_URL: http://127.0.0.1:(\d+)")
             uvicorn_ready_pattern = re.compile(r"Uvicorn running on")
