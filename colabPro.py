@@ -260,8 +260,10 @@ class ServerManager:
                 pip_command = [sys.executable, "-m", "pip", "install", "-q", "--progress-bar", "off", "-r", str(merged_reqs_path)]
                 try:
                     subprocess.check_call([sys.executable, "-m", "uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    self._log_manager.log("INFO", "偵測到 'uv'，將使用它進行快速安裝。")
-                    pip_command = [sys.executable, "-m", "uv", "pip", "install", "-q", "-r", str(merged_reqs_path)]
+                    self._log_manager.log("INFO", "偵測到 'uv'，將使用它进行快速安裝。")
+                    # 在 Colab 環境中，我們需要確保套件被安裝到系統的 site-packages 中，
+                    # 以便由 sys.executable 啟動的子程序能夠找到它們。
+                    pip_command = [sys.executable, "-m", "uv", "pip", "install", "--system", "-q", "-r", str(merged_reqs_path)]
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     self._log_manager.log("INFO", "未找到 'uv'，將退回使用 'pip'。")
 

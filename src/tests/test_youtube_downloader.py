@@ -65,8 +65,10 @@ class TestYoutubeDownloader:
             )
 
         # 斷言 subprocess.run 被正確呼叫
+        # 根據 youtube_downloader.py 的變更，更新預期的指令
+        # 現在它應該透過 python -m yt_dlp 來執行
         expected_cmd = [
-            "yt-dlp", "--print-json",
+            sys.executable, "-m", "yt_dlp", "--print-json",
             "-f", "bestaudio", "-x", "--audio-format", "mp3",
             "-o", f"{TEST_OUTPUT_DIR / TEST_FILENAME}.%(ext)s",
             TEST_URL
@@ -98,7 +100,7 @@ class TestYoutubeDownloader:
         )
 
         expected_cmd = [
-            "yt-dlp", "--print-json",
+            sys.executable, "-m", "yt_dlp", "--print-json",
             "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4",
             "-o", f"{TEST_OUTPUT_DIR / TEST_FILENAME}.%(ext)s",
             TEST_URL
