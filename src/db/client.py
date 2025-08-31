@@ -3,6 +3,7 @@ import socket
 import json
 import logging
 import time
+import os
 from pathlib import Path
 
 # --- 日誌設定 ---
@@ -22,13 +23,12 @@ class DBClient:
 
     def _get_server_port(self) -> int:
         """
-        返回資料庫管理者伺服器的硬編碼埠號。
-        這個改動是為了消除因讀取 .port 檔案而引起的競爭條件。
+        從環境變數或預設值獲取資料庫管理者伺服器的埠號。
         """
-        # JULES' FIX: 根據 YouTube.md 中的發現，直接使用硬編碼的埠號
-        hardcoded_port = 49999
-        log.info(f"使用硬編碼的 DB Manager 埠號: {hardcoded_port}")
-        return hardcoded_port
+        # JULES'S FIX (2025-08-31): 從環境變數讀取埠號，以支援動態埠號
+        port = int(os.getenv('DB_MANAGER_PORT', 49999))
+        log.info(f"使用 DB Manager 埠號: {port} ({'來自環境變數' if 'DB_MANAGER_PORT' in os.environ else '預設值'})")
+        return port
 
     def _send_request(self, action: str, params: dict = None) -> dict:
         """

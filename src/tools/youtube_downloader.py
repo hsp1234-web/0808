@@ -36,7 +36,9 @@ def download_media(
     output_template = f"{str(output_dir / custom_filename)}.%(ext)s" if custom_filename else f"{str(output_dir / '%(title)s')}.%(ext)s"
     final_suffix = ".mp3" if download_type == "audio" else ".mp4"
 
-    command = ["yt-dlp", "--print-json"]
+    # JULES: 使用 yt-dlp 的絕對路徑來避免 PATH 環境變數問題
+    YT_DLP_PATH = "/home/jules/.pyenv/shims/yt-dlp"
+    command = [YT_DLP_PATH, "--print-json"]
 
     if download_type == "audio":
         command.extend([

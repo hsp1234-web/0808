@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 import socket
 import os
+import re
 
 os.environ['TZ'] = 'Asia/Taipei'
 if sys.platform != 'win32':
@@ -60,13 +61,26 @@ def stop_database_logging():
         log_listener.stop()
         log_listener = None
 
-def stream_reader(stream, prefix, ready_event=None, ready_signal=None):
+def stream_reader(stream, prefix, ready_event=None, ready_signal=None, port_list=None, port_regex=None):
+    """
+    讀取子程序的輸出流，記錄日誌，並可選地設置就緒事件和提取埠號。
+    """
+    port_pattern = re.compile(port_regex) if port_regex else None
     for line in iter(stream.readline, ''):
         stripped_line = line.strip()
         log.info(f"[{prefix}] {stripped_line}")
+
         if ready_event and not ready_event.is_set() and ready_signal and ready_signal in stripped_line:
             ready_event.set()
             log.info(f"✅ 偵測到來自 '{prefix}' 的就緒信號 '{ready_signal}'！")
+
+        if port_list is not None and port_pattern:
+            match = port_pattern.search(stripped_line)
+            if match:
+                port = int(match.group(1))
+                port_list[0] = port
+                log.info(f"✅ 從 '{prefix}' 的輸出中成功提取到埠號: {port}")
+
     stream.close()
 
 def find_free_port() -> int:
@@ -96,7 +110,12 @@ def main():
         log.info(f"✅ 資料庫管理者子程序已建立，PID: {db_manager_proc.pid}")
 
         db_ready_event = threading.Event()
-        db_stdout_thread = threading.Thread(target=stream_reader, args=(db_manager_proc.stdout, 'db_manager', db_ready_event, "DB_MANAGER_READY"))
+        db_manager_port_list = [None]
+        db_stdout_thread = threading.Thread(
+            target=stream_reader,
+            args=(db_manager_proc.stdout, 'db_manager', db_ready_event, "DB_MANAGER_READY"),
+            kwargs={'port_list': db_manager_port_list, 'port_regex': r"DB_MANAGER_PORT: (\d+)"}
+        )
         db_stdout_thread.daemon = True
         db_stdout_thread.start()
         threads.append(db_stdout_thread)
@@ -104,14 +123,15 @@ def main():
         log.info(f"正在等待資料庫管理者就緒 (超時: 30秒)...")
         if not db_ready_event.wait(timeout=30):
             raise RuntimeError("資料庫管理者服務啟動超時。")
-        log.info("✅ 資料庫管理者服務已完全就緒。")
 
-        # JULES'S FIX (2025-08-30): 加入一個微小的延遲，以解決競爭條件。
-        # 即使 db_manager 已發出就緒信號，作業系統可能仍需極短時間來完全開啟監聽埠。
-        # 沒有這個延遲，api_server 在啟動時的日誌系統可能會因為無法立即連線到 db_manager 而掛起。
-        time.sleep(1)
+        db_manager_port = db_manager_port_list[0]
+        if db_manager_port is None:
+            raise RuntimeError("無法從資料庫管理者獲取埠號。")
+        log.info(f"✅ 資料庫管理者服務已就緒，監聽埠號為: {db_manager_port}")
 
         # 2. 資料庫就緒後，建立客戶端並設定日誌系統
+        # JULES: 為了確保客戶端能使用正確的埠號，我們在此處設定環境變數
+        os.environ['DB_MANAGER_PORT'] = str(db_manager_port)
         db_client = get_client()
         setup_database_logging()
 
@@ -122,7 +142,11 @@ def main():
         if args.mock:
             api_server_cmd.append("--mock")
 
-        api_proc = subprocess.Popen(api_server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+        # 將 DB 管理者的埠號傳遞給 API 伺服器
+        api_env = os.environ.copy()
+        api_env['DB_MANAGER_PORT'] = str(db_manager_port)
+
+        api_proc = subprocess.Popen(api_server_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=api_env)
         processes.append(api_proc)
         log.info(f"✅ API 伺服器已啟動，PID: {api_proc.pid}，埠號: {api_port}")
 

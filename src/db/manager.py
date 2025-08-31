@@ -41,7 +41,8 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 log = logging.getLogger('DBManagerServer')
 
 # --- 伺服器設定 ---
-HOST, PORT = "127.0.0.1", 49999 # JULES: Hardcoded port to fix race condition
+# JULES: 將 PORT 設為 0，讓作業系統動態選擇可用埠號
+HOST, PORT = "127.0.0.1", 0
 
 # --- 指令分派 ---
 # 建立一個函式名稱與指令 action 的對應字典
@@ -159,6 +160,9 @@ def run_server():
         # 獲取實際綁定的埠號
         actual_port = server.server_address[1]
         log.info(f"🚀 資料庫管理者伺服器已在 {HOST}:{actual_port} 上啟動...")
+
+        # JULES'S FIX (2025-08-31): 將選擇的埠號輸出，以便協調器可以讀取
+        print(f"DB_MANAGER_PORT: {actual_port}", flush=True)
 
         try:
             # 啟動伺服器，它將一直運行直到被中斷 (例如 Ctrl+C)

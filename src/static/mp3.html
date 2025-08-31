@@ -2003,10 +2003,14 @@
                     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                     button.classList.add('active');
 
-                    // Handle active content
+                    // Handle active content by only managing the 'active' class
                     document.querySelectorAll('.tab-content').forEach(content => {
-                        content.style.display = (content.id === tabId) ? 'block' : 'none';
+                        content.classList.remove('active');
                     });
+                    const activeContent = document.getElementById(tabId);
+                    if (activeContent) {
+                        activeContent.classList.add('active');
+                    }
 
                     // JULES'S FIX: Hide transcript output on YouTube tab as per user request
                     if (transcriptContainer) {
