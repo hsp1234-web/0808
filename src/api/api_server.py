@@ -678,9 +678,8 @@ async def validate_api_key(request: Request):
 
         if result.returncode == 0:
             log.info(f"API 金鑰驗證成功。")
-            # JULES DEBUG (2025-08-31): 實現無狀態金鑰處理的最後一步。
-            # 根據使用者的要求，移除在伺服器端環境變數中儲存金鑰的狀態化行為。
-            # 現在所有需要金鑰的操作都必須由前端在每次請求中提供。
+            # JULES (2025-08-31): 移除狀態儲存。
+            # os.environ["GOOGLE_API_KEY"] = api_key
             return {"valid": True}
         else:
             log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
@@ -769,20 +768,20 @@ async def process_youtube_urls(request: Request):
 
     # 新的彈性參數
     model = payload.get("model")
-    # JULES DEBUG (2025-08-31): 實現無狀態金鑰處理的第一步。
-    # 從請求負載中直接獲取 API 金鑰。
-    api_key = payload.get("api_key")
     tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
     output_format = payload.get("output_format", "html") # "html" or "txt"
     download_only = payload.get("download_only", False)
     download_type = payload.get("download_type", "audio") # JULES'S NEW FEATURE
+    api_key = payload.get("api_key") # 實現無狀態，從請求中直接獲取金鑰
 
     if not requests_list:
         # 在加入相容性邏輯後，更新錯誤訊息
         raise HTTPException(status_code=400, detail="請求中必須包含 'requests' 或 'urls'。")
-    # JULES DEBUG (2025-08-31): 現在 AI 分析也需要檢查 api_key 是否存在。
-    if not download_only and (not model or not api_key):
-        raise HTTPException(status_code=400, detail="執行 AI 分析時必須提供 'model' 和 'api_key'。")
+    if not download_only and not model:
+        raise HTTPException(status_code=400, detail="執行 AI 分析時必須提供 'model'。")
+    if not download_only and not api_key:
+        raise HTTPException(status_code=401, detail="執行 AI 分析時必須提供 'api_key'。")
+
 
     tasks = []
     for req_item in requests_list:
@@ -806,13 +805,12 @@ async def process_youtube_urls(request: Request):
             # JULES'S NEW FEATURE: Pass download_type to download payload
             download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
             # 將所有新參數存入 process 任務的 payload
-            # JULES DEBUG (2025-08-31): 將 api_key 存入任務負載，以便 worker 執行緒可以取用。
             process_payload = {
                 "model": model,
-                "api_key": api_key,
                 "output_dir": "transcripts",
                 "tasks": tasks_to_run,
-                "output_format": output_format
+                "output_format": output_format,
+                "api_key": api_key # 將金鑰存入任務酬載
             }
 
             db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
@@ -1101,11 +1099,9 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             process_task_info = db_client.get_task_status(dependent_task_id)
             process_payload = json.loads(process_task_info['payload'])
             model = process_payload['model']
-            # JULES DEBUG (2025-08-31): 實現無狀態金鑰處理的第三步。
-            # 從資料庫中儲存的任務負載裡讀取 API 金鑰。
-            api_key = process_payload.get('api_key')
             tasks_to_run = process_payload.get('tasks', 'summary,transcript')
             output_format = process_payload.get('output_format', 'html')
+            api_key = process_payload.get('api_key') # 從任務酬載中讀取金鑰
 
             log.info(f"執行 Gemini 分析，任務: '{tasks_to_run}', 格式: '{output_format}'")
             asyncio.run_coroutine_threadsafe(manager.broadcast_json({
@@ -1130,10 +1126,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             ]
 
             proc_env = os.environ.copy()
-            # JULES DEBUG (2025-08-31): 實現無狀態金鑰處理的第四步。
-            # 為子程序明確設定 GOOGLE_API_KEY 環境變數。
             if api_key:
-                proc_env["GOOGLE_API_KEY"] = api_key
+                proc_env["GOOGLE_API_KEY"] = api_key # 將金鑰設定到子程序的環境變數中
 
             process_gemini = subprocess.Popen(
                 cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env

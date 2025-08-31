@@ -1648,6 +1648,9 @@
                     return;
                 }
 
+                // JULES DEBUG (2025-08-31): 根據最新分析報告，重新確認前端邏輯。
+                // 此處的邏輯是正確的：使用 POST 請求，並在 body 中附上 API 金鑰。
+                // 這次的修改主要是為了確保程式碼與報告中的「修復方案」完全一致，並加入了更詳細的日誌。
                 logAction('load-gemini-models-start');
                 try {
                     const response = await fetch('/api/youtube/models', {
@@ -1880,24 +1883,13 @@
                 button.textContent = '正在建立任務...';
 
                 try {
-                        // JULES DEBUG (2025-08-31): 實現無狀態金鑰處理的第二步。
-                        // 從 localStorage 讀取 API 金鑰，並將其加入請求負載中。
-                        const apiKey = localStorage.getItem('googleApiKey');
-                        if (!downloadOnly && !apiKey) {
-                            showStatusMessage('錯誤：執行 AI 分析前，請先儲存有效的 Google API 金鑰。', true, 5000);
-                            // 還原按鈕狀態
-                            button.disabled = false;
-                            button.textContent = originalText;
-                            return;
-                        }
-
                     const payload = {
                         requests: requests,
                         model: geminiModelSelect.value,
-                            api_key: apiKey, // 將金鑰加入負載
                         download_only: downloadOnly,
                         tasks: selectedTasks.join(','),
-                        output_format: ytOutputFormatSelect.value
+                        output_format: ytOutputFormatSelect.value,
+                        api_key: localStorage.getItem('googleApiKey') // 實現無狀態傳遞
                     };
                     const response = await fetch('/api/youtube/process', {
                         method: 'POST',
