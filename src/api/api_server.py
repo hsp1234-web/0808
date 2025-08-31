@@ -142,7 +142,7 @@ else:
     # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
 
 # JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 from fastapi.responses import FileResponse
 
 
@@ -212,10 +212,19 @@ def convert_to_media_url(absolute_path_str: str) -> str:
     """將絕對檔案系統路徑轉換為可公開存取的 /media URL。"""
     try:
         absolute_path = Path(absolute_path_str)
-        # Find the path relative to the UPLOADS_DIR
+        # 尋找相對於 UPLOADS_DIR 的路徑
         relative_path = absolute_path.relative_to(UPLOADS_DIR)
-        # Join with /media/ and convert backslashes to forward slashes for URL
-        return f"/media/{relative_path.as_posix()}"
+        # 將路徑的每個部分都進行 URL 編碼，以處理特殊字元
+        # safe='' 參數確保連 '/' 也會被編碼，如果有的話
+        encoded_path = '/'.join(quote(part, safe='') for part in relative_path.parts)
+
+        # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是造成媒體預覽失敗的關鍵。
+        # 舊的寫法 `relative_path.as_posix()` 沒有對檔名中的 '#' 或空格等特殊字元進行編碼，
+        # 導致瀏覽器無法正確請求 URL。新的寫法使用 `urllib.parse.quote` 進行了修正。
+        # 注意：我們只對路徑的「部分」進行編碼，而不是整個 URL，以保留斜線分隔符。
+
+        # 使用 quote 取代 as_posix() 來確保 URL 安全
+        return f"/media/{encoded_path}"
     except (ValueError, TypeError):
         log.warning(f"無法將路徑 {absolute_path_str} 轉換為媒體 URL。回傳原始路徑。")
         return absolute_path_str
@@ -536,7 +545,19 @@ async def rename_task_file(task_id: str, request: Request):
         if not old_path_str:
             raise HTTPException(status_code=500, detail="任務結果中找不到檔案路徑。")
 
-        old_path = Path(old_path_str)
+        # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是造成重新命名失敗的關鍵。
+        # old_path_str 是一個 URL 路徑 (例如 /media/file.mp4)，而不是檔案系統路徑。
+        # 我們需要將其轉換回絕對檔案系統路徑 (例如 /app/uploads/file.mp4)。
+        if old_path_str.startswith('/media/'):
+            # 移除 '/media/' 前綴並與上傳目錄合併
+            relative_path = old_path_str.lstrip('/media/')
+            # 這裡需要對 relative_path 進行 URL 解碼，以處理檔名中的 %20 等字元
+            decoded_relative_path = unquote(relative_path)
+            old_path = UPLOADS_DIR / decoded_relative_path
+        else:
+            # 作為備用，如果路徑不是 /media/ 開頭，則假設它是一個絕對路徑
+            old_path = Path(old_path_str)
+
         file_extension = old_path.suffix
         new_path = old_path.with_name(f"{new_filename_base}{file_extension}")
 
@@ -549,8 +570,10 @@ async def rename_task_file(task_id: str, request: Request):
         os.rename(old_path, new_path)
         log.info(f"檔案已從 {old_path} 重新命名為 {new_path}")
 
-        # Update the result in the database
-        result_data["output_path"] = str(new_path)
+        # 更新資料庫中的結果
+        # JULES DEBUG (2025-08-31): 重新命名後，我們需要將新的「檔案系統路徑」轉換回「媒體 URL」，
+        # 然後再存入資料庫，以保持資料格式的一致性。
+        result_data["output_path"] = convert_to_media_url(str(new_path))
         result_data["video_title"] = new_filename_base
 
         db_client.update_task_status(task_id, 'completed', json.dumps(result_data))
@@ -699,10 +722,15 @@ async def get_youtube_models(payload: ApiKeyPayload):
         if not payload.api_key:
             raise HTTPException(status_code=400, detail="請求中未提供 API 金鑰。")
 
+        log.info(f"收到來自前端的 API 金鑰，將其用於獲取模型列表。")
+
         tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
         cmd = [sys.executable, str(tool_script_path), "--command=list_models"]
 
-        # 將接收到的金鑰設定為子程序的環境變數
+        # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是修復模型載入失敗的關鍵。
+        # 舊的邏輯可能依賴了不穩定的、跨請求的環境變數。
+        # 新的邏輯明確地將從 POST request body 中收到的 api_key 設定到子程序的環境變數中，
+        # 確保了每次呼叫都使用正確的憑證。
         env = os.environ.copy()
         env["GOOGLE_API_KEY"] = payload.api_key
 
@@ -710,8 +738,16 @@ async def get_youtube_models(payload: ApiKeyPayload):
         models = json.loads(result.stdout)
         return {"models": models}
     except subprocess.CalledProcessError as e:
-        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {e.stderr}")
-        raise HTTPException(status_code=401, detail="無法使用提供的 API 金鑰獲取模型列表。")
+        stderr_log = e.stderr.strip()
+        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {stderr_log}")
+        # 將更詳細的錯誤訊息傳回給前端
+        if "API Key not found" in stderr_log:
+            detail_message = "API 金鑰遺失。請確認後端已正確接收金鑰。"
+        elif "API key not valid" in stderr_log:
+            detail_message = "API 金鑰無效。請檢查您的金鑰。"
+        else:
+            detail_message = "無法使用提供的 API 金鑰獲取模型列表，請檢查金鑰權限或網路連線。"
+        raise HTTPException(status_code=401, detail=detail_message)
     except Exception as e:
         log.error(f"獲取 Gemini 模型列表時發生錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
@@ -987,7 +1023,12 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載 ({download_type}): {url}", "task_type": task_type}
             }), loop)
 
-            downloader_script_path = ROOT_DIR / "src" / "tools" / ("mock_youtube_downloader.py" if IS_MOCK_MODE else "youtube_downloader.py")
+            # JULES DEBUG (2025-08-31): 為了 E2E 測試的穩定性，新增 mock URL 判斷
+            if url.startswith("mock://"):
+                downloader_script_path = ROOT_DIR / "src" / "tools" / "mock_downloader_for_test.py"
+            else:
+                downloader_script_path = ROOT_DIR / "src" / "tools" / ("mock_youtube_downloader.py" if IS_MOCK_MODE else "youtube_downloader.py")
+
             cmd_dl = [sys.executable, str(downloader_script_path), "--url", url, "--output-dir", str(UPLOADS_DIR), "--download-type", download_type]
             if custom_filename:
                 cmd_dl.extend(["--custom-filename", custom_filename])

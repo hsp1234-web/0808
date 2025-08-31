@@ -36,13 +36,10 @@ def download_media(
     output_template = f"{str(output_dir / custom_filename)}.%(ext)s" if custom_filename else f"{str(output_dir / '%(title)s')}.%(ext)s"
     final_suffix = ".mp3" if download_type == "audio" else ".mp4"
 
-    # JULES: 使用 yt-dlp 的絕對路徑來避免 PATH 環境變數問題 -> 已由 Gemini 助理修復
-    # YT_DLP_PATH = "/home/jules/.pyenv/shims/yt-dlp"
-    # 舊方法：直接呼叫 yt-dlp，依賴作業系統的 PATH 環境變數。
-    # command = ["yt-dlp", "--print-json"]
-    # 新方法：透過 sys.executable -m yt_dlp 執行，確保無論 PATH 如何設定，都能使用當前 Python 環境中的 yt-dlp 套件。
-    # 這種方法更具可攜性，能從根本上解決在 Colab 等環境中找不到 'yt-dlp' 執行檔的問題。
-    command = [sys.executable, "-m", "yt_dlp", "--print-json"]
+    # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是修復環境依賴問題的關鍵。
+    # 雖然 `python -m yt_dlp` 在理論上更具可攜性，但使用者的報告明確指出要直接呼叫 `yt-dlp`。
+    # 為了完全遵循修復建議，我們將呼叫方式改回直接呼叫執行檔，讓作業系統從 PATH 中尋找。
+    command = ["yt-dlp", "--print-json"]
 
     if download_type == "audio":
         command.extend([

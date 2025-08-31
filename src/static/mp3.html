@@ -1380,6 +1380,7 @@
                 downloadBtn.className = 'btn-download';
                 downloadBtn.textContent = '下載';
                 downloadBtn.download = `${title}${extension}`; // Use direct title
+                downloadBtn.dataset.taskId = taskId; // JULES DEBUG: Add for robust testing
                 downloadBtn.addEventListener('click', (e) => logAction('click-download-task', taskId));
 
                 // Preview button for Video, Audio, HTML Reports, and Text Transcripts
@@ -1388,6 +1389,7 @@
                     previewBtn.href = '#';
                     previewBtn.className = 'btn-preview';
                     previewBtn.textContent = '預覽';
+                    previewBtn.dataset.taskId = taskId; // JULES DEBUG: Add for robust testing
                     previewBtn.addEventListener('click', (e) => {
                         e.preventDefault();
                         logAction('click-preview', `${mimeType}:${taskId}`);
@@ -1646,27 +1648,39 @@
                     return;
                 }
 
+                // JULES DEBUG (2025-08-31): 根據最新分析報告，重新確認前端邏輯。
+                // 此處的邏輯是正確的：使用 POST 請求，並在 body 中附上 API 金鑰。
+                // 這次的修改主要是為了確保程式碼與報告中的「修復方案」完全一致，並加入了更詳細的日誌。
+                logAction('load-gemini-models-start');
                 try {
-                    const modelsRes = await fetch('/api/youtube/models', {
+                    const response = await fetch('/api/youtube/models', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ api_key: apiKey }),
                     });
-                    if (!modelsRes.ok) {
-                        const errorData = await modelsRes.json();
-                        throw new Error(errorData.detail || '無法載入模型列表');
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        // 從後端傳來的詳細錯誤訊息 result.detail
+                        throw new Error(result.detail || `HTTP 錯誤 ${response.status}`);
                     }
-                    const modelsData = await modelsRes.json();
-                    geminiModelSelect.innerHTML = '';
-                    modelsData.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.id;
-                        option.textContent = model.name;
-                        geminiModelSelect.appendChild(option);
-                    });
-                    logAction('load-gemini-models-success');
+
+                    geminiModelSelect.innerHTML = ''; // 清空現有選項
+                    if (result.models && result.models.length > 0) {
+                        result.models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.id;
+                            option.textContent = model.name;
+                            geminiModelSelect.appendChild(option);
+                        });
+                        logAction('load-gemini-models-success', `loaded ${result.models.length} models`);
+                    } else {
+                        geminiModelSelect.innerHTML = `<option>未找到任何可用模型</option>`;
+                        logAction('load-gemini-models-empty');
+                    }
                 } catch (error) {
                     console.error("載入 Gemini 模型時出錯:", error);
                     logAction('load-gemini-models-failed', error.message);
