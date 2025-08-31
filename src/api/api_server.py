@@ -382,6 +382,22 @@ async def get_application_status():
         "message": "等待使用者操作"
     }
 
+@app.get("/api/system/readiness")
+async def system_readiness_check():
+    """
+    檢查核心依賴（如 yt-dlp）是否已準備就緒。
+    """
+    # 使用 shutil.which 檢查 yt-dlp 是否在系統 PATH 中且可執行
+    yt_dlp_path = shutil.which("yt-dlp")
+    is_ready = yt_dlp_path is not None
+
+    if is_ready:
+        log.info(f"✅ 系統就緒檢查：成功找到 yt-dlp 於 {yt_dlp_path}")
+        return {"ready": True}
+    else:
+        log.warning("⚠️ 系統就緒檢查：找不到 yt-dlp。前端功能可能受限。")
+        return {"ready": False}
+
 @app.get("/api/system_stats")
 async def get_system_stats():
     """
@@ -660,35 +676,32 @@ async def validate_api_key(request: Request):
         if not api_key:
             raise HTTPException(status_code=400, detail="未提供 API 金鑰。")
 
-        # 在模擬模式下，只要金鑰非空就視為有效
         if IS_MOCK_MODE:
             log.info("模擬模式：將非空 API 金鑰視為有效。")
             return {"valid": True}
 
-        # 真實模式下，呼叫工具進行驗證
         tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
         cmd = [sys.executable, str(tool_script_path), "--command=validate_key"]
 
-        # 將金鑰作為環境變數傳遞給子程序，更安全
-        env = os.environ.copy()
-        env["GOOGLE_API_KEY"] = api_key
+        # JULES'S FIX V3: 建立一個最小化的乾淨環境來執行驗證。
+        # 這是為了防止 Google 的函式庫自動從沙箱環境中繼承任何「應用程式預設憑證」，
+        # 從而確保驗證過程只使用使用者提供的 API 金鑰。
+        minimal_env = {
+            "PATH": os.environ.get("PATH", ""),
+            "GOOGLE_API_KEY": api_key,
+            # 在某些系統上，特別是 Windows，需要 SYSTEMROOT。為保險起見加入。
+            "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")
+        }
 
-        # 設定 check=False，因為我們預期在金鑰無效時程序會失敗
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=env, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=minimal_env, check=False)
 
         if result.returncode == 0:
             log.info(f"API 金鑰驗證成功。")
-            # JULES (2025-08-31): 移除狀態儲存。
-            # os.environ["GOOGLE_API_KEY"] = api_key
             return {"valid": True}
         else:
             log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
-            # 嘗試從 stderr 中提取更具體的錯誤訊息
             error_message = result.stderr.strip()
-            if "API key not valid" in error_message:
-                detail = "API 金鑰無效。請檢查您的金鑰是否正確。"
-            else:
-                detail = "金鑰驗證失敗，可能是網路問題或金鑰權限不足。"
+            detail = error_message if error_message else "金鑰驗證失敗，請檢查主控台日誌以了解詳情。"
             return JSONResponse(status_code=400, content={"valid": False, "detail": detail})
 
     except Exception as e:

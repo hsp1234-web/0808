@@ -1616,59 +1616,35 @@
                 }
             };
 
-            const validateApiKey = async (apiKey) => {
-                if (!apiKey) {
-                    updateApiKeyUI('not_provided');
-                    return;
-                }
-                updateApiKeyUI('validating');
-                try {
-                    const response = await fetch('/api/youtube/validate_api_key', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ api_key: apiKey }),
-                    });
-                    const result = await response.json();
-                    if (response.ok && result.valid) {
-                        updateApiKeyUI('valid', '金鑰有效，Gemini 功能已啟用');
-                        loadGeminiModels();
-                    } else {
-                        updateApiKeyUI('invalid', result.detail || '金鑰無效或發生未知錯誤');
-                    }
-                } catch (error) {
-                    console.error('API Key validation error:', error);
-                    updateApiKeyUI('invalid', '無法連線至後端進行驗證');
-                }
-            };
-
-            const loadGeminiModels = async () => {
+            const validateAndLoadModels = async () => {
                 const apiKey = localStorage.getItem('googleApiKey');
                 if (!apiKey) {
                     geminiModelSelect.innerHTML = `<option>請先儲存有效的 API 金鑰</option>`;
+                    updateApiKeyUI('not_provided');
                     return;
                 }
 
-                // JULES DEBUG (2025-08-31): 根據最新分析報告，重新確認前端邏輯。
-                // 此處的邏輯是正確的：使用 POST 請求，並在 body 中附上 API 金鑰。
-                // 這次的修改主要是為了確保程式碼與報告中的「修復方案」完全一致，並加入了更詳細的日誌。
-                logAction('load-gemini-models-start');
+                logAction('validate-and-load-models-start');
+                updateApiKeyUI('validating', '正在驗證金鑰並載入模型...');
+
                 try {
                     const response = await fetch('/api/youtube/models', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ api_key: apiKey }),
                     });
 
                     const result = await response.json();
 
                     if (!response.ok) {
-                        // 從後端傳來的詳細錯誤訊息 result.detail
-                        throw new Error(result.detail || `HTTP 錯誤 ${response.status}`);
+                        throw new Error(result.detail || `伺服器錯誤 ${response.status}`);
                     }
 
-                    geminiModelSelect.innerHTML = ''; // 清空現有選項
+                    // 成功：更新 UI，啟用按鈕，填充模型
+                    updateApiKeyUI('valid', '金鑰有效，Gemini 功能已啟用');
+                    showStatusMessage('API 金鑰驗證成功！', false);
+
+                    geminiModelSelect.innerHTML = ''; // 清空
                     if (result.models && result.models.length > 0) {
                         result.models.forEach(model => {
                             const option = document.createElement('option');
@@ -1676,15 +1652,17 @@
                             option.textContent = model.name;
                             geminiModelSelect.appendChild(option);
                         });
-                        logAction('load-gemini-models-success', `loaded ${result.models.length} models`);
+                        logAction('validate-and-load-models-success', `loaded ${result.models.length} models`);
                     } else {
                         geminiModelSelect.innerHTML = `<option>未找到任何可用模型</option>`;
-                        logAction('load-gemini-models-empty');
+                        logAction('validate-and-load-models-empty');
                     }
                 } catch (error) {
-                    console.error("載入 Gemini 模型時出錯:", error);
-                    logAction('load-gemini-models-failed', error.message);
-                    geminiModelSelect.innerHTML = `<option>載入失敗: ${error.message}</option>`;
+                    // 失敗：更新 UI，保持按鈕禁用
+                    console.error("金鑰驗證或模型載入失敗:", error);
+                    logAction('validate-and-load-models-failed', error.message);
+                    geminiModelSelect.innerHTML = `<option>載入失敗</option>`;
+                    updateApiKeyUI('invalid', error.message);
                 }
             };
 
@@ -1727,7 +1705,8 @@
                     logAction('click-save-api-key');
                     if (apiKey) {
                         localStorage.setItem('googleApiKey', apiKey);
-                        validateApiKey(apiKey);
+                        // 直接呼叫新的整合函式
+                        validateAndLoadModels();
                     } else {
                         showStatusMessage('API 金鑰不能為空', true);
                     }
@@ -1744,7 +1723,8 @@
                 const storedApiKey = localStorage.getItem('googleApiKey');
                 if (storedApiKey) {
                     apiKeyInput.value = storedApiKey;
-                    validateApiKey(storedApiKey);
+                    // 頁面載入時也使用新的整合函式
+                    validateAndLoadModels();
                 } else {
                     updateApiKeyUI('not_provided');
                     geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
@@ -2095,10 +2075,59 @@
             };
 
             // --- JULES'S NEW FEATURE (V2): Final Setup ---
+            const checkSystemReadiness = async () => {
+                const buttonsToDisable = [
+                    document.getElementById('start-download-btn'),
+                    document.getElementById('download-audio-only-btn'),
+                    document.getElementById('start-youtube-processing-btn'),
+                    document.getElementById('start-processing-btn')
+                ];
+
+                buttonsToDisable.forEach(btn => {
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.title = '正在等待後端依賴安裝完成...';
+                    }
+                });
+                showStatusMessage('⏳ 正在等待後端服務完全就緒...', false, 0);
+
+                const maxRetries = 30; // 30 * 2s = 60s timeout
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        const response = await fetch('/api/system/readiness');
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.ready) {
+                                buttonsToDisable.forEach(btn => {
+                                    if (btn && !btn.id.includes('start-processing')) { // Keep file upload button disabled initially
+                                        btn.disabled = false;
+                                        btn.title = '';
+                                    }
+                                });
+                                // Keep file upload button disabled until files are selected
+                                document.getElementById('start-processing-btn').disabled = uploadedFiles.length === 0;
+
+                                showStatusMessage('✅ 系統已就緒，所有功能可用！', false, 5000);
+                                logAction('system-ready-check-success');
+                                return;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`[${i+1}/${maxRetries}] 系統就緒檢查失敗:`, error.message);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                showStatusMessage('❌ 後端服務就緒檢查超時，部分功能可能無法使用。', true, 0);
+                logAction('system-ready-check-timeout');
+            };
+
+
             initialLoad();
             setupWebSocket(); // WebSocket is still needed for real-time updates
             startPolling(); // Start the backup polling mechanism
             updateFileDisplay();
+            checkSystemReadiness(); // Start the readiness check
 
             // --- 日誌檢視器邏輯 ---
             fetchLogsBtn.addEventListener('click', async () => {
