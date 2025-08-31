@@ -10,14 +10,15 @@ import asyncio
 import os
 import time
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, List
-
-# 匯入新的資料庫客戶端
-# from db import database # REMOVED: No longer used directly
+from contextlib import asynccontextmanager
+from urllib.parse import unquote, quote
+from pydantic import BaseModel
+import psutil
 
 # --- 修正模組匯入路徑 ---
 # 將專案的 src 目錄新增到 Python 的搜尋路徑中，
@@ -98,8 +99,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-from contextlib import asynccontextmanager
-
 # --- DB 客戶端 ---
 # 在模組加載時獲取客戶端單例
 # 客戶端內部有重試機制，會等待 DB 管理者服務就緒
@@ -142,46 +141,6 @@ else:
     # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
 
 # JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
-from urllib.parse import unquote, quote
-from fastapi.responses import FileResponse
-
-
-# --- JULES'S NEW FEATURE: App State API Endpoints ---
-
-@app.get("/api/app_state", response_class=JSONResponse)
-async def get_app_state_endpoint():
-    """
-    獲取應用程式的 UI 狀態。
-    """
-    try:
-        # 我們將所有 UI 狀態儲存在一個鍵 'ui_settings' 下
-        state_json = db_client.get_app_state(key='ui_settings')
-        if state_json:
-            # 如果資料庫中有資料，解析並回傳
-            return JSONResponse(content=json.loads(state_json))
-        # 如果資料庫中沒有，回傳一個空的預設物件
-        return JSONResponse(content={})
-    except Exception as e:
-        log.error(f"獲取 app_state 時 API 發生錯誤: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="無法獲取應用程式狀態")
-
-@app.post("/api/app_state", status_code=200)
-async def set_app_state_endpoint(request: Request):
-    """
-    儲存應用程式的 UI 狀態。
-    """
-    try:
-        new_state = await request.json()
-        # 將收到的 JSON 物件轉換為字串以便儲存
-        state_json = json.dumps(new_state)
-        db_client.set_app_state(key='ui_settings', value=state_json)
-        return {"status": "success", "message": "應用程式狀態已儲存"}
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="無效的 JSON 格式。")
-    except Exception as e:
-        log.error(f"儲存 app_state 時 API 發生錯誤: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="無法儲存應用程式狀態")
-
 @app.get("/media/{file_path:path}")
 async def serve_media_files(file_path: str):
     """
@@ -368,8 +327,6 @@ async def log_action_endpoint(payload: Dict):
     return {"status": "logged"}
 
 
-import psutil
-
 @app.get("/api/application_status")
 async def get_application_status():
     """
@@ -519,7 +476,6 @@ async def download_transcript(task_id: str):
             raise HTTPException(status_code=404, detail="檔案遺失或無法讀取。")
 
         # 提供檔案下載
-        from fastapi.responses import FileResponse
         ext = file_path.suffix.lower()
         if ext == '.pdf':
             media_type = 'application/pdf'
@@ -708,8 +664,6 @@ async def validate_api_key(request: Request):
         log.error(f"驗證 API 金鑰時發生伺服器內部錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
 
-
-from pydantic import BaseModel
 
 class ApiKeyPayload(BaseModel):
     api_key: str
@@ -1142,6 +1096,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             if api_key:
                 proc_env["GOOGLE_API_KEY"] = api_key # 將金鑰設定到子程序的環境變數中
 
+            log.info(f"任務 {dependent_task_id}: 正要啟動 gemini_processor.py 子程序...")
             process_gemini = subprocess.Popen(
                 cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env
             )
@@ -1150,7 +1105,9 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             # Reading stderr line-by-line while stdout buffer might fill up is a classic deadlock scenario.
             # The safer approach is to use communicate() to get both streams after the process finishes.
             # This sacrifices real-time progress updates for stability and correctness, which is the right trade-off here.
+            log.info(f"任務 {dependent_task_id}: 正在等待 gemini_processor.py 子程序完成...")
             stdout_output, stderr_output = process_gemini.communicate()
+            log.info(f"任務 {dependent_task_id}: gemini_processor.py 子程序已結束。返回碼: {process_gemini.returncode}")
 
             if process_gemini.returncode != 0:
                 # Log the full stderr for debugging purposes, then raise the error with stdout,

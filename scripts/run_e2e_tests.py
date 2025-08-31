@@ -18,8 +18,8 @@ def run_playwright_tests():
     Target function to run Playwright tests in a subprocess.
     """
     log.info("Subprocess started: Running Playwright tests...")
-    # Focusing on the main validation test
-    command = ["npx", "playwright", "test", "src/tests/e2e_main_validation.spec.js"]
+    # Running the new, real-world E2E test
+    command = ["npx", "playwright", "test", "src/tests/e2e_real_youtube_test.spec.cjs"]
     try:
         subprocess.run(command, check=True, text=True, encoding='utf-8')
         sys.exit(0)
@@ -74,7 +74,7 @@ def main():
     """
     Main launcher to manage the test subprocess with a timeout.
     """
-    timeout_seconds = 180 # Increased timeout to be safe
+    timeout_seconds = 300 # Increased timeout to 5 minutes for real network calls
     log.info(f"--- Starting E2E Test Launcher (Total timeout: {timeout_seconds} seconds) ---")
 
     try:

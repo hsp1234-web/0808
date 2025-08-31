@@ -1,14 +1,5 @@
+# -*- coding: utf-8 -*-
 # tools/transcriber.py
-
-# --- 可供 bake_envs.py 解析的依賴定義 ---
-# 使用 ast.literal_eval 安全解析
-DEPENDENCIES = {
-    # '套件名': '在 pip install 中使用的名稱'
-    'torch': 'torch',
-    'faster-whisper': 'faster-whisper',
-    'opencc': 'opencc-python-reimplemented'
-}
-
 import time
 import logging
 import argparse
@@ -19,50 +10,35 @@ import json
 import sys
 from faster_whisper.utils import get_assets_path
 
+# --- 全域常數 ---
+# 定義下載進度回報的最小時間間隔 (秒)
+PROGRESS_REPORT_INTERVAL = 0.5
+# 繁簡轉換器
+CC = OpenCC('s2t')
+
 # --- 日誌設定 ---
-# 設定一個基本的日誌記錄器，以便在工具執行時提供有用的輸出
-# 這對於在背景執行時進行偵錯至關重要
+# 將所有日誌和進度訊息導向標準錯誤流
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler() # 直接輸出到 stderr
-    ]
+    stream=sys.stderr
 )
 log = logging.getLogger('transcriber_tool')
 
 class Transcriber:
-    """
-    一個獨立的轉錄工具類別。
-    它在初始化時載入指定的 faster-whisper 模型，並提供一個方法來執行轉錄。
-    這個版本被簡化了，移除了單例模式和多模型快取，因為它被設計為在
-    一個隔離的、一次性的「預烘烤」環境中運行。
-    """
-    def __init__(self, model_size: str):
-        """
-        在實例化時直接載入模型。
-        """
+    def __init__(self, model_size="large-v3"):
         self.model_size = model_size
         self.model = self._load_model()
+        self.last_report_time = 0
 
     def _load_model(self):
-        """
-        根據指定的模型大小和可用的硬體，載入 faster-whisper 模型。
-        """
-        log.info(f"🧠 開始載入 '{self.model_size}' 模型...")
+        """載入 faster-whisper 模型。"""
+        log.info(f"準備載入 '{self.model_size}' 模型...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if torch.cuda.is_available() else "int8"
+        log.info(f"裝置: {device}, 計算類型: {compute_type}")
+
         start_time = time.time()
-
-        # --- JULES 於 2025-08-09 的修改：自動偵測並使用 GPU ---
-        device = "cpu"
-        compute_type = "int8"
-        if torch.cuda.is_available():
-            log.info("✅ 偵測到 NVIDIA GPU (CUDA)！將使用 GPU 進行加速。")
-            device = "cuda"
-            compute_type = "float16" # 在 GPU 上使用 float16 以獲得最佳性能
-        else:
-            log.info("ℹ️ 未偵測到 NVIDIA GPU (CUDA)。將使用 CPU 進行運算。")
-        # --- 修改結束 ---
-
         try:
             from faster_whisper import WhisperModel
             model = WhisperModel(self.model_size, device=device, compute_type=compute_type)
@@ -76,17 +52,22 @@ class Transcriber:
             log.critical(f"❌ 載入 '{self.model_size}' 模型時發生未預期錯誤: {e}", exc_info=True)
             raise e
 
-    def transcribe(self, audio_path: str, language: str, beam_size: int = 5) -> str:
-        """
-        執行音訊轉錄的核心方法。
-        """
-        log.info(f"🎤 開始處理轉錄任務: {audio_path} (Beam Size: {beam_size})")
-        if not self.model:
-            log.error("❌ 模型未被載入，無法進行轉錄。")
-            raise RuntimeError("模型未被載入，無法進行轉錄。")
+    def _report_progress(self, progress: float):
+        """以 JSON 格式回報進度到 stdout，並控制回報頻率。"""
+        current_time = time.time()
+        if current_time - self.last_report_time >= PROGRESS_REPORT_INTERVAL:
+            progress_data = {
+                "type": "progress",
+                "percent": round(progress, 2),
+                "description": "AI 正在處理音訊..."
+            }
+            # 使用 print 將 JSON 輸出到 stdout，並確保立即刷新
+            print(json.dumps(progress_data), flush=True)
+            self.last_report_time = current_time
 
+    def transcribe(self, audio_path: str, language: str = None, beam_size: int = 5) -> str:
+        """執行音訊轉錄。"""
         try:
-            start_time = time.time()
             log.info("模型載入完成，開始轉錄...")
 
             segments, info = self.model.transcribe(audio_path, beam_size=beam_size, language=language, word_timestamps=True)
@@ -97,80 +78,74 @@ class Transcriber:
             else:
                 log.info(f"🌍 未指定語言，模型自動偵測到 {detected_lang_msg}")
 
-            # --- 串流式輸出 ---
-            # 我們不再一次性回傳整個文本，而是逐句印出
-            cc = OpenCC('s2twp') if info.language.lower().startswith('zh') else None
-            if cc:
-                log.info("🔄 偵測到中文，將對每句進行繁體化處理。")
+            full_transcript = []
+            total_duration = info.duration
 
-            total_transcript = []
             for segment in segments:
-                segment_text = segment.text.strip()
-                if cc:
-                    segment_text = cc.convert(segment_text)
+                # 簡轉繁
+                text_simplified = segment.text
+                text_traditional = CC.convert(text_simplified)
 
-                # 建立一個 JSON 物件來標準化輸出
-                output_data = {
+                # 建立包含時間戳的單行文字
+                start_time = time.strftime('%H:%M:%S', time.gmtime(segment.start))
+                end_time = time.strftime('%H:%M:%S', time.gmtime(segment.end))
+                line = f"[{start_time} --> {end_time}] {text_traditional}"
+                full_transcript.append(line)
+
+                # 回報進度
+                progress = (segment.end / total_duration) * 100
+                self._report_progress(progress)
+
+                # 也將每個片段的詳細資訊以 JSON 格式輸出到 stdout
+                segment_data = {
                     "type": "segment",
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment_text
+                    "start": round(segment.start, 2),
+                    "end": round(segment.end, 2),
+                    "text": text_traditional
                 }
-                # 使用 flush=True 確保即時輸出
-                print(json.dumps(output_data, ensure_ascii=False), flush=True)
-                total_transcript.append(segment_text)
+                print(json.dumps(segment_data), flush=True)
 
-            processing_time = time.time() - start_time
-            log.info(f"📝 轉錄完成。耗時: {processing_time:.2f} 秒。")
-
-            # 在最後，輸出一個包含最終統計資訊的 JSON 物件
-            final_info = {
-                "type": "final",
-                "audio_duration": info.duration,
-                "processing_time": processing_time
-            }
-            print(json.dumps(final_info), flush=True)
-
-            # 為了相容原有的檔案寫入邏輯，我們回傳完整的文本
-            return "".join(total_transcript)
+            log.info("✅ 轉錄完成。")
+            return "\n".join(full_transcript)
 
         except Exception as e:
-            log.error(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
+            log.critical(f"❌ 轉錄過程中發生錯誤: {e}", exc_info=True)
             raise e
 
-def check_model(model_size: str):
-    """檢查模型是否已下載"""
+def check_model_exists(model_size: str) -> bool:
+    """檢查模型是否已在本地快取。"""
     try:
-        # 這是 faster-whisper 內部用來找模型路徑的方法
-        model_path = get_assets_path(f"ctranslate2-4-avx2/whisper-{model_size}-ct2")
-        if (Path(model_path) / "config.json").is_file():
-            print("exists")
-            log.info(f"✅ 模型 '{model_size}' 已存在於: {model_path}")
-        else:
-            print("not_exists")
-            log.info(f"❓ 模型 '{model_size}' 不存在。")
+        # faster-whisper 將模型存在 huggingface 快取目錄
+        # 我們透過檢查模型目錄是否存在來判斷
+        assets_dir = get_assets_path()
+        model_path = Path(assets_dir) / f"models--Systran--faster-whisper-{model_size}"
+        return model_path.exists()
     except Exception as e:
-        print("not_exists")
-        log.error(f"檢查模型 '{model_size}' 時出錯: {e}")
+        log.error(f"檢查模型 '{model_size}' 時發生錯誤: {e}")
+        return False
 
-def download_model(model_size: str):
-    """下載模型並回報進度"""
-    log.info(f"📥 開始下載模型: {model_size}")
-    # 利用 _load_model 的副作用來下載
+def download_model_with_progress(model_size: str):
+    """下載模型並在 stdout 上顯示進度。"""
+    log.info(f"📥 開始下載 '{model_size}' 模型...")
     try:
-        Transcriber(model_size=model_size)
-        print(json.dumps({"progress": 100, "log": "模型下載完成"}), flush=True)
+        from faster_whisper import WhisperModel
+        # 載入模型時，如果模型不存在，它會自動下載
+        # 我們可以利用這個行為，但 faster-whisper 本身不提供下載進度回呼
+        # 這是一個簡化的實現，只在開始和結束時提供回饋
+        print(json.dumps({"type": "progress", "percent": 0, "description": f"開始下載 {model_size} 模型..."}), flush=True)
+        WhisperModel(model_size, download_root=None) # download_root=None 使用預設快取路徑
+        print(json.dumps({"type": "progress", "percent": 100, "description": "模型下載完成。"}), flush=True)
+        log.info(f"✅ 模型 '{model_size}' 下載或驗證成功。")
     except Exception as e:
-        print(json.dumps({"progress": 100, "log": f"下載失敗: {e}"}), flush=True)
-        log.critical(f"下載模型時發生錯誤: {e}", exc_info=True)
-        exit(1)
-
+        log.critical(f"❌ 下載模型 '{model_size}' 時失敗: {e}", exc_info=True)
+        # 將錯誤訊息也以 JSON 格式輸出，以便上層捕捉
+        print(json.dumps({"type": "error", "message": str(e)}), flush=True)
+        raise
 
 def main():
-    """
-    主函數，根據 command 參數執行不同操作。
-    """
+    """主函式，解析命令列參數並執行相應操作。"""
     parser = argparse.ArgumentParser(description="一個多功能轉錄與模型管理工具。")
+    # 主指令
     parser.add_argument("--command", type=str, default="transcribe", choices=["transcribe", "check", "download"], help="要執行的操作。")
     # 轉錄參數
     parser.add_argument("--audio_file", type=str, help="[transcribe] 需要轉錄的音訊檔案路徑。")
@@ -183,32 +158,32 @@ def main():
     args = parser.parse_args()
 
     if args.command == "check":
-        check_model(args.model_size)
-        return
+        if check_model_exists(args.model_size):
+            print("exists", flush=True) # 輸出到 stdout
+        else:
+            print("not_exists", flush=True) # 輸出到 stdout
 
-    if args.command == "download":
-        download_model(args.model_size)
-        return
+    elif args.command == "download":
+        download_model_with_progress(args.model_size)
 
-    # --- 預設為轉錄 ---
-    if not args.audio_file or not args.output_file:
-        parser.error("--audio_file 和 --output_file 是 'transcribe' 命令的必要參數。")
-
-    log.info(f"🚀 工具啟動 (轉錄模式)，參數: {args}")
-    try:
-        transcriber = Transcriber(model_size=args.model_size)
-        result_text = transcriber.transcribe(args.audio_file, args.language, args.beam_size)
-        output_path = Path(args.output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(result_text, encoding='utf-8')
-        log.info(f"✅ 成功將結果寫入到: {args.output_file}")
-
-    except Exception as e:
-        log.critical(f"❌ 在執行過程中發生致命錯誤: {e}", exc_info=True)
-        # 可以在此處建立一個錯誤標記檔案，以便外部執行器知道發生了問題
-        error_file = Path(args.output_file).parent / f"{Path(args.output_file).stem}.error"
-        error_file.write_text(str(e), encoding='utf-8')
-        exit(1) # 以非零狀態碼退出，表示失敗
+    elif args.command == "transcribe":
+        if not args.audio_file or not args.output_file:
+            log.critical("錯誤：執行 'transcribe' 指令時，必須提供 --audio_file 和 --output_file。")
+            exit(1)
+        try:
+            transcriber = Transcriber(model_size=args.model_size)
+            result_text = transcriber.transcribe(args.audio_file, args.language, args.beam_size)
+            output_path = Path(args.output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(result_text)
+            log.info(f"✅ 轉錄結果已成功寫入: {output_path}")
+        except Exception as e:
+            log.critical(f"❌ 在執行過程中發生致命錯誤: {e}", exc_info=True)
+            # 可以在此處建立一個錯誤標記檔案，以便外部執行器知道發生了問題
+            error_file = Path(args.output_file).parent / f"{Path(args.output_file).stem}.error"
+            error_file.write_text(str(e), encoding='utf-8')
+            exit(1) # 以非零狀態碼退出，表示失敗
 
 if __name__ == "__main__":
     main()
