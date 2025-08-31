@@ -9,6 +9,12 @@ from unittest.mock import MagicMock, patch, mock_open, call, ANY
 
 # 由於採用了 src-layout 和可編輯安裝模式 (pip install -e .)，
 # pytest 會自動將 src 目錄下的模組視為頂層模組。
+# HACK: 但是在某些 CI/CD 環境中，PYTHONPATH 可能沒有被正確設定。
+#       為了確保測試的穩定性，我們手動將 'src' 目錄加到系統路徑中。
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from api import api_server
 
 # --- 測試設定 ---
@@ -189,20 +195,28 @@ def test_mock_youtube_downloader_script(tmp_path):
 
     # --- 3. 斷言 ---
     # 斷言腳本成功執行
-    assert result.returncode == 0, f"腳本執行失敗，stderr: {result.stderr}"
+    assert result.returncode == 0, f"腳本執行失敗，stdout: {result.stdout}, stderr: {result.stderr}"
 
-    # 斷言 stdout 不是空的
+    # 斷言 stdout (標準輸出) 只包含最終的結果 JSON
     assert result.stdout, "腳本沒有任何輸出到 stdout"
-
-    # 解析最後一行輸出，因為進度更新會輸出到 stderr
-    lines = result.stdout.strip().splitlines()
-    assert len(lines) > 0, "stdout 中沒有有效的輸出行"
-    last_line = lines[-1]
-
     try:
-        output_json = json.loads(last_line)
+        # stdout 應該只包含一個 JSON 物件
+        output_json = json.loads(result.stdout)
     except json.JSONDecodeError:
-        pytest.fail(f"無法將 stdout 的最後一行解析為 JSON: '{last_line}'")
+        pytest.fail(f"無法將 stdout 的內容解析為一個單一的 JSON 物件: '{result.stdout}'")
+
+    # 斷言 stderr (標準錯誤) 包含進度更新
+    assert result.stderr, "腳本沒有任何進度更新輸出到 stderr"
+    progress_lines = result.stderr.strip().splitlines()
+    assert len(progress_lines) > 2, "預期至少有3行進度更新"
+    for line in progress_lines:
+        try:
+            progress_json = json.loads(line)
+            assert progress_json.get("type") == "progress", f"stderr 中的行不是 'progress' 類型: {line}"
+            assert "percent" in progress_json, f"stderr 中的進度更新缺少 'percent' 鍵: {line}"
+        except json.JSONDecodeError:
+            pytest.fail(f"無法將 stderr 的某一行解析為 JSON: '{line}'")
+
 
     # 斷言 JSON 內容
     assert output_json.get("type") == "result"
