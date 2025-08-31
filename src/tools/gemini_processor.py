@@ -100,8 +100,15 @@ def list_models():
     """列出可用的 Gemini 模型並以 JSON 格式輸出。"""
     try:
         api_key = os.getenv("GOOGLE_API_KEY")
+        # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是修復模型載入失敗的關鍵。
+        # 舊的邏輯拋出了一個通用錯誤，而 API 伺服器無法從中判斷失敗的具體原因。
+        # 新的邏輯明確地檢查金鑰是否存在，如果不存在，則向 stderr 印出一個
+        # 可被 API 伺服器解析的、特定的錯誤訊息，從而確保前端能收到準確的提示。
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set.")
+            # 這個特定的錯誤訊息 "API Key not found" 會被 api_server.py 捕捉。
+            print("API Key not found in environment variables.", file=sys.stderr, flush=True)
+            sys.exit(1)
+
         genai.configure(api_key=api_key)
 
         models_list = []
@@ -117,6 +124,7 @@ def list_models():
     except Exception as e:
         log.critical(f"🔴 Failed to list models: {e}", exc_info=True)
         # 將錯誤訊息輸出到 stderr，以便父程序擷取
+        # 此處現在主要處理 API 金鑰無效或網路問題等其他錯誤。
         print(f"Error listing models: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
 
