@@ -51,11 +51,8 @@ def mock_subprocess(mocker):
         "video_title": MOCK_VIDEO_TITLE
     })
 
-    # 模擬 readline() 的行為，就像從子程序的 stdout 讀取一樣
-    process_mock.stdout.readline.side_effect = [
-        f"{download_result_json}\n",
-        ""  # 第二次呼叫回傳空字串，表示串流結束
-    ]
+    # 模擬 communicate() 的行為，它會回傳 (stdout, stderr)
+    process_mock.communicate.return_value = (download_result_json, "")
 
     # 模擬 wait() 和 returncode
     process_mock.wait.return_value = None
