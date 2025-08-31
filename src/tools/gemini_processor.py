@@ -153,7 +153,9 @@ def upload_to_gemini(genai_module, audio_path: Path, display_filename: str):
     def upload_task():
         log.info("正要呼叫 genai.upload_file...")
         try:
-            return genai_module.upload_file(path=str(audio_path), display_name=display_filename, mime_type=mime_type, request_options={'timeout': 100})
+            # 修正：移除不被支援的 'request_options' 參數。
+            # 超時控制完全由外部的 concurrent.futures.ThreadPoolExecutor 的 future.result(timeout=...) 來處理。
+            return genai_module.upload_file(path=str(audio_path), display_name=display_filename, mime_type=mime_type)
         except Exception as e:
             log.error(f"檔案上傳執行緒內部發生錯誤: {e}", exc_info=True)
             raise
