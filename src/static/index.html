@@ -32,15 +32,23 @@
         <!-- 全域儀表板 -->
         <div class="card">
             <h2>📊 全域儀表板</h2>
-            <div class="dashboard-grid">
+            <div id="dashboard-container" class="dashboard-grid">
                 <div class="stat-item">
                     <span id="status-light" class="status-light"></span>
-                    <strong>狀態:</strong> <span id="status-text">正在連線...</span>
+                    <span id="status-text">連線中...</span>
                 </div>
-                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">--</span></div>
-                <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
-                <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
-                <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+                <div class="stat-item" id="gpu-stat-container">
+                    <span>GPU</span>
+                    <strong id="gpu-label">--%</strong>
+                </div>
+                <div class="stat-item">
+                    <span>CPU</span>
+                    <strong id="cpu-label">--%</strong>
+                </div>
+                <div class="stat-item">
+                    <span>RAM</span>
+                    <strong id="ram-label">--%</strong>
+                </div>
             </div>
         </div>
 

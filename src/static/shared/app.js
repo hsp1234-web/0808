@@ -90,22 +90,27 @@ function renderDashboard() {
             statusTextEl.textContent = '已連線';
             statusLightEl.classList.add('status-green');
         } else {
-            statusTextEl.textContent = '已離線';
+            statusTextEl.textContent = '連線中...';
             statusLightEl.classList.add('status-yellow');
         }
     }
 
     const cpuLabelEl = document.getElementById('cpu-label');
-    if (cpuLabelEl) cpuLabelEl.textContent = `${systemStats.cpu}%`;
+    if (cpuLabelEl) cpuLabelEl.textContent = `${systemStats.cpu_usage || '--'}%`;
 
     const ramLabelEl = document.getElementById('ram-label');
-    if (ramLabelEl) ramLabelEl.textContent = `${systemStats.ram}%`;
+    if (ramLabelEl) ramLabelEl.textContent = `${systemStats.ram_usage || '--'}%`;
 
-    const gpuDisplayEl = document.getElementById('gpu-display');
-    if (gpuDisplayEl) gpuDisplayEl.textContent = systemStats.gpu_detected ? '已偵測到' : '未偵測到';
-
-    const gpuLabelEl = document.getElementById('gpu-label');
-    if (gpuLabelEl) gpuLabelEl.textContent = systemStats.gpu_detected ? `${systemStats.gpu}%` : '--%';
+    const gpuContainer = document.getElementById('gpu-stat-container');
+    if(gpuContainer) {
+        if (systemStats.gpu_detected) {
+            gpuContainer.style.display = 'flex'; // Or 'block', depending on your desired layout
+            const gpuLabelEl = document.getElementById('gpu-label');
+            if (gpuLabelEl) gpuLabelEl.textContent = `${systemStats.gpu_usage || '--'}%`;
+        } else {
+            gpuContainer.style.display = 'none';
+        }
+    }
 }
 
 /**
@@ -152,29 +157,46 @@ function getTaskHtml(task) {
 
 /**
  * 渲染所有任務列表（處理中、已完成等）。
+ * 這個函式現在能處理通用的任務列表以及 YouTube 報告專屬的瀏覽區。
  */
 function renderTaskLists() {
     const { tasks } = globalState;
 
     const ongoingTasksContainer = document.getElementById('ongoing-tasks');
     const completedTasksContainer = document.getElementById('completed-tasks');
+    const youtubeReportsContainer = document.getElementById('youtube-file-browser');
 
     const ongoingTasks = tasks.filter(t => ['starting', 'downloading', 'processing', 'analyzing', 'transcribing', 'generating'].includes(t.status));
-    const finishedTasks = tasks.filter(t => ['completed', 'failed'].includes(t.status));
 
+    // 將 YouTube 報告與其他已完成任務分開
+    const youtubeReports = tasks.filter(t => t.type === 'gemini_process' && (t.status === 'completed' || t.status === 'failed'));
+    const otherFinishedTasks = tasks.filter(t => t.type !== 'gemini_process' && (t.status === 'completed' || t.status === 'failed'));
+
+
+    // 渲染處理中任務
     if (ongoingTasksContainer) {
         if (ongoingTasks.length > 0) {
-            ongoingTasksContainer.innerHTML = ongoingTasks.sort((a, b) => b.timestamp - a.timestamp).map(getTaskHtml).join('');
+            ongoingTasksContainer.innerHTML = ongoingTasks.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(getTaskHtml).join('');
         } else {
             ongoingTasksContainer.innerHTML = `<p id="no-ongoing-task-msg">暫無執行中任務</p>`;
         }
     }
 
+    // 渲染通用的已完成任務
     if (completedTasksContainer) {
-        if (finishedTasks.length > 0) {
-            completedTasksContainer.innerHTML = finishedTasks.sort((a, b) => b.timestamp - a.timestamp).map(getTaskHtml).join('');
+        if (otherFinishedTasks.length > 0) {
+            completedTasksContainer.innerHTML = otherFinishedTasks.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(getTaskHtml).join('');
         } else {
             completedTasksContainer.innerHTML = `<p id="no-completed-task-msg">尚無完成的任務</p>`;
+        }
+    }
+
+    // 專門渲染 YouTube 報告
+    if (youtubeReportsContainer) {
+        if (youtubeReports.length > 0) {
+            youtubeReportsContainer.innerHTML = youtubeReports.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(getTaskHtml).join('');
+        } else {
+            youtubeReportsContainer.innerHTML = `<p id="no-youtube-report-msg">尚無已完成的報告</p>`;
         }
     }
 }
@@ -265,16 +287,20 @@ export const AppInitializer = {
                 showStatusMessage('無法載入歷史任務', true);
             }
 
-            // 設定定時更新儀表板
-            setInterval(async () => {
+            // 立即獲取一次系統狀態，然後設定定時更新
+            const fetchSystemStats = async () => {
                 try {
                     const response = await fetch('/api/system_stats');
-                    const stats = await response.json();
-                    updateStateAndRender({ systemStats: stats });
+                    if (response.ok) {
+                        const stats = await response.json();
+                        updateStateAndRender({ systemStats: stats });
+                    }
                 } catch (error) {
-                    // 靜默失敗，避免過多 log
+                    console.warn('無法獲取系統狀態:', error);
                 }
-            }, 2000);
+            };
+            fetchSystemStats();
+            setInterval(fetchSystemStats, 2000);
 
             // 如果有頁面專屬的渲染邏輯，將其加入主渲染循環
             if (pageConfig.pageSpecificRender) {
@@ -290,3 +316,27 @@ export const AppInitializer = {
 
 // 將常用函式附加到導出物件上，方便單獨使用
 AppInitializer.showStatusMessage = showStatusMessage;
+
+// --- For Testing Purposes ---
+// Expose a handler to the window object only in a test environment.
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    window.__handleTestWebSocketMessage = (message) => {
+        const { type, payload } = message;
+        let tasks = [...globalState.tasks];
+        const taskIndex = tasks.findIndex(t => t.task_id === payload.task_id);
+
+        if (taskIndex !== -1) {
+            // 更新現有任務
+            tasks[taskIndex] = { ...tasks[taskIndex], ...payload, timestamp: Date.now() };
+        } else {
+            // 新增任務
+            tasks.push({ ...payload, timestamp: Date.now() });
+        }
+        updateStateAndRender({ tasks });
+    };
+
+    // 為了測試方便，也暴露一個更新狀態的通用函式
+    window.__updateTestState = (partialState) => {
+        updateStateAndRender(partialState);
+    };
+}
