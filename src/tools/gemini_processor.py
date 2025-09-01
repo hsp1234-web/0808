@@ -245,17 +245,38 @@ def process_audio_file(audio_path: Path, model_name: str, video_title: str, outp
                 if error_msg: raise ValueError(error_msg)
                 total_tokens_used += get_token_count(response)
                 results['transcript'] = response.text.strip()
+        sanitized_title = sanitize_filename(video_title)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        final_filename_base = f"{sanitized_title}_{timestamp}_AI_Report"
+        html_report_path = None
+        txt_report_path = None
+
         if output_format == 'html':
             html_content, response = generate_html_report(results.get('summary', ''), results.get('transcript', ''), model_instance, video_title)
             error_msg = get_error_message_from_response(response)
             if error_msg: raise ValueError(error_msg)
             total_tokens_used += get_token_count(response)
-            sanitized_title = sanitize_filename(video_title)
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            final_filename_base = f"{sanitized_title}_{timestamp}_AI_Report"
             output_path = output_dir / f"{final_filename_base}.html"
             with open(output_path, "w", encoding="utf-8") as f: f.write(html_content)
-        final_result = {"type": "result", "status": "已完成", "output_path": str(output_path), "video_title": video_title, "total_tokens_used": total_tokens_used, "processing_duration_seconds": round(time.time() - start_time, 2)}
+            html_report_path = str(output_path)
+        else: # Handle 'txt' format
+            summary_text = results.get('summary', '無摘要。')
+            transcript_text = results.get('transcript', '無逐字稿。')
+            full_text_content = f"# {video_title}\n\n## 重點摘要\n\n{summary_text}\n\n---\n\n## 詳細逐字稿\n\n{transcript_text}"
+            output_path = output_dir / f"{final_filename_base}.txt"
+            with open(output_path, "w", encoding="utf-8") as f: f.write(full_text_content)
+            txt_report_path = str(output_path)
+
+        final_result = {
+            "type": "result",
+            "status": "已完成",
+            "output_path": str(output_path),
+            "video_title": video_title,
+            "total_tokens_used": total_tokens_used,
+            "processing_duration_seconds": round(time.time() - start_time, 2),
+            "html_report_path": html_report_path,
+            "txt_report_path": txt_report_path
+        }
         print(json.dumps(final_result), flush=True)
     except Exception as e:
         log.critical(f"🔴 處理流程中發生未預期的嚴重錯誤: {e}", exc_info=True)
