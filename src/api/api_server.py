@@ -1127,10 +1127,16 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             db_client.update_task_status(dependent_task_id, '已完成', json.dumps(process_result))
             log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "已完成", "result": process_result, "task_type": "gemini_process"}
-            }), loop)
+            # JULES'S FIX (2025-08-31): 補上遺失的 WebSocket 廣播
+            final_payload = {
+                "task_id": dependent_task_id,
+                "status": "completed",
+                "task_type": "gemini_process",
+                "result": process_result
+            }
+            update_message = {"type": "YOUTUBE_STATUS", "payload": final_payload}
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(update_message), loop)
+            log.info(f"✅ [執行緒] 已廣播 Gemini AI 任務完成訊息。")
 
         except Exception as e:
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
