@@ -39,7 +39,7 @@ def download_media(
     # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是修復環境依賴問題的關鍵。
     # 雖然 `python -m yt_dlp` 在理論上更具可攜性，但使用者的報告明確指出要直接呼叫 `yt-dlp`。
     # 為了完全遵循修復建議，我們將呼叫方式改回直接呼叫執行檔，讓作業系統從 PATH 中尋找。
-    command = ["yt-dlp", "--print-json"]
+    command = [sys.executable, "-m", "yt_dlp", "--print-json"]
 
     if download_type == "audio":
         command.extend([
