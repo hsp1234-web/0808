@@ -685,7 +685,10 @@
             const output = { ...target };
             if (target && typeof target === 'object' && source && typeof source === 'object') {
                 Object.keys(source).forEach(key => {
-                    if (source[key] && typeof source[key] === 'object') {
+                    // JULES'S FIX: 陣列應該被直接替換，而不是合併。
+                    if (Array.isArray(source[key])) {
+                        output[key] = source[key];
+                    } else if (source[key] && typeof source[key] === 'object') {
                         if (!(key in target)) {
                             Object.assign(output, { [key]: source[key] });
                         } else {
@@ -774,7 +777,8 @@
 
             // --- HTML Generation Helper ---
             const getTaskHtml = (task) => {
-                const displayName = getDisplayName(task.filename || task.url || task.task_id);
+                // JULES'S FIX: Prioritize the final video title from the result
+                const displayName = (task.result && task.result.video_title) || task.filename || task.url || task.task_id;
                 const fullDisplayName = task.filename || task.url || task.task_id;
                 const taskType = task.task_type_display || task.type;
 
@@ -790,8 +794,20 @@
                 if (isOngoing(task)) {
                     const elapsed = task.startTime ? `(經過時間: ${Math.floor((Date.now() - task.startTime) / 1000)}s)` : '';
                     statusHtml = `<span class="status-text-label ${statusClass}">${task.message || task.status}</span> <span class="timer">${elapsed}</span>`;
-                } else {
-                    // TODO: Action buttons for completed tasks
+                } else if (task.status === 'completed') {
+                    // JULES'S FIX: Implement the missing action buttons for completed tasks
+                    const resultData = task.result || {};
+                    const outputPath = resultData.output_path || resultData.transcript_path || '';
+                    if (outputPath) {
+                         statusHtml = `
+                            <div class="task-actions">
+                                <a href="#" class="btn-preview" data-task-id="${task.task_id}" data-testid="view-report-button">預覽</a>
+                                <a href="/api/download/${task.task_id}" class="btn-download" download>下載</a>
+                            </div>`;
+                    } else {
+                        statusHtml = `<span>完成 (無輸出)</span>`;
+                    }
+                } else { // failed
                     statusHtml = `<span>${task.status}</span>`;
                 }
 
@@ -1254,6 +1270,7 @@
                     updateStateAndRender(partialState);
                 }
             };
+            window.handleWebSocketMessage = handleWebSocketMessage; // JULES: 為了測試而暴露此函式
 
             const getIconForFile = (outputPath) => {
                 if (!outputPath || typeof outputPath !== 'string') return '📁';

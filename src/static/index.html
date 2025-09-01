@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>儀表板 - 音訊轉錄儀</title>
+    <link rel="stylesheet" href="/static/shared/main.css">
+</head>
+<body>
+    <div id="app" class="container">
+        <!-- 標題 -->
+        <header class="card">
+            <h1>音訊轉錄儀 - 儀表板</h1>
+        </header>
+
+        <!-- 狀態訊息區 -->
+        <div id="status-message-area" class="card">
+            <div id="status-message-text"></div>
+        </div>
+
+        <!-- 導覽列 -->
+        <nav class="card">
+            <div class="tab-container">
+                <a href="/static/index.html" class="tab-button active">📊 儀表板</a>
+                <a href="/static/transcribe.html" class="tab-button">📁 本地轉錄</a>
+                <a href="/static/downloader.html" class="tab-button">📥 媒體下載器</a>
+                <a href="/static/youtube_report.html" class="tab-button">▶️ YouTube 轉報告</a>
+                <a href="/static/prompts.html" class="tab-button">📝 提示詞管理</a>
+            </div>
+        </nav>
+
+        <!-- 全域儀表板 -->
+        <div class="card">
+            <h2>📊 全域儀表板</h2>
+            <div class="dashboard-grid">
+                <div class="stat-item">
+                    <span id="status-light" class="status-light"></span>
+                    <strong>狀態:</strong> <span id="status-text">正在連線...</span>
+                </div>
+                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">--</span></div>
+                <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
+                <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
+                <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+            </div>
+        </div>
+
+        <!-- 處理中任務 -->
+        <div class="card">
+            <h2>🔄 處理中任務</h2>
+            <div id="ongoing-tasks" class="task-list">
+                <p id="no-ongoing-task-msg">暫無執行中任務</p>
+            </div>
+        </div>
+
+        <!-- 已完成任務 -->
+        <div classs="card">
+            <h2>✅ 已完成任務</h2>
+            <div id="completed-tasks" class="task-list">
+                <p id="no-completed-task-msg">尚無完成的任務</p>
+            </div>
+        </div>
+
+        <!-- Modal 彈窗 (共享) -->
+        <div id="preview-modal" class="modal-overlay" style="display: none;">
+            <!-- Modal 結構... -->
+        </div>
+    </div>
+
+    <script type="module">
+        import { AppInitializer } from '/static/shared/app.js';
+        AppInitializer.init();
+    </script>
+</body>
+</html>
