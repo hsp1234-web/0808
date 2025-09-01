@@ -1,3 +1,20 @@
+## 921號 - 2025-09-02T03:19:02.438127+08:00
+
+### refactor(frontend): 完成 SPA 至 MPA 的架構重構
+
+- **動機**: 根據「前端架構重構執行計畫書」，將專案從單頁應用 (SPA) 遷移至多頁應用 (MPA)，以提高模組化程度、簡化測試並為未來的功能擴展奠定穩固基礎。
+- **核心變更**:
+    1.  **共享資源化**: 成功將通用的 CSS 和 JavaScript 邏輯從 `mp3.html` 提取至新的 `src/static/shared/` 目錄下的 `main.css` 和 `app.js`。
+    2.  **頁面模組化**: 將原有的單體 `mp3.html` 拆分為四個獨立的功能頁面：`index.html` (儀表板)、`transcribe.html`、`downloader.html` 和 `youtube_report.html`。
+    3.  **後端路由更新**: 修改了 `api_server.py`，使根路徑 `/` 指向新的 `index.html`。
+    4.  **檔案封存**: 按計畫將舊的 `mp3.html` 加上封存註解後，移至 `archive/frontend_refactor_2025-09-02/` 目錄。
+    5.  **測試適配與驗證**:
+        - 建立了一個新的 E2E 測試 `e2e-mpa-validation.spec.cjs`，此測試透過 `page.goto()` 直接導覽至各個頁面，以適應 MPA 架構。
+        - 修正了新架構下的數個測試問題，包括非同步載入、DOM 渲染時序和全域狀態存取等。
+        - 最終，`e2e-mpa-validation.spec.cjs` 中的所有測試案例均 100% 通過。
+- **成果**: 成功完成了從 SPA 到 MPA 的前端架構重構。新的架構邊界清晰，每個核心功能頁面皆可獨立測試，完全符合計畫書的驗收標準。
+
+---
 ## 920號 - 2025-09-02T00:10:44+08:00
 
 ### chore(docs): 標準化日誌時間戳記並更新開發準則
