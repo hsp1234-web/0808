@@ -339,7 +339,7 @@
 
         <!-- JULES'S NEW STATUS MESSAGE AREA -->
         <div id="status-message-area" class="card" style="display: none; padding: 12px; margin-bottom: 16px; border-width: 2px;">
-            <p id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></p>
+            <div id="status-message-text" style="margin: 0; font-weight: 500; text-align: center; white-space: pre-wrap; word-wrap: break-word;"></div>
         </div>
 
         <!-- 全域儀表板 -->
@@ -576,19 +576,19 @@
             </div>
         </div>
 
-        <!-- 任務儀表板 -->
-        <div class="grid-2-col">
-            <div class="card">
-                <h2>🔄 處理中任務</h2>
-                <div id="ongoing-tasks" class="task-list">
-                    <p id="no-ongoing-task-msg">暫無執行中任務</p>
-                </div>
+        <!-- 處理中任務 -->
+        <div class="card">
+            <h2>🔄 處理中任務</h2>
+            <div id="ongoing-tasks" class="task-list" style="margin-top: 16px;">
+                <p id="no-ongoing-task-msg">暫無執行中任務</p>
             </div>
-            <div class="card">
-                <h2>✅ 已完成任務</h2>
-                <div id="completed-tasks" class="task-list">
-                    <p id="no-completed-task-msg">尚無完成的任務</p>
-                </div>
+        </div>
+
+        <!-- 已完成任務 -->
+        <div class="card">
+            <h2>✅ 已完成任務</h2>
+            <div id="completed-tasks" class="task-list" style="margin-top: 16px;">
+                <p id="no-completed-task-msg">尚無完成的任務</p>
             </div>
         </div>
 
@@ -604,30 +604,6 @@
             <div id="transcript-output" class="transcript-output" style="margin-top: 16px;">等待任務開始...</div>
         </div>
 
-        <!-- 系統日誌查看器 -->
-        <div id="log-viewer-card" class="card">
-            <h2>📜 系統日誌查看器</h2>
-            <div class="log-controls">
-                <strong>等級:</strong>
-                <label><input type="checkbox" name="log-level" value="INFO" checked> INFO</label>
-                <label><input type="checkbox" name="log-level" value="SUCCESS" checked> SUCCESS</label>
-                <label><input type="checkbox" name="log-level" value="WARN" checked> WARN</label>
-                <label><input type="checkbox" name="log-level" value="ERROR" checked> ERROR</label>
-                <label><input type="checkbox" name="log-level" value="CRITICAL" checked> CRITICAL</label>
-            </div>
-            <div class="log-controls" style="margin-top: 10px;">
-                <strong>來源:</strong>
-                <label><input type="checkbox" name="log-source" value="colab_setup" checked> Setup</label>
-                <label><input type="checkbox" name="log-source" value="orchestrator" checked> Orchestrator</label>
-                <label><input type="checkbox" name="log-source" value="api_server" checked> API Server</label>
-                <label><input type="checkbox" name="log-source" value="worker" checked> Worker</label>
-            </div>
-            <div style="margin-top: 16px; display: flex; gap: 10px;">
-                <button id="fetch-logs-btn">🔄 更新日誌</button>
-                <button id="copy-logs-btn">📋 複製日誌</button>
-            </div>
-            <pre id="log-output" class="transcript-output" style="margin-top: 16px; min-height: 200px; max-height: 500px; overflow-y: auto;">點擊「更新日誌」以載入...</pre>
-        </div>
 
         <!-- 檔案預覽區 -->
         <div id="preview-area" class="card hidden">
@@ -685,9 +661,21 @@
              * @param {boolean} isError - 是否為錯誤訊息 (紅色)。預設為 false (綠色)。
              * @param {number} duration - 訊息顯示的毫秒數。
              */
+            const translateErrorMessage = (message) => {
+                if (typeof message !== 'string') {
+                    return '發生未知錯誤。';
+                }
+                if (message.includes('500 An internal error has occurred')) {
+                    return `發生 500 An internal error has occurred 錯誤，通常表示 Google Gemini 伺服器端發生了問題。\n\n可能的原因：\n- 伺服器暫時性故障：這是最常見的原因。伺服器可能正在進行維護、流量過大或某個服務暫時性失效。\n- 不穩定的網路連線：雖然這個錯誤主要來自伺服器，但你和伺服器之間的網路連線不穩定，偶爾也可能導致請求失敗並返回這個錯誤。\n- 請求資料格式問題：雖然這個錯誤碼通常和伺服器有關，但在極少數情況下，如果你的請求資料格式有嚴重問題，也可能導致伺服器無法解析並回傳此錯誤。`;
+                }
+                // Add more translations here in the future
+                return message; // Return original message if no translation is found
+            };
+
             const showStatusMessage = (message, isError = false, duration = 5000) => {
                 if (!statusMessageArea || !statusMessageText) return;
-                statusMessageText.textContent = message;
+                const displayMessage = isError ? translateErrorMessage(message) : message;
+                statusMessageText.textContent = displayMessage;
                 statusMessageArea.style.display = 'block';
                 if (isError) {
                     statusMessageArea.style.backgroundColor = '#f8d7da';
@@ -793,6 +781,7 @@
             let uploadedFiles = [];
             let socket;
             const taskElements = new Map();
+            const taskStartTimes = {}; // For timers
             const modelStatus = {};
             let currentFontSize = 100;
             let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
@@ -1123,10 +1112,15 @@
 
                 if (type === 'TRANSCRIPTION_STATUS') {
                     if (payload.status === 'starting') {
+                        taskStartTimes[payload.task_id] = Date.now();
                         statusSpan.textContent = '轉錄中...';
                         transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
                         if (progressContainer) progressContainer.style.display = 'block';
                     } else if (payload.status === 'completed') {
+                        delete taskStartTimes[payload.task_id];
+                        const timerSpan = taskElement.querySelector('.timer');
+                        if(timerSpan) timerSpan.textContent = '';
+
                         if (progressContainer) progressContainer.style.display = 'none';
                         statusSpan.innerHTML = '';
                         const buttonGroup = createActionButtons(payload.task_id, payload);
@@ -1157,6 +1151,9 @@
                         }
 
                     } else if (payload.status === 'failed') {
+                        delete taskStartTimes[payload.task_id];
+                        const timerSpan = taskElement.querySelector('.timer');
+                        if(timerSpan) timerSpan.textContent = '';
                         if (progressContainer) progressContainer.style.display = 'none';
                         statusSpan.textContent = `❌ 失敗: ${payload.error}`;
                     }
@@ -1262,12 +1259,24 @@
                 statusSpan.className = 'task-status';
 
                 if (payload.status === 'downloading' || (payload.progress_code && payload.progress_code.includes('upload'))) {
+                    if (!taskStartTimes[payload.task_id]) {
+                        taskStartTimes[payload.task_id] = Date.now();
+                    }
                     statusSpan.classList.add('status-downloading');
                 } else if (payload.status === 'processing' || (payload.progress_code && payload.progress_code.includes('generating'))) {
+                    if (!taskStartTimes[payload.task_id]) {
+                        taskStartTimes[payload.task_id] = Date.now();
+                    }
                     statusSpan.classList.add('status-processing');
                 } else if (payload.status === 'failed') {
+                    delete taskStartTimes[payload.task_id];
+                    const timerSpan = taskElement.querySelector('.timer');
+                    if(timerSpan) timerSpan.textContent = '';
                     statusSpan.classList.add('status-failed');
                 } else if (payload.status === 'completed') {
+                    delete taskStartTimes[payload.task_id];
+                    const timerSpan = taskElement.querySelector('.timer');
+                    if(timerSpan) timerSpan.textContent = '';
                     statusSpan.classList.add('status-completed');
                 }
 
@@ -1283,8 +1292,9 @@
                         const originalText = filenameSpan.textContent;
                         const taskTypeMatch = originalText.match(/\s\(.*\)$/);
                         const taskTypeSuffix = taskTypeMatch ? taskTypeMatch[0] : '';
-                        filenameSpan.textContent = `${filename}${taskTypeSuffix}`;
-                        filenameSpan.title = filename;
+                        const newDisplayText = `${filename}${taskTypeSuffix}`;
+                        filenameSpan.textContent = newDisplayText;
+                        filenameSpan.setAttribute('title', newDisplayText); // Set title attribute
                     }
                 }
 
@@ -1475,7 +1485,14 @@
                             <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
                         </div>
                     </div>
-                    <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 100px;">已建立</span>`;
+                    <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 100px;">
+                        已建立 <span class="timer" data-task-id="${taskId}"></span>
+                    </span>`;
+                // Add title attribute for tooltip on long filenames
+                const filenameSpan = taskElement.querySelector('.task-filename');
+                if (filenameSpan) {
+                    filenameSpan.setAttribute('title', displayName);
+                }
                 container.appendChild(taskElement);
                 taskElements.set(taskId, taskElement);
                 return taskElement;
@@ -1489,7 +1506,7 @@
                     uploadedFiles.forEach((file, index) => {
                         const fileElement = document.createElement('div');
                         fileElement.className = 'task-item';
-                        fileElement.innerHTML = `<span class="task-filename">${file.name}</span><button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>`;
+                        fileElement.innerHTML = `<span class="task-filename" title="${file.name}">${file.name}</span><button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>`;
                         fileListDisplay.appendChild(fileElement);
                     });
                 }
@@ -1773,7 +1790,7 @@
                 const filenameSpan = document.createElement('span');
                 filenameSpan.className = 'task-filename';
                 filenameSpan.textContent = videoTitle;
-                filenameSpan.title = videoTitle;
+                filenameSpan.setAttribute('title', videoTitle);
                 fileInfoDiv.appendChild(filenameSpan);
 
                 // 2. Action Buttons
@@ -2227,6 +2244,17 @@
             videoQualitySelect.addEventListener('change', (e) => logAction('change-video-quality', e.target.value));
             removeSilenceCheckbox.addEventListener('change', (e) => logAction('toggle-remove-silence', e.target.checked));
             renameFileCheckbox.addEventListener('change', (e) => logAction('toggle-rename-file', e.target.checked));
+
+            // --- Timer Update Interval ---
+            setInterval(() => {
+                document.querySelectorAll('.timer').forEach(timerEl => {
+                    const taskId = timerEl.dataset.taskId;
+                    if (taskStartTimes[taskId]) {
+                        const elapsed = Math.floor((Date.now() - taskStartTimes[taskId]) / 1000);
+                        timerEl.textContent = `(經過時間: ${elapsed}s)`;
+                    }
+                });
+            }, 1000);
         });
     </script>
 </body>
