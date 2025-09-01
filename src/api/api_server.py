@@ -465,7 +465,12 @@ async def download_transcript(task_id: str):
         if output_filename.startswith('/media/'):
             # 移除 '/media/' 前綴並與上傳目錄合併
             relative_path = output_filename.lstrip('/media/')
-            file_path = UPLOADS_DIR / relative_path
+            # JULES'S FIX 2025-08-31: 新增 URL 解碼步驟
+            # 這是解決「檔案名稱過長」錯誤的關鍵。從資料庫取出的路徑是
+            # URL 編碼過的 (例如 'file%20name.txt')，我們必須將其解碼回
+            # 'file name.txt' 才能讓檔案系統找到它。
+            decoded_relative_path = unquote(relative_path)
+            file_path = UPLOADS_DIR / decoded_relative_path
         else:
             # 作為備用，如果路徑不是 /media/ 開頭，則假設它是一個絕對路徑
             # 這可以保持對舊資料格式的相容性
@@ -1127,10 +1132,16 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             db_client.update_task_status(dependent_task_id, '已完成', json.dumps(process_result))
             log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "已完成", "result": process_result, "task_type": "gemini_process"}
-            }), loop)
+            # JULES'S FIX (2025-08-31): 補上遺失的 WebSocket 廣播
+            final_payload = {
+                "task_id": dependent_task_id,
+                "status": "completed",
+                "task_type": "gemini_process",
+                "result": process_result
+            }
+            update_message = {"type": "YOUTUBE_STATUS", "payload": final_payload}
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(update_message), loop)
+            log.info(f"✅ [執行緒] 已廣播 Gemini AI 任務完成訊息。")
 
         except Exception as e:
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
