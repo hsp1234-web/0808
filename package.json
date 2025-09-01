@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "snapshot": "bun install && mkdir -p logs && python3 -m pip install -r requirements-server.txt && npx playwright install chromium && bun scripts/snapshot.js"
+    "snapshot": "bun install && mkdir -p logs && python3 -m pip install -r requirements-server.txt && npx playwright install chromium && bun scripts/snapshot.js",
+    "test:e2e": "cross-env API_MODE=mock GOOGLE_API_KEY='DUMMY_KEY' npx playwright test src/tests/e2e_real_youtube_test.spec.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
