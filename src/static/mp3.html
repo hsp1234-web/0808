@@ -650,6 +650,249 @@
     </div>
 
     <script>
+        // --- 階段一：狀態層 (State Layer) ---
+        // 全域狀態物件，作為唯一的「事實來源 (Single Source of Truth)」。
+        let globalState = {
+            // 系統與連線狀態
+            connectionStatus: 'connecting', // 'connecting', 'connected', 'disconnected'
+            systemStats: { cpu: '--%', ram: '--%', gpu: '--%' },
+            modelStatus: { status: 'idle', message: '', percent: 0 },
+            // 所有任務的統一列表
+            tasks: [],
+            // 使用者設定與輸入
+            settings: {
+                whisperModel: 'tiny',
+                language: 'zh',
+                beamSize: 1
+            },
+            ui: {
+                activeTab: 'local-file-tab',
+                apiKeyStatus: { state: 'not_provided', message: '尚未提供金鑰' },
+                availableModels: [],
+                fontSize: 100
+            },
+            // 上傳區的檔案
+            filesToUpload: []
+        };
+
+        /**
+         * 深度合併兩個物件。
+         * @param {object} target - 目標物件。
+         * @param {object} source - 來源物件。
+         * @returns {object} 合併後的物件。
+         */
+        const deepMerge = (target, source) => {
+            const output = { ...target };
+            if (target && typeof target === 'object' && source && typeof source === 'object') {
+                Object.keys(source).forEach(key => {
+                    if (source[key] && typeof source[key] === 'object') {
+                        if (!(key in target)) {
+                            Object.assign(output, { [key]: source[key] });
+                        } else {
+                            output[key] = deepMerge(target[key], source[key]);
+                        }
+                    } else {
+                         Object.assign(output, { [key]: source[key] });
+                    }
+                });
+            }
+            return output;
+        };
+
+        /**
+         * 狀態更新與渲染觸發器。
+         * @param {object} partialNewState - 部分新狀態。
+         */
+        const updateStateAndRender = (partialNewState) => {
+            globalState = deepMerge(globalState, partialNewState);
+            // 在合併完成後，立即呼叫 renderUI()
+            renderUI();
+        };
+
+        // --- 階段二：渲染層 (Render Layer) ---
+
+        const renderDashboard = () => {
+            const { connectionStatus, systemStats, settings } = globalState;
+
+            // 連線狀態
+            const statusTextEl = document.getElementById('status-text');
+            const statusLightEl = document.getElementById('status-light');
+            if (statusTextEl && statusLightEl) {
+                statusLightEl.classList.remove('status-green', 'status-yellow');
+                if (connectionStatus === 'connected') {
+                    statusTextEl.textContent = '已連線';
+                    statusLightEl.classList.add('status-green');
+                } else {
+                    statusTextEl.textContent = '已離線';
+                    statusLightEl.classList.add('status-yellow');
+                }
+            }
+
+            // 模型顯示
+            const modelDisplayEl = document.getElementById('model-display');
+            if (modelDisplayEl) modelDisplayEl.textContent = settings.whisperModel;
+
+            // 系統資源
+            const cpuLabelEl = document.getElementById('cpu-label');
+            if (cpuLabelEl) cpuLabelEl.textContent = `${systemStats.cpu}%`;
+
+            const ramLabelEl = document.getElementById('ram-label');
+            if (ramLabelEl) ramLabelEl.textContent = `${systemStats.ram}%`;
+
+            const gpuDisplayEl = document.getElementById('gpu-display');
+            if (gpuDisplayEl) gpuDisplayEl.textContent = systemStats.gpu_detected ? '已偵測到' : '未偵測到';
+
+            const gpuLabelEl = document.getElementById('gpu-label');
+            if (gpuLabelEl) gpuLabelEl.textContent = systemStats.gpu_detected ? `${systemStats.gpu}%` : '--%';
+        };
+        const renderTaskLists = () => {
+            const { tasks } = globalState;
+
+            // --- DOM Containers ---
+            const containers = {
+                ongoing: document.getElementById('ongoing-tasks'),
+                completed: document.getElementById('completed-tasks'),
+                downloader: document.getElementById('downloader-tasks'),
+                youtubeReports: document.getElementById('youtube-file-browser'),
+            };
+
+            // --- Clear All Lists ---
+            Object.values(containers).forEach(c => { if(c) c.innerHTML = ''; });
+
+            // --- Filtering Logic ---
+            const isOngoing = t => ['starting', 'downloading', 'processing', 'analyzing', 'transcribing', 'generating'].includes(t.status);
+            const isFinished = t => ['completed', 'failed'].includes(t.status);
+
+            const ongoingTasks = tasks.filter(t => isOngoing(t));
+            const downloaderTasks = tasks.filter(t => t.type === 'download_only');
+            const youtubeReports = tasks.filter(t => t.type === 'gemini_process' && isFinished(t));
+            const completedWhisperTasks = tasks.filter(t => t.type === 'transcribe' && isFinished(t));
+
+            // --- Sorting Logic (Newest First) ---
+            const sortByTimestampDesc = (a, b) => (b.timestamp || 0) - (a.timestamp || 0);
+            [ongoingTasks, downloaderTasks, youtubeReports, completedWhisperTasks].forEach(arr => arr.sort(sortByTimestampDesc));
+
+            // --- HTML Generation Helper ---
+            const getTaskHtml = (task) => {
+                const displayName = getDisplayName(task.filename || task.url || task.task_id);
+                const fullDisplayName = task.filename || task.url || task.task_id;
+                const taskType = task.task_type_display || task.type;
+
+                let statusClass = '';
+                const lowerCaseStatus = (task.message || task.status || '').toLowerCase();
+                if (lowerCaseStatus.includes('downloading') || lowerCaseStatus.includes('下載中')) {
+                    statusClass = 'status-downloading';
+                } else if (lowerCaseStatus.includes('processing') || lowerCaseStatus.includes('處理中') || lowerCaseStatus.includes('analyzing') || lowerCaseStatus.includes('分析中') || lowerCaseStatus.includes('transcribing') || lowerCaseStatus.includes('轉錄中') || lowerCaseStatus.includes('generating') || lowerCaseStatus.includes('生成中')) {
+                    statusClass = 'status-processing';
+                }
+
+                let statusHtml = '';
+                if (isOngoing(task)) {
+                    const elapsed = task.startTime ? `(經過時間: ${Math.floor((Date.now() - task.startTime) / 1000)}s)` : '';
+                    statusHtml = `<span class="status-text-label ${statusClass}">${task.message || task.status}</span> <span class="timer">${elapsed}</span>`;
+                } else {
+                    // TODO: Action buttons for completed tasks
+                    statusHtml = `<span>${task.status}</span>`;
+                }
+
+                return `
+                    <div class="task-item" data-task-id="${task.task_id}">
+                        <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
+                            <span class="task-filename" title="${fullDisplayName}">${displayName} (${taskType})</span>
+                        </div>
+                        <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 100px;">
+                            ${statusHtml}
+                        </span>
+                    </div>
+                `;
+            };
+
+            // --- Render Lists ---
+            const renderList = (container, tasks, emptyMsgId, emptyMsgText) => {
+                if (tasks.length > 0) {
+                    container.innerHTML = tasks.map(getTaskHtml).join('');
+                } else {
+                    container.innerHTML = `<p id="${emptyMsgId}">${emptyMsgText}</p>`;
+                }
+            };
+
+            renderList(containers.ongoing, ongoingTasks, 'no-ongoing-task-msg', '暫無執行中任務');
+            renderList(containers.completed, completedWhisperTasks, 'no-completed-task-msg', '尚無完成的任務');
+            renderList(containers.downloader, downloaderTasks, 'no-downloader-task-msg', '暫無下載任務');
+            renderList(containers.youtubeReports, youtubeReports, 'no-youtube-report-msg', '尚無已完成的報告');
+        };
+        const renderYouTubeTab = () => {
+            const { apiKeyStatus, availableModels } = globalState.ui;
+
+            // API 金鑰狀態
+            const apiKeyStatusEl = document.getElementById('api-key-status')?.querySelector('span');
+            if (apiKeyStatusEl) {
+                apiKeyStatusEl.textContent = apiKeyStatus.message;
+                apiKeyStatusEl.style.color = apiKeyStatus.state === 'valid' ? 'var(--status-green)' : (apiKeyStatus.state === 'invalid' ? '#dc3545' : 'inherit');
+                apiKeyStatusEl.style.fontStyle = (apiKeyStatus.state === 'not_provided' || apiKeyStatus.state === 'validating') ? 'italic' : 'normal';
+            }
+
+            // 控制項啟用/禁用
+            const isValid = apiKeyStatus.state === 'valid';
+            const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
+            if (youtubeParamsFieldset) youtubeParamsFieldset.disabled = !isValid;
+            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
+            if (startYoutubeProcessingBtn) startYoutubeProcessingBtn.disabled = !isValid;
+
+            // Gemini 模型下拉選單
+            const geminiModelSelect = document.getElementById('gemini-model-select');
+            if (geminiModelSelect) {
+                geminiModelSelect.innerHTML = ''; // 清空
+                if (availableModels.length > 0) {
+                    availableModels.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.id;
+                        option.textContent = model.name;
+                        geminiModelSelect.appendChild(option);
+                    });
+                } else {
+                    geminiModelSelect.innerHTML = `<option>請先提供有效的 API 金鑰以載入模型</option>`;
+                }
+            }
+        };
+        const renderFileUploadList = () => {
+            const { filesToUpload } = globalState;
+            const fileListDisplay = document.getElementById('file-list');
+            const startBtn = document.getElementById('start-processing-btn');
+
+            if (!fileListDisplay || !startBtn) return;
+
+            fileListDisplay.innerHTML = '';
+            if (filesToUpload.length === 0) {
+                fileListDisplay.innerHTML = '<p style="color: #666; text-align: center;">尚未選擇任何檔案</p>';
+            } else {
+                filesToUpload.forEach((file, index) => {
+                    const fileElement = document.createElement('div');
+                    fileElement.className = 'task-item';
+                    // 為事件委派新增 data-action 屬性
+                    fileElement.innerHTML = `<span class="task-filename" title="${file.name}">${file.name}</span><button data-action="remove-file" data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>`;
+                    fileListDisplay.appendChild(fileElement);
+                });
+            }
+
+            startBtn.disabled = filesToUpload.length === 0;
+            startBtn.textContent = filesToUpload.length > 0 ? `✨ 開始處理 ${filesToUpload.length} 個檔案` : '✨ 請先選擇檔案';
+        };
+
+        /**
+         * 主渲染函式。
+         * 根據 globalState 的內容，完整地重繪所有相關的 UI 區塊。
+         * 此函式必須是冪等的。
+         */
+        const renderUI = () => {
+            console.log("Rendering UI with current state...");
+            renderDashboard();
+            renderTaskLists();
+            renderYouTubeTab();
+            renderFileUploadList();
+            // ... 更多渲染函式將會加入
+        };
+
         // Make functions globally available for testing
         let handleTranscriptionUpdate;
 
@@ -812,90 +1055,23 @@
                 }
             };
 
-            const applyStateToUI = () => {
-                // Whisper
-                if (modelSelect.querySelector(`option[value="${appState.whisperModel}"]`)) modelSelect.value = appState.whisperModel;
-                modelDisplay.textContent = modelSelect.value;
-                if (languageSelect.querySelector(`option[value="${appState.whisperLanguage}"]`)) languageSelect.value = appState.whisperLanguage;
-                beamSizeInput.value = appState.whisperBeamSize;
-                // Downloader
-                downloaderUrlsInput.value = appState.downloaderUrls;
-                // YouTube
-                if (Array.isArray(appState.youtubeLinks) && appState.youtubeLinks.length > 0) {
-                    const firstRow = youtubeLinkList.querySelector('.youtube-link-row');
-                    if (firstRow) {
-                        firstRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[0].url || '';
-                        firstRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[0].filename || '';
-                        for (let i = 1; i < appState.youtubeLinks.length; i++) {
-                            const newRow = firstRow.cloneNode(true);
-                            newRow.querySelector('.youtube-url-input').value = appState.youtubeLinks[i].url || '';
-                            newRow.querySelector('.youtube-filename-input').value = appState.youtubeLinks[i].filename || '';
-                            youtubeLinkList.appendChild(newRow);
-                        }
-                    }
-                }
-                // UI
-                const tabToActivate = document.querySelector(`.tab-button[data-tab="${appState.activeTab}"]`);
-                if (tabToActivate) tabToActivate.click();
-                currentFontSize = appState.fontSize || 100;
-                updateFontSize();
-            };
-
-            const updateTaskLists = (tasks) => {
-                if (!Array.isArray(tasks)) return;
-                // Add a console log for debugging the raw data from the API
-                // console.log("DEBUG: Raw tasks from API:", JSON.stringify(tasks));
-
-                const taskIdsFromResponse = new Set(tasks.map(t => t.task_id));
-
-                // First, remove any tasks from the UI that are no longer in the backend response
-                taskElements.forEach((element, taskId) => {
-                    if (!taskIdsFromResponse.has(taskId)) {
-                        element.remove();
-                        taskElements.delete(taskId);
-                    }
-                });
-
-                // Then, update or add tasks
-                tasks.forEach(dispatchStatusUpdate);
-
-                // Finally, update the "no tasks" messages
-                noOngoingTaskMsg.style.display = ongoingTasksContainer.childElementCount > 0 ? 'none' : 'block';
-                noCompletedTaskMsg.style.display = completedTasksContainer.childElementCount > 0 ? 'none' : 'block';
-                const downloaderTasksContainer = document.getElementById('downloader-tasks');
-                document.getElementById('no-downloader-task-msg').style.display = downloaderTasksContainer.childElementCount > 0 ? 'none' : 'block';
-            };
-
             const initialLoad = async () => {
                 logAction('initial-load-start');
                 try {
-                    const [savedState, savedTasks] = await Promise.all([
-                        fetchWithRetry('/api/app_state'),
-                        fetchWithRetry('/api/tasks')
-                    ]);
-
-                    if (savedState && typeof savedState === 'object' && Object.keys(savedState).length > 0) {
-                        Object.assign(appState, savedState);
-                        logAction('load-app-state-success');
-                    } else {
-                        logAction('load-app-state-default');
-                    }
-                    applyStateToUI();
-
-                    updateTaskLists(savedTasks);
-                    logAction('load-task-history-success', `loaded ${savedTasks.length} tasks`);
-
+                    const tasks = await fetchWithRetry('/api/tasks');
+                    // 用從後端獲取的完整任務列表更新狀態
+                    updateStateAndRender({ tasks: tasks || [] });
+                    logAction('load-task-history-success', `loaded ${tasks.length} tasks`);
                 } catch (error) {
                     console.error('❌ 初始化載入失敗:', error);
-                    showStatusMessage('無法從伺服器載入初始資料，請稍後重新整理。', true, 10000);
-                    applyStateToUI(); // Still apply default UI state
+                    // 未來可以透過狀態管理顯示錯誤訊息
                 }
             };
 
             const fetchTaskHistory = async () => {
                 try {
-                    const tasks = await fetchWithRetry('/api/tasks', {}, 2, 500); // Shorter retry for polling
-                    updateTaskLists(tasks);
+                    const tasks = await fetchWithRetry('/api/tasks', {}, 2, 500); // 使用較短的重試間隔進行輪詢
+                    updateStateAndRender({ tasks: tasks || [] });
                 } catch (error) {
                     console.warn("輪詢任務歷史失敗:", error.message);
                 }
@@ -1049,33 +1225,33 @@
             const handleWebSocketMessage = (message) => {
                 console.log(`[WebSocket Received]: ${JSON.stringify(message)}`);
                 const { type, payload } = message;
-                if (type === 'DOWNLOAD_STATUS') {
-                    handleDownloadStatus(payload);
-                } else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
-                    handleTranscriptionUpdate(type, payload);
-                } else if (type === 'YOUTUBE_STATUS') {
-                    handleYoutubeStatus(payload);
-                }
-            };
+                let partialState = {};
 
-            const handleDownloadStatus = (payload) => {
-                if (!modelStatus[payload.model]) modelStatus[payload.model] = {};
-                modelStatus[payload.model].status = payload.status;
-                modelProgressContainer.classList.remove('hidden');
-                if (payload.status === 'downloading') {
-                    const percent = payload.percent || 0;
-                    modelProgressBar.style.width = `${percent}%`;
-                    modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
-                    confirmBtn.disabled = true;
-                } else if (payload.status === 'completed') {
-                    modelProgressBar.style.width = '100%';
-                    modelProgressText.textContent = '下載完成';
-                    confirmBtn.disabled = false;
-                } else if (payload.status === 'failed') {
-                    modelProgressBar.style.width = '100%';
-                    modelProgressBar.style.backgroundColor = '#dc3545';
-                    modelProgressText.textContent = `下載失敗: ${payload.error}`;
-                    confirmBtn.disabled = false;
+                if (type === 'DOWNLOAD_STATUS') {
+                    partialState.modelStatus = {
+                        status: payload.status,
+                        message: payload.description || '',
+                        percent: payload.percent || 0
+                    };
+                } else if (type === 'YOUTUBE_STATUS' || type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
+                    const tasks = [...globalState.tasks];
+                    const taskIndex = tasks.findIndex(t => t.task_id === payload.task_id);
+
+                    if (taskIndex !== -1) {
+                        tasks[taskIndex] = { ...tasks[taskIndex], ...payload };
+                    } else {
+                        tasks.push({
+                            ...payload,
+                            timestamp: Date.now(),
+                            filename: payload.filename || payload.url || payload.task_id,
+                            task_type_display: payload.type === 'transcribe' ? '轉錄' : 'YouTube 分析'
+                        });
+                    }
+                    partialState.tasks = tasks;
+                }
+
+                if (Object.keys(partialState).length > 0) {
+                    updateStateAndRender(partialState);
                 }
             };
 
