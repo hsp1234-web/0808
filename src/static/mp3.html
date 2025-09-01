@@ -1088,6 +1088,29 @@
                 return '📁';
             };
 
+            /**
+             * 根據狀態訊息更新任務的 CSS class，以改變顏色。
+             * @param {HTMLElement} statusSpan - 任務狀態的 span 元素。
+             * @param {string} statusMessage - 從後端收到的狀態訊息。
+             */
+            const updateTaskStatusClass = (statusSpan, statusMessage) => {
+                if (!statusSpan || typeof statusMessage !== 'string') return;
+
+                // 先移除所有可能的狀態 class，除了最終狀態
+                statusSpan.classList.remove('status-downloading', 'status-processing');
+
+                const lowerCaseMessage = statusMessage.toLowerCase();
+
+                if (lowerCaseMessage.includes('downloading') || lowerCaseMessage.includes('下載中')) {
+                    statusSpan.classList.add('status-downloading');
+                } else if (lowerCaseMessage.includes('processing') || lowerCaseMessage.includes('處理中') ||
+                           lowerCaseMessage.includes('analyzing') || lowerCaseMessage.includes('分析中') ||
+                           lowerCaseMessage.includes('transcribing') || lowerCaseMessage.includes('轉錄中') ||
+                           lowerCaseMessage.includes('generating') || lowerCaseMessage.includes('生成中')) {
+                    statusSpan.classList.add('status-processing');
+                }
+            };
+
             handleTranscriptionUpdate = (type, payload) => {
                 if (!payload || !payload.task_id) return;
                 let taskElement = taskElements.get(payload.task_id);
@@ -1105,7 +1128,11 @@
                     if (payload.progress !== undefined && progressBar) {
                         progressBar.style.width = `${payload.progress}%`;
                     }
-                    if (statusTextLabel) statusTextLabel.textContent = `${payload.message || '轉錄中'}...`;
+                    if (statusTextLabel) {
+                        const message = `${payload.message || '轉錄中'}...`;
+                        statusTextLabel.textContent = message;
+                        updateTaskStatusClass(statusSpan, message);
+                    }
                 }
 
                 if (type === 'TRANSCRIPTION_STATUS') {
@@ -1254,15 +1281,19 @@
                 const progressBar = taskElement.querySelector('.task-progress-bar');
 
                 if (payload.status === 'completed' && payload.task_type === 'youtube_download') {
-                    if(statusTextLabel) statusTextLabel.textContent = '音訊下載完成，等待 AI 分析...';
+                    const message = '音訊下載完成，等待 AI 分析...';
+                    if(statusTextLabel) statusTextLabel.textContent = message;
+                    updateTaskStatusClass(statusSpan, message); // 為這個中間狀態也上色
                     if (progressContainer) {
                         const bar = progressContainer.querySelector('.task-progress-bar');
-                        if (bar) bar.style.width = '50%';
+                        if (bar) bar.style.width = '50%'; // JULES'S NOTE: Maybe 50% is a good indicator
                     }
                     return;
                 }
 
-                if(statusTextLabel) statusTextLabel.textContent = payload.message || payload.status;
+                const message = payload.message || payload.status;
+                if(statusTextLabel) statusTextLabel.textContent = message;
+                updateTaskStatusClass(statusSpan, message);
 
                 if (payload.status === 'downloading' || payload.status === 'processing' || (payload.progress_code && (payload.progress_code.includes('upload') || payload.progress_code.includes('generating')))) {
                     if (!taskStartTimes[payload.task_id]) {
@@ -1461,6 +1492,20 @@
             };
 
             /**
+             * 取得任務的顯示名稱。如果是 UUID，則縮短它。
+             * @param {string} name - 原始名稱或 ID。
+             * @returns {string} 處理後的顯示名稱。
+             */
+            const getDisplayName = (name) => {
+                if (typeof name !== 'string') return '無效名稱';
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                if (uuidRegex.test(name)) {
+                    return `${name.substring(0, 8)}...`;
+                }
+                return name;
+            };
+
+            /**
              * 建立一個新的任務項目 UI 元素，並加入獨立進度條。
              * @param {string} displayName - 任務的顯示名稱。
              * @param {string} taskId - 任務的唯一 ID。
@@ -1472,11 +1517,13 @@
                 const noTaskMsg = container.querySelector('p');
                 if (noTaskMsg && noTaskMsg.style.display !== 'none') noTaskMsg.style.display = 'none';
 
+                const processedDisplayName = getDisplayName(displayName);
+
                 const taskElement = document.createElement('div');
                 taskElement.className = 'task-item';
                 taskElement.innerHTML = `
                     <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
-                        <span class="task-filename" title="${displayName}" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayName} (${taskType})</span>
+                        <span class="task-filename" title="${displayName}" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${processedDisplayName} (${taskType})</span>
                         <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
                             <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
                         </div>
@@ -1487,6 +1534,7 @@
                 // Add title attribute for tooltip on long filenames
                 const filenameSpan = taskElement.querySelector('.task-filename');
                 if (filenameSpan) {
+                    // 將完整、未經處理的名稱放在 title 屬性中，供使用者懸停查看
                     filenameSpan.setAttribute('title', displayName);
                 }
                 container.appendChild(taskElement);
