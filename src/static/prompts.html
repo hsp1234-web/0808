@@ -3,32 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>提示詞管理</title>
+    <title>提示詞管理 - 音訊轉錄儀</title>
+    <link rel="stylesheet" href="/static/shared/main.css">
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-            background-color: #F8F9FA;
-            color: #202124;
-            padding: 20px;
-            font-size: 100%;
-            line-height: 1.5;
-        }
-        .container {
-            max-width: 900px;
-            margin: auto;
-            background-color: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        h1 {
-            font-size: 1.8em;
-            font-weight: 700;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 16px;
-            margin-bottom: 24px;
-        }
+        /* 頁面專屬的微調 */
         .prompt-group {
             margin-bottom: 24px;
         }
@@ -41,82 +19,71 @@
         textarea {
             width: 100%;
             min-height: 150px;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            font-family: monospace;
-            font-size: 0.9em;
-            line-height: 1.6;
-            box-sizing: border-box;
-            resize: vertical;
         }
         .controls {
-            text-align: right;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
             margin-top: 24px;
-        }
-        button {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            background-color: #007bff;
-            color: white;
-            font-weight: 600;
-            font-size: 1em;
-            transition: all 0.2s;
-        }
-        button:hover:not(:disabled) {
-            background-color: #0056b3;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        .status-message {
-            display: none;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 16px;
-            text-align: center;
-            font-weight: 500;
-        }
-        .status-message.success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .status-message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            text-decoration: none;
-            color: #007bff;
-            font-weight: 500;
-        }
-        .back-link:hover {
-            text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <a href="/static/mp3.html" class="back-link">&larr; 返回主操作介面</a>
-        <h1>提示詞管理</h1>
-        <p>在這裡，您可以檢視和修改系統用於與 AI 溝通的各種提示詞 (Prompts)。修改後請務必儲存。</p>
+    <div id="app" class="container">
+        <!-- 全域標頭 (共享) -->
+        <header class="global-header">
+            <div class="header-top-row">
+                <h1 id="page-title">提示詞管理</h1>
+                <div class="perf-dashboard">
+                    <div class="stat-item">
+                        <span id="status-light" class="status-light"></span>
+                        <span id="status-text">連線中...</span>
+                    </div>
+                    <div class="stat-item" id="gpu-stat-container" style="display: none;">
+                        <span>GPU</span>
+                        <strong id="gpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>CPU</span>
+                        <strong id="cpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>RAM</span>
+                        <strong id="ram-label">--%</strong>
+                    </div>
+                </div>
+            </div>
+            <nav class="nav-buttons">
+                <a href="/static/index.html" class="nav-button" data-page="index">儀表板</a>
+                <a href="/static/transcribe.html" class="nav-button" data-page="transcribe">本地轉錄</a>
+                <a href="/static/downloader.html" class="nav-button" data-page="downloader">媒體下載器</a>
+                <a href="/static/youtube_report.html" class="nav-button" data-page="youtube_report">YouTube 報告</a>
+                <a href="/static/prompts.html" class="nav-button" data-page="prompts">提示詞管理</a>
+            </nav>
+        </header>
 
-        <div id="prompts-container">
-            <p>正在從伺服器載入提示詞...</p>
+        <!-- 狀態訊息區 (共享) -->
+        <div id="status-message-area" class="card" style="display:none;">
+            <div id="status-message-text"></div>
         </div>
 
-        <div class="controls">
-            <button id="save-btn" disabled>儲存變更</button>
+        <div class="card">
+            <p>在這裡，您可以檢視和修改系統用於與 AI 溝通的各種提示詞 (Prompts)。修改後請務必儲存。</p>
+
+            <div id="prompts-container">
+                <p>正在從伺服器載入提示詞...</p>
+            </div>
+
+            <div class="controls">
+                <button id="save-btn" disabled>儲存變更</button>
+            </div>
+            <div id="status-area" class="status-message"></div>
         </div>
-        <div id="status-area" class="status-message"></div>
     </div>
 
-    <script>
+    <script type="module">
+        import { AppInitializer } from '/static/shared/app.js';
+
         document.addEventListener('DOMContentLoaded', () => {
             const promptsContainer = document.getElementById('prompts-container');
             const saveBtn = document.getElementById('save-btn');
@@ -204,9 +171,10 @@
                 }
             });
 
-            // Initial load
             fetchPrompts();
         });
+
+        AppInitializer.init({ pageId: 'prompts' });
     </script>
 </body>
 </html>

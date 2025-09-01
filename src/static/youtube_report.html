@@ -8,9 +8,36 @@
 </head>
 <body>
     <div id="app" class="container">
-        <!-- 標題 -->
-        <header class="card">
-            <h1>音訊轉錄儀 - YouTube 轉報告</h1>
+        <!-- 全域標頭 (共享) -->
+        <header class="global-header">
+            <div class="header-top-row">
+                <h1 id="page-title">YouTube 轉報告</h1>
+                <div class="perf-dashboard">
+                    <div class="stat-item">
+                        <span id="status-light" class="status-light"></span>
+                        <span id="status-text">連線中...</span>
+                    </div>
+                    <div class="stat-item" id="gpu-stat-container" style="display: none;">
+                        <span>GPU</span>
+                        <strong id="gpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>CPU</span>
+                        <strong id="cpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>RAM</span>
+                        <strong id="ram-label">--%</strong>
+                    </div>
+                </div>
+            </div>
+            <nav class="nav-buttons">
+                <a href="/static/index.html" class="nav-button" data-page="index">儀表板</a>
+                <a href="/static/transcribe.html" class="nav-button" data-page="transcribe">本地轉錄</a>
+                <a href="/static/downloader.html" class="nav-button" data-page="downloader">媒體下載器</a>
+                <a href="/static/youtube_report.html" class="nav-button" data-page="youtube_report">YouTube 報告</a>
+                <a href="/static/prompts.html" class="nav-button" data-page="prompts">提示詞管理</a>
+            </nav>
         </header>
 
         <!-- 狀態訊息區 (共享) -->
@@ -18,105 +45,102 @@
             <div id="status-message-text"></div>
         </div>
 
-        <!-- 導覽列 (共享) -->
-        <nav class="card">
-            <div class="tab-container">
-                <a href="/static/index.html" class="tab-button">📊 儀表板</a>
-                <a href="/static/transcribe.html" class="tab-button">📁 本地轉錄</a>
-                <a href="/static/downloader.html" class="tab-button">📥 媒體下載器</a>
-                <a href="/static/youtube_report.html" class="tab-button active">▶️ YouTube 轉報告</a>
-                <a href="/static/prompts.html" class="tab-button">📝 提示詞管理</a>
-            </div>
-        </nav>
-
         <!-- === YouTube 轉報告專屬內容 === -->
-        <div id="youtube-report-tab" class="tab-content active">
-            <div class="card">
-                <!-- API 金鑰管理 -->
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-                    <h2>🔑 Google API 金鑰管理</h2>
-                    <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                    <input type="password" id="api-key-input" data-testid="api-key-input" placeholder="在此貼上您的 Google API 金鑰">
-                    <button id="save-api-key-btn" data-testid="save-api-key-button">儲存金鑰</button>
-                    <button id="clear-api-key-btn" style="background-color: #6c757d;">清除金鑰</button>
-                </div>
-                <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <h2>🔑 Google API 金鑰管理</h2>
+                <a href="/static/prompts.html" class="nav-button" style="background-color: var(--button-secondary-bg-color); color: white;">管理提示詞 &rarr;</a>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px;">
+                <input type="password" id="api-key-input" data-testid="api-key-input" placeholder="在此貼上您的 Google API 金鑰" class="form-input" style="flex-grow: 1;">
+                <button id="save-api-key-btn" data-testid="save-api-key-button">儲存金鑰</button>
+                <button id="clear-api-key-btn" style="background-color: #6c757d;">清除</button>
+            </div>
+            <p id="api-key-status" style="margin-top: 8px; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+        </div>
 
-                <!-- YouTube 影片處理 -->
-                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
-                <fieldset id="youtube-controls-fieldset">
-                    <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
-                        <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-                            <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px;">
-                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px;">
-                            <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+        <div class="card">
+            <h2>▶️ 輸入 YouTube 影片</h2>
+            <fieldset id="youtube-controls-fieldset" disabled>
+                <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
+                    <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                        <input type="text" class="youtube-url-input form-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px;">
+                        <input type="text" class="youtube-filename-input form-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px;">
+                        <button class="remove-youtube-row-btn" style="background-color: var(--status-red); padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+                    </div>
+                </div>
+                <button id="add-youtube-row-btn" data-testid="add-youtube-row-button" style="margin-top: 12px;">+ 新增一列</button>
+            </fieldset>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ 參數控制區</h2>
+            <fieldset id="youtube-params-fieldset" disabled>
+                <div class="grid-2-col">
+                    <div>
+                        <label><strong>任務選項</strong></label>
+                        <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                            <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                            <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                            <label><input type="checkbox" name="yt-task" value="translate"> 使用原文 (基於逐字稿)</label>
+                            <label><input type="checkbox" name="yt-task" value="translate_zh"> 翻譯成繁體中文 (基於逐字稿)</label>
                         </div>
                     </div>
-                    <button id="add-youtube-row-btn" data-testid="add-youtube-row-button" style="margin-top: 12px;">+ 新增一列</button>
-                </fieldset>
-            </div>
-
-            <!-- 參數控制區 -->
-            <div class="card" style="margin-top: 24px;">
-                <h2>⚙️ 參數控制區</h2>
-                <fieldset id="youtube-params-fieldset" disabled>
-                    <div class="grid-2-col">
+                    <div class="flex-col">
                         <div>
-                            <label><strong>任務選項</strong></label>
-                            <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                                <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
-                                <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
-                                <label><input type="checkbox" name="yt-task" value="translate"> 使用原文 (基於逐字稿)</label>
-                                <label><input type="checkbox" name="yt-task" value="translate_zh"> 翻譯成繁體中文 (基於逐字稿)</label>
-                            </div>
+                            <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                            <select id="gemini-model-select" data-testid="gemini-model-select" class="form-select">
+                                <option>等待從伺服器載入模型列表...</option>
+                            </select>
                         </div>
-                        <div class="flex-col">
-                            <div>
-                                <label for="gemini-model-select"><strong>AI 模型</strong></label>
-                                <select id="gemini-model-select" data-testid="gemini-model-select">
-                                    <option>等待從伺服器載入模型列表...</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="yt-output-format-select"><strong>輸出格式</strong></label>
-                                <select id="yt-output-format-select">
-                                    <option value="html">HTML 報告</option>
-                                    <option value="txt">純文字 (.txt)</option>
-                                </select>
-                            </div>
+                        <div>
+                            <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                            <select id="yt-output-format-select" class="form-select">
+                                <option value="html">HTML 報告</option>
+                                <option value="txt">純文字 (.txt)</option>
+                            </select>
                         </div>
                     </div>
-                </fieldset>
-            </div>
-
-            <!-- 操作按鈕 -->
-            <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-                <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
-            </div>
-
-            <!-- YouTube 報告瀏覽區 -->
-            <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
-                <h2>📊 YouTube 報告瀏覽區</h2>
-                <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
-                    <p id="no-youtube-report-msg">尚無已完成的報告</p>
                 </div>
+                 <div style="text-align: center; margin-top: 24px;">
+                    <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
+                </div>
+            </fieldset>
+        </div>
+
+        <div class="card">
+            <h2>📊 YouTube 報告瀏覽區</h2>
+            <div id="youtube-file-browser" class="task-list">
+                <p id="no-youtube-report-msg">尚無已完成的報告</p>
             </div>
         </div>
-        <!-- === 專屬內容結束 === -->
+
+        <!-- 處理中任務 (共享) -->
+        <div class="card">
+            <h3>🔄 處理中任務</h3>
+            <div id="ongoing-tasks" class="task-list">
+                <p>正在載入任務...</p>
+            </div>
+        </div>
+
+        <!-- 已完成任務 (共享) -->
+        <div class="card">
+            <h3>✅ 已完成任務</h3>
+            <div id="completed-tasks" class="task-list">
+                <p>正在載入任務...</p>
+            </div>
+        </div>
     </div>
 
     <script type="module">
         import { AppInitializer } from '/static/shared/app.js';
 
-        // 頁面專屬邏輯
         document.addEventListener('DOMContentLoaded', () => {
             const apiKeyInput = document.getElementById('api-key-input');
             const saveApiKeyBtn = document.getElementById('save-api-key-btn');
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
             const apiKeyStatus = document.getElementById('api-key-status').querySelector('span');
-            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
+            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-button');
             const geminiModelSelect = document.getElementById('gemini-model-select');
             const addYoutubeRowBtn = document.getElementById('add-youtube-row-btn');
             const youtubeLinkList = document.getElementById('youtube-link-list');
@@ -137,7 +161,7 @@
                         break;
                     case 'invalid':
                         apiKeyStatus.textContent = message || '驗證失敗';
-                        apiKeyStatus.style.color = '#dc3545';
+                        apiKeyStatus.style.color = 'var(--status-red)';
                         break;
                     case 'validating':
                         apiKeyStatus.textContent = message || '正在驗證中...';
@@ -247,7 +271,8 @@
                         body: JSON.stringify(payload)
                     });
                     if (!response.ok) throw new Error((await response.json()).detail);
-                    // Clear inputs after successful submission
+
+                    AppInitializer.showStatusMessage(`${requests.length} 個 YouTube 分析任務已成功建立！`, false);
                     youtubeLinkList.querySelectorAll('.youtube-link-row').forEach((row, index) => {
                         if (index === 0) {
                             row.querySelector('.youtube-url-input').value = '';
@@ -264,7 +289,6 @@
                 }
             });
 
-            // Initial load
             const storedApiKey = localStorage.getItem('googleApiKey');
             if (storedApiKey) {
                 apiKeyInput.value = storedApiKey;
@@ -274,8 +298,7 @@
             }
         });
 
-        // 初始化共享應用程式邏輯
-        AppInitializer.init();
+        AppInitializer.init({ pageId: 'youtube_report' });
     </script>
 </body>
 </html>

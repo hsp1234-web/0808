@@ -8,67 +8,62 @@
 </head>
 <body>
     <div id="app" class="container">
-        <!-- 標題 -->
-        <header class="card">
-            <h1>音訊轉錄儀 - 儀表板</h1>
+        <!-- 全域標頭 (共享) -->
+        <header class="global-header">
+            <div class="header-top-row">
+                <h1 id="page-title">儀表板</h1>
+                <div class="perf-dashboard">
+                    <div class="stat-item">
+                        <span id="status-light" class="status-light"></span>
+                        <span id="status-text">連線中...</span>
+                    </div>
+                    <div class="stat-item" id="gpu-stat-container" style="display: none;">
+                        <span>GPU</span>
+                        <strong id="gpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>CPU</span>
+                        <strong id="cpu-label">--%</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>RAM</span>
+                        <strong id="ram-label">--%</strong>
+                    </div>
+                </div>
+            </div>
+            <nav class="nav-buttons">
+                <a href="/static/index.html" class="nav-button" data-page="index">儀表板</a>
+                <a href="/static/transcribe.html" class="nav-button" data-page="transcribe">本地轉錄</a>
+                <a href="/static/downloader.html" class="nav-button" data-page="downloader">媒體下載器</a>
+                <a href="/static/youtube_report.html" class="nav-button" data-page="youtube_report">YouTube 報告</a>
+                <a href="/static/prompts.html" class="nav-button" data-page="prompts">提示詞管理</a>
+            </nav>
         </header>
 
         <!-- 狀態訊息區 -->
-        <div id="status-message-area" class="card">
+        <div id="status-message-area" class="card" style="display:none;">
             <div id="status-message-text"></div>
         </div>
 
-        <!-- 導覽列 -->
-        <nav class="card">
-            <div class="tab-container">
-                <a href="/static/index.html" class="tab-button active">📊 儀表板</a>
-                <a href="/static/transcribe.html" class="tab-button">📁 本地轉錄</a>
-                <a href="/static/downloader.html" class="tab-button">📥 媒體下載器</a>
-                <a href="/static/youtube_report.html" class="tab-button">▶️ YouTube 轉報告</a>
-                <a href="/static/prompts.html" class="tab-button">📝 提示詞管理</a>
-            </div>
-        </nav>
-
-        <!-- 全域儀表板 -->
+        <!-- 主內容 -->
         <div class="card">
-            <h2>📊 全域儀表板</h2>
-            <div class="dashboard-grid">
-                <div class="stat-item">
-                    <span id="status-light" class="status-light"></span>
-                    <strong>狀態:</strong> <span id="status-text">正在連線...</span>
-                </div>
-                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">--</span></div>
-                <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
-                <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
-                <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
-            </div>
-        </div>
-
-        <!-- 處理中任務 -->
-        <div class="card">
-            <h2>🔄 處理中任務</h2>
+            <h2>所有任務狀態</h2>
             <div id="ongoing-tasks" class="task-list">
-                <p id="no-ongoing-task-msg">暫無執行中任務</p>
+                <p>正在載入任務...</p>
             </div>
         </div>
-
-        <!-- 已完成任務 -->
-        <div classs="card">
-            <h2>✅ 已完成任務</h2>
+        <div class="card">
             <div id="completed-tasks" class="task-list">
-                <p id="no-completed-task-msg">尚無完成的任務</p>
+                <p>正在載入任務...</p>
             </div>
         </div>
-
-        <!-- Modal 彈窗 (共享) -->
-        <div id="preview-modal" class="modal-overlay" style="display: none;">
-            <!-- Modal 結構... -->
-        </div>
+        <!-- 在非報告頁，這個容器是隱藏的，但為了讓 JS 腳本正常運作而存在 -->
+        <div id="youtube-file-browser" style="display: none;"></div>
     </div>
 
     <script type="module">
         import { AppInitializer } from '/static/shared/app.js';
-        AppInitializer.init();
+        AppInitializer.init({ pageId: 'index' });
     </script>
 </body>
 </html>
