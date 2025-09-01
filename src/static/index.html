@@ -10,37 +10,37 @@
     <div id="app" class="container">
         <!-- 標題 -->
         <header class="card">
-            <h1>音訊轉錄儀 - 儀表板</h1>
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <h1>音訊轉錄儀 - 儀表板</h1>
+                <a href="/static/menu.html" class="tab-button">🚀 開始新任務</a>
+            </div>
         </header>
 
         <!-- 狀態訊息區 -->
-        <div id="status-message-area" class="card">
+        <div id="status-message-area" class="card" style="display:none;">
             <div id="status-message-text"></div>
         </div>
-
-        <!-- 導覽列 -->
-        <nav class="card">
-            <div class="tab-container">
-                <a href="/static/index.html" class="tab-button active">📊 儀表板</a>
-                <a href="/static/transcribe.html" class="tab-button">📁 本地轉錄</a>
-                <a href="/static/downloader.html" class="tab-button">📥 媒體下載器</a>
-                <a href="/static/youtube_report.html" class="tab-button">▶️ YouTube 轉報告</a>
-                <a href="/static/prompts.html" class="tab-button">📝 提示詞管理</a>
-            </div>
-        </nav>
 
         <!-- 全域儀表板 -->
         <div class="card">
             <h2>📊 全域儀表板</h2>
-            <div class="dashboard-grid">
+            <div id="dashboard-container" class="dashboard-grid">
                 <div class="stat-item">
                     <span id="status-light" class="status-light"></span>
-                    <strong>狀態:</strong> <span id="status-text">正在連線...</span>
+                    <span id="status-text">連線中...</span>
                 </div>
-                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">--</span></div>
-                <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
-                <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
-                <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+                <div class="stat-item" id="gpu-stat-container" style="display: none;">
+                    <span>GPU</span>
+                    <strong id="gpu-label">--%</strong>
+                </div>
+                <div class="stat-item">
+                    <span>CPU</span>
+                    <strong id="cpu-label">--%</strong>
+                </div>
+                <div class="stat-item">
+                    <span>RAM</span>
+                    <strong id="ram-label">--%</strong>
+                </div>
             </div>
         </div>
 
@@ -53,7 +53,7 @@
         </div>
 
         <!-- 已完成任務 -->
-        <div classs="card">
+        <div class="card">
             <h2>✅ 已完成任務</h2>
             <div id="completed-tasks" class="task-list">
                 <p id="no-completed-task-msg">尚無完成的任務</p>

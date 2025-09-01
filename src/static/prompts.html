@@ -3,31 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>提示詞管理</title>
+    <title>提示詞管理 - 音訊轉錄儀</title>
+    <link rel="stylesheet" href="/static/shared/main.css">
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-            background-color: #F8F9FA;
-            color: #202124;
-            padding: 20px;
-            font-size: 100%;
-            line-height: 1.5;
-        }
+        /* 頁面專屬的微調 */
         .container {
             max-width: 900px;
             margin: auto;
-            background-color: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        h1 {
-            font-size: 1.8em;
-            font-weight: 700;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 16px;
-            margin-bottom: 24px;
         }
         .prompt-group {
             margin-bottom: 24px;
@@ -51,26 +33,10 @@
             resize: vertical;
         }
         .controls {
-            text-align: right;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
             margin-top: 24px;
-        }
-        button {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            background-color: #007bff;
-            color: white;
-            font-weight: 600;
-            font-size: 1em;
-            transition: all 0.2s;
-        }
-        button:hover:not(:disabled) {
-            background-color: #0056b3;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
         }
         .status-message {
             display: none;
@@ -88,22 +54,14 @@
             background-color: #f8d7da;
             color: #721c24;
         }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            text-decoration: none;
-            color: #007bff;
-            font-weight: 500;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <a href="/static/mp3.html" class="back-link">&larr; 返回主操作介面</a>
-        <h1>提示詞管理</h1>
+    <div class="container card">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <h1>提示詞管理</h1>
+            <a href="/static/menu.html" class="tab-button" style="background-color: #6c757d;">&larr; 返回選單</a>
+        </div>
         <p>在這裡，您可以檢視和修改系統用於與 AI 溝通的各種提示詞 (Prompts)。修改後請務必儲存。</p>
 
         <div id="prompts-container">

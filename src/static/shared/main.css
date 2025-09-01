@@ -48,6 +48,7 @@ h2 { font-size: 1.3em; font-weight: 600; margin-bottom: 12px; }
 /* --- 分頁樣式 --- */
 .tab-container {
     display: flex;
+    flex-wrap: wrap; /* 允許換行 */
     gap: 8px;
     padding: 0;
 }
@@ -144,12 +145,46 @@ select, textarea, input[type="text"], input[type="password"], input[type="number
     line-height: 28px;
 }
 
-/* --- 儀表板 --- */
-.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-.stat-item { font-size: 0.9em; }
-.status-light { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-.status-green { background-color: var(--status-green); box-shadow: 0 0 6px var(--status-green); }
-.status-yellow { background-color: var(--status-yellow); box-shadow: 0 0 6px var(--status-yellow); }
+/* --- 儀表板 (新版) --- */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 16px;
+    align-items: center;
+}
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #f0f2f5;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+.stat-item span {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 4px;
+}
+.stat-item strong {
+    font-size: 1.4em;
+    color: var(--text-color);
+}
+#status-text {
+    font-size: 1em;
+    font-weight: 600;
+}
+.status-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+.status-green { background-color: var(--status-green); box-shadow: 0 0 8px var(--status-green); }
+.status-yellow { background-color: var(--status-yellow); box-shadow: 0 0 8px var(--status-yellow); }
 
 /* --- 任務列表 --- */
 .task-list { min-height: 60px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }

@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    ✨🐺 善狼一鍵啟動器 (v22.2) 🐺                                 ✨🐺 ║
+# ║    ✨🐺 善狼一鍵啟動器 (v23.0) 🐺                                 ✨🐺 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V22.2 更新日誌 (2025-08-31):                                       ║
-# ║   - **依賴修正**: 將 YouTube 下載依賴加入安裝列表，解決下載失敗問題。║
-# ║   - **金鑰修正**: 修正了 Gemini API 金鑰的處理邏輯，使其在驗證後可  ║
-# ║     被後續的模型列表功能使用。                                     ║
-# ║   - **介面優化**: 將 Whisper 模型的預設選項調整為 'tiny'。         ║
+# ║ - V23.0 更新日誌 (2025-09-02):                                       ║
+# ║   - **架構更新**: 預設分支更新至 `922`，以完全支援 MPA（多頁應用）  ║
+# ║     前端架構。                                                     ║
+# ║   - **相容性檢查**: 確認啟動器與新的 MPA 架構完全相容，無需修改     ║
+# ║     核心啟動邏輯。                                                 ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title ✨🐺 善狼一鍵啟動器 (v22.2) 🐺 { vertical-output: true, display-mode: "form" }
+#@title ✨🐺 善狼一鍵啟動器 (v23.0) 🐺 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -21,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0808.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "902" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "922" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "wolf_project" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
