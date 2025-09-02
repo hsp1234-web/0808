@@ -2256,7 +2256,11 @@
 
             // --- 其他 UI 事件記錄 ---
             timestampToggle.addEventListener('change', (e) => logAction('toggle-timestamp', e.target.checked));
-            modelSelect.addEventListener('change', (e) => logAction('change-model-select', e.target.value));
+            modelSelect.addEventListener('change', (e) => {
+                logAction('change-model-select', e.target.value);
+                // JULES'S FIX (2025-09-02): 更新全域儀表板中的模型顯示
+                modelDisplay.textContent = e.target.value;
+            });
             languageSelect.addEventListener('change', (e) => logAction('change-language-select', e.target.value));
             beamSizeInput.addEventListener('change', (e) => logAction('change-beam-size', e.target.value));
             geminiModelSelect.addEventListener('change', (e) => logAction('change-gemini-model', e.target.value));

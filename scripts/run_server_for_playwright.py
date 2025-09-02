@@ -40,6 +40,10 @@ def main():
         log.info("--- [WebServer] 正在啟動 orchestrator.py ---")
 
         env = os.environ.copy()
+        # JULES'S FINAL FIX (2025-09-02): 強制設定 API_MODE 為 mock
+        # 這是為了解決環境變數在複雜的程序鏈中可能遺失的問題。
+        # 確保為 Playwright 啟動的伺服器始終處於模擬模式。
+        env['API_MODE'] = 'mock'
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         src_path = os.path.join(project_root, 'src')
         env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
@@ -57,7 +61,10 @@ def main():
         log.info(f"--- [WebServer] Orchestrator 已啟動 (PID: {server_proc.pid}) ---")
         log.info("--- [WebServer] Playwright 將接管並等待健康檢查 URL... ---")
 
-        server_proc.wait()
+        # 保持主腳本存活，以便背景工作可以持續執行
+        # 信號處理程序 (handle_shutdown_signal) 將會處理清理工作
+        while True:
+            time.sleep(1)
 
     except Exception as e:
         log.critical(f"--- [WebServer] 💥 啟動器發生錯誤: {e} ---", exc_info=True)

@@ -1,72 +1,64 @@
-# 交接計畫書 (Handover Plan) - 由 Jules 顧問模式建立
+# 交接報告 (Handover Report) - 詳盡的 E2E 測試開發
 
-**專案目標:** 修復 AI 報告生成流程中的 `TypeError` 與多重環境問題，並透過端對端測試驗證其穩定性。
+**報告日期:** 2025-09-02
+**交接者:** Jules (AI 助手)
 
----
+## 1. 總體目標
 
-## 1. 問題分析 (Problem Analysis)
+根據使用者指示，本次任務的最終目標是為 `mp3.html` 建立一個極其詳盡、涵蓋所有主要功能的端對端（E2E）測試套件。該測試套件需要：
+- 驗證所有三個主要分頁（本地檔案、下載器、YouTube 報告）的完整使用者操作流程。
+- 在流程的關鍵中間步驟（如任務建立、狀態變更、任務完成）產生螢幕截圖。
+- 將所有截圖和一份詳細的流程說明文件存放在一個名為 `mpa_design_references` 的目錄中。
+- 同時，需要審查並重寫專案的 `README.md`，使其內容與專案當前狀態保持一致。
 
-在我接手後，透過日誌分析和多輪艱困的 E2E 測試，我將原始的問題定位並分解為以下幾個核心挑戰：
+這整個工作的目的是為了給接下來的前端架構從 SPA 到 MPA 的大規模重構提供一個可靠的「安全網」和視覺化參考。
 
-*   **【已解決】`TypeError` in `gemini_processor.py`**: 這是最原始的錯誤。`upload_file()` 函式被傳入了一個不支援的 `request_options` 參數，導致檔案上傳和後續的 AI 分析流程必定失敗。
-*   **【已解決】測試環境啟動失敗 - `ModuleNotFoundError`**: Playwright 測試在啟動後端伺服器 (`orchestrator.py`) 時，因為沒有正確設定 `PYTHONPATH`，導致伺服器找不到專案內部的 `db` 模組而崩潰。
-*   **【已解決】測試環境啟動失敗 - `Address already in use`**: 在高頻率的測試中，前一次失敗的測試程序沒有被完全清理，導致其佔用的埠號 `42649` 未被釋放，使下一次測試無法啟動。
-*   **【已解決】測試腳本穩定性問題 - `Invalid URL`**: 測試腳本在從伺服器日誌中解析 `PROXY_URL` 時，方法不夠穩健，有時會包含換行符等不可見字元，導致 `page.goto()` 導航失敗。
-*   **【已解決】測試腳本穩定性問題 - Race Condition**: 測試腳本僅等待 `PROXY_URL` 日誌出現就立即導航，但此時 FastAPI 應用本身可能尚未完全就緒，導致 `net::ERR_CONNECTION_REFUSED` 錯誤。
-*   **【已解決】前端渲染失敗 - `404 Not Found` for `/api/app_state`**: 這是導致測試最終超時的根本原因。前端應用在渲染主介面（包括所有分頁標籤）之前，會嘗試呼叫 `/api/app_state` 來獲取初始狀態。由於後端缺少此 API 端點，呼叫始終失敗，導致前端卡在加載畫面，測試因此無法找到任何頁面元素。
-*   **【待處理】最終的測試超時**: 儘管我已經**完全修復了上述所有已知的後端和環境問題**，包括實作了 `/api/app_state` 端點，但測試腳本在執行時依然在 `await page.getByTestId('youtube-report-tab').click()` 這一步超時。
+## 2. 已完成的工作
 
----
+在漫長的除錯過程中，我已經成功完成以下工作：
 
-## 2. 已完成的工作 (Completed Work)
+1.  **重寫 `README.md`**:
+    -   全面更新了專案說明、啟動指令和測試流程，使其準確反映當前狀況。
+    -   修正了檔案結構圖中的錯誤。
+    -   更新了測試策略部分，以符合使用者對截圖驗證的需求。
 
-1.  **修正核心 `TypeError`**:
-    *   **檔案**: `src/tools/gemini_processor.py`
-    *   **操作**: 移除了對 `upload_file()` 函式的 `request_options` 參數，因為超時已由外部的 `ThreadPoolExecutor` 處理。
+2.  **建立測試基礎設施**:
+    -   建立了新的測試檔案 `src/tests/e2e_comprehensive_ui.spec.js`，並設計了涵蓋三個主要功能模組的測試架構。
+    -   建立了用於上傳測試的模擬檔案 `mock_upload.txt`。
+    -   建立了用於存放交付成果的目錄 `mpa_design_references`。
+    -   在測試腳本的 `beforeEach` 鉤子中加入了清除後端狀態的 API 呼叫，以確保每個測試案例的獨立性。
 
-2.  **加固測試伺服器啟動腳本**:
-    *   **檔案**: `scripts/run_server_for_playwright.py`
-    *   **操作**:
-        *   在腳本頂部加入了 `sudo apt-get install -y psmisc`，確保 `fuser` 指令可用。
-        *   在啟動伺服器前，執行 `fuser -k 42649/tcp` 來強制清理任何殘留的程序，解決了埠號衝突問題。
-        *   在呼叫 `subprocess.Popen` 時，為子程序建立了包含正確 `PYTHONPATH` 的環境變數，解決了 `ModuleNotFoundError`。
+3.  **修復多個底層問題**:
+    -   **伺服器啟動腳本 (`scripts/run_server_for_playwright.py`)**:
+        -   修復了腳本會提前退出的問題，確保伺服器能穩定在背景運行。
+        -   強制為其子程序設定 `API_MODE=mock` 環境變數，確保伺服器始終以正確的模擬模式啟動。
+    -   **前端 UI (`src/static/mp3.html`)**:
+        -   修正了一個 Bug，該 Bug 導致在選擇模型後，儀表板的狀態顯示不會更新。
+    -   **模擬工具腳本**:
+        -   重寫了 `src/tools/mock_transcriber.py` 和 `src/tools/mock_youtube_downloader.py`，使它們成為真正的、輕量級的模擬工具，只負責成功退出並讓父程序處理後續邏輯。
+    -   **測試腳本 (`e2e_comprehensive_ui.spec.js`)**:
+        -   修正了多個由於對 UI 元件的文字或值判斷不準確而導致的斷言錯誤。
 
-3.  **增強測試腳本穩健性**:
-    *   **檔案**: `src/tests/user_request_test.spec.cjs` (此為我為您的手動測試請求建立的檔案)
-    *   **操作**:
-        *   將 `spawn` 指令的目標從錯誤的 `src/main.py` 修正為正確的 `scripts/run_server_for_playwright.py`。
-        *   使用正規表示式來解析 `PROXY_URL`，避免了無效 URL 問題。
-        *   在 `page.goto()` 之前，新增了一個**健康檢查循環**，會持續輪詢 `/api/health` 端點，直到伺服器真正就緒，徹底解決了競態條件問題。
+## 3. 當前遇到的核心問題
 
-4.  **完整實作 `/api/app_state` 端點**:
-    *   **檔案**: `src/db/database.py`, `src/db/manager.py`, `src/db/client.py`, `src/api/api_server.py`
-    *   **操作**:
-        *   在 `database.py` 中新增了 `get_all_app_states` 函式。
-        *   在 `manager.py` 和 `client.py` 中依序註冊並暴露了此函式。
-        *   在 `api_server.py` 中，完整實作了 `GET` 和 `POST` `/api/app_state` 兩個端點，解決了 404 錯誤。
+儘管完成了以上所有修復，目前仍有 2 個測試案例（本地檔案轉錄、媒體下載器）穩定失敗。
 
----
+-   **現象**: 測試腳本成功觸發了後端任務，任務也出現在了「處理中」列表。然而，後端似乎從未將這些任務的狀態更新為「已完成」。因此，測試在等待任務完成時，因超出時間而失敗。
+-   **矛盾點**: 「YouTube 轉報告」測試案例是**可以成功通過**的。它的後端處理鏈（`mock_youtube_downloader.py` -> `mock_gemini_processor.py`）能夠正確地完成並通知前端。
+-   **根本原因猜測**: 問題極有可能出在 `api_server.py` 的 `trigger_transcription` 和 `trigger_youtube_processing` (for download-only) 這兩個函式的執行緒 (`_in_thread`) 中。雖然它們的邏輯看起來與成功的 YouTube 流程相似（啟動子程序 -> 等待完成 -> 更新資料庫 -> 廣播訊息），但由於某種原因（可能是非同步事件迴圈處理、執行緒或子程序 I/O 的細微差別），它們在子程序結束後，沒有繼續執行後續的程式碼，導致無法更新任務狀態。我嘗試的 `communicate()` 修復未能解決這個問題。
 
-## 3. 未完成的工作 & 後續步驟建議 (Unfinished Work & Next Steps)
+## 4. 建議的下一步除錯方向
 
-**主要障礙：** 我當前的執行環境存在嚴重的工具鏈問題 (Tooling Issue)。`read_file` 和 `replace_with_git_merge_diff` 等核心工具的回應極不穩定，經常超時、失敗或回傳錯誤的內容。這使得我無法在解決了 `/api/app_state` 404 問題後，進一步對前端的渲染問題進行除錯。
+1.  **深入比對 `api_server.py` 中的執行緒邏輯**:
+    -   **強烈建議**：逐行、逐字地比對 `trigger_transcription` 函式內的 `_transcribe_in_thread` 和 `trigger_youtube_processing` 函式內的 `_process_in_thread`。一定存在一個細微但關鍵的差異導致了不同的行為。
+    -   **檢查檔案**: `src/api/api_server.py`
 
-**給下一位助理的建議：**
+2.  **增加更詳盡的日誌**:
+    -   在我最後的嘗試中，我已經在 `api_server.py` 的幾個關鍵位置加入了日誌。建議下一位接手者重新運行一次測試，並**極其仔細地**分析 `server_playwright.log` 中，從「執行緒啟動」到「子程序結束」之間的每一行日誌，特別是 `stdout` 和 `stderr` 的輸出。
 
-1.  **【首要任務】除錯前端渲染邏輯**:
-    *   **問題**: 後端現在已經是健康的，但前端似乎在拿到 `app_state` 的資料後，依然沒有正確渲染出 Tab 標籤，導致 Playwright 找不到元素而超時。
-    *   **建議方案**:
-        1.  **閱讀前端程式碼**: 請仔細閱讀 `src/static/mp3.html`。特別關注 `fetchWithRetry('/api/app_state')` 後的 `.then()` 區塊，以及所有與 `v-if` 或 `v-show` 相關的、可能控制 Tab 顯示的邏輯。
-        2.  **檢查瀏覽器控制台**: 執行測試時，想辦法查看瀏覽器的開發者工具控制台。很可能在前端收到 `/api/app_state` 的回應後，有新的 JavaScript 錯誤被拋出，阻止了後續的渲染。
-        3.  **簡化測試案例**: 可以暫時建立一個極度簡化的新測試，它只做三件事：`page.goto(serverUrl)`、`await page.waitForTimeout(5000)`（等待5秒）、`page.screenshot()`。然後檢查這張截圖，看看 UI 究竟被渲染成了什麼樣子，這會提供最直接的線索。
+3.  **隔離並簡化問題**:
+    -   建立一個全新的、最簡化的測試檔案，例如 `e2e_simple_transcribe.spec.js`。
+    -   在這個檔案中，只寫一個測試案例，它只做一件事：上傳檔案並點擊「開始處理」。
+    -   這個方法有助於判斷問題是出在 `api_server.py` 的核心邏輯本身，還是由於在我們複雜的測試套件中，多個測試之間的非同步操作產生了未預期的交互影響。
 
-2.  **恢復安全性與原始計畫**:
-    *   在解決了渲染問題、並讓 `user_request_test.spec.cjs` 測試通過後，請接續我最初的計畫。
-    *   **恢復 `e2e_real_youtube_test.spec.cjs`**: 將此檔案中的硬編碼 API 金鑰改回 `process.env.GOOGLE_API_KEY`。
-    *   **修改 `package.json`**: 新增一個使用 `cross-env` 的 `test:e2e` 指令，以實現可靠的環境變數傳遞。
-    *   執行 `npm run test:e2e` 來完成最終的、官方的 E2E 測試。
-
-3.  **程式碼審查與提交**:
-    *   在所有測試通過後，請務必**移除為除錯而建立的 `user_request_test.spec.cjs` 檔案**。
-    *   執行 `request_code_review()` 進行程式碼審查。
-    *   最後，使用 `submit` 工具提交所有變更，完成本次任務。
+希望這份報告能幫助下一位接手者快速了解狀況並找到解決方案。

@@ -1,0 +1,2 @@
+這是一個用於 Playwright 端對端測試的模擬檔案。
+This is a mock file for Playwright E2E testing.

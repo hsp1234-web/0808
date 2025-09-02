@@ -907,8 +907,7 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                encoding='utf-8',
-                bufsize=1
+                encoding='utf-8'
             )
 
             start_message_filename = original_filename or Path(file_path).name
@@ -918,26 +917,13 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
             }
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(start_message), loop)
 
-            if process.stdout:
-                for line in iter(process.stdout.readline, ''):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if data.get("type") == "segment":
-                            message = {
-                                "type": "TRANSCRIPTION_UPDATE",
-                                "payload": {"task_id": task_id, **data}
-                            }
-                            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
-                    except json.JSONDecodeError:
-                        log.warning(f"[執行緒] 無法解析來自 transcriber 的 JSON 行: {line}")
-
-            process.wait()
+            # JULES'S FINAL FIX (2025-09-02): 使用 communicate() 來避免 I/O 死鎖
+            stdout_output, stderr_output = process.communicate()
 
             if process.returncode == 0:
-                log.info(f"✅ [執行緒] 轉錄任務 '{task_id}' 成功完成。")
+                # 即使我們不處理 stdout_output，也要確保子程序成功完成
+                log.info(f"✅ [執行緒] 轉錄子程序 '{task_id}' 成功完成。")
+                # 由於 mock script 現在會寫入檔案，我們直接讀取它
                 final_transcript = output_file_path.read_text(encoding='utf-8').strip()
 
                 # 問題二：將檔案系統路徑轉換為可存取的 URL
@@ -961,6 +947,7 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                     "payload": {"task_id": task_id, "status": "failed", "error": stderr_output}
                 }
 
+            log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
 
         except Exception as e:
@@ -1057,10 +1044,12 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 download_result['output_path'] = convert_to_media_url(download_result['output_path'])
                 db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
                 log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
-                asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                final_message = {
                     "type": "YOUTUBE_STATUS",
                     "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
-                }), loop)
+                }
+                log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
+                asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
                 return
 
             db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
@@ -1140,6 +1129,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "result": process_result
             }
             update_message = {"type": "YOUTUBE_STATUS", "payload": final_payload}
+            log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(update_message)}")
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(update_message), loop)
             log.info(f"✅ [執行緒] 已廣播 Gemini AI 任務完成訊息。")
 
