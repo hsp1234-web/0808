@@ -1,0 +1,4 @@
+-r requirements/server.txt
+-r requirements/transcriber.txt
+-r requirements/youtube.txt
+-r requirements/gemini.txt
