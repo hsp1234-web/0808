@@ -204,6 +204,18 @@ async def notify_api_server(task_id: str, status: str, result: dict = None):
     except httpx.RequestError as e:
         log.error(f"通知 API 伺服器失敗: {e}")
 
+async def heartbeat_task():
+    """背景任務，定期發送心跳到資料庫。"""
+    log.info("❤️ 心跳任務已啟動。")
+    while True:
+        try:
+            current_timestamp = str(time.time())
+            db_client.set_app_state("worker_last_heartbeat", current_timestamp)
+            log.info(f"❤️ 發送心跳，時間戳: {current_timestamp}")
+        except Exception as e:
+            log.error(f"發送心跳時發生錯誤: {e}", exc_info=True)
+        await asyncio.sleep(10) # 每 10 秒發送一次
+
 async def main_loop():
     """工人的主迴圈，不斷輪詢並處理任務 (異步版本)"""
     log.info("✅ Worker 主迴圈已啟動，開始輪詢任務...")
@@ -251,7 +263,10 @@ async def health_handshake():
 
 async def main():
     if await health_handshake():
-        await main_loop()
+        # 同時啟動主迴圈和心跳任務
+        heartbeat = asyncio.create_task(heartbeat_task())
+        main = asyncio.create_task(main_loop())
+        await asyncio.gather(main, heartbeat)
 
 if __name__ == "__main__":
     # 安裝 uvloop (如果可用) 以獲得更佳效能

@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+# --- 標準化路徑修正 ---
+# 這是解決 ModuleNotFoundError 的標準且穩健的方法。
+# 無論此腳本從何處被執行，它都能確保 'src' 目錄位於 Python 的搜尋路徑中。
+import sys
+from pathlib import Path
+
+# 1. 取得目前檔案 (`orchestrator.py`) 的絕對路徑。
+#    例如: /path/to/project/src/core/orchestrator.py
+this_file = Path(__file__).resolve()
+
+# 2. 透過 .parent 兩次，我們向上找到 'src' 目錄。
+#    -> .parent -> /path/to/project/src/core
+#    -> .parent -> /path/to/project/src
+SRC_DIR = this_file.parent.parent
+
+# 3. 將 'src' 目錄的絕對路徑加到 sys.path 的最前面。
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+# --- 路徑修正結束 ---
+
 import argparse
 import logging
 import os
 import re
 import socket
 import subprocess
-import sys
 import threading
 import time
-from pathlib import Path
 from db.client import DBClient, get_client
-
-# --- 路徑設定 ---
-# 將專案的根目錄 (本檔案的上兩層) 新增到 Python 的搜尋路徑中
-# 這樣可以確保無論從哪裡執行，都能正確找到 src 下的模組
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR))
-SRC_DIR = ROOT_DIR / "src"
 
 
 logging.basicConfig(
@@ -162,23 +174,76 @@ def main():
 
         log.info("--- [協調器進入監控模式] ---")
 
-        last_heartbeat_time = time.time()
         while not stop_event.is_set():
-            # 1. 檢查所有子程序是否仍在運行
-            for proc in processes:
+            # --- 監控 API Server 和 DB Manager (關鍵服務) ---
+            # 如果這些核心服務失敗，整個協調器應該停止並報告錯誤。
+            for proc in [db_manager_proc, api_proc]:
                 if proc.poll() is not None:
-                    raise RuntimeError(f"子程序 {proc.args} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
+                    raise RuntimeError(f"核心服務 {proc.args[1]} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}。協調器將關閉。")
 
-            # 4. 心跳檢查
-            if time.time() - last_heartbeat_time > 15:
-                try:
-                    active_tasks = db_client.are_tasks_active()
-                    log.info(f"HEARTBEAT: RUNNING {'(TASKS ACTIVE)' if active_tasks else ''}")
-                    last_heartbeat_time = time.time()
-                except Exception as e:
-                    log.error(f"心跳檢查失敗: {e}")
-                    # 如果心跳連續失敗，可能需要採取行動
-            time.sleep(2)
+            # --- 監控 Worker (可自我療癒的服務) ---
+            # 1. 監工職責：檢查 Worker 程序是否死亡
+            if worker_proc.poll() is not None:
+                log.critical(f"🚨 [監工] 偵測到 Worker 程序 (PID: {worker_proc.pid}) 已死亡 (返回碼: {worker_proc.returncode})。將在 5 秒後嘗試重啟...")
+                time.sleep(5)
+
+                log.info("🔧 正在重啟 Worker...")
+                worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=worker_env)
+                processes[-1] = worker_proc # 替換掉舊的 proc 物件
+                log.info(f"✅ 新的 Worker 程序已啟動，PID: {worker_proc.pid}")
+
+                # 為新的程序重啟日誌讀取執行緒
+                worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker', None, None))
+                worker_stderr_thread = threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr', None, None))
+                threads[-2:] = [worker_stdout_thread, worker_stderr_thread]
+                for t in [worker_stdout_thread, worker_stderr_thread]:
+                    t.daemon = True
+                    t.start()
+                continue # 重啟後，立即開始下一次迴圈檢查
+
+            # 2. 稽核員職責：如果程序存活，檢查其心跳是否過期
+            try:
+                heartbeat_str = db_client.get_app_state("worker_last_heartbeat")
+                if heartbeat_str:
+                    heartbeat_ts = float(heartbeat_str)
+                    time_diff = time.time() - heartbeat_ts
+                    if time_diff > 60:
+                        log.critical(f"🚨 [稽核員] Worker (PID: {worker_proc.pid}) 心跳已過期 {time_diff:.1f} 秒，判定為「假死」狀態。將執行終止並重啟...")
+
+                        # 終止殭屍程序
+                        worker_proc.terminate()
+                        try:
+                            worker_proc.wait(timeout=5)
+                            log.info(f"✅ 殭屍 Worker (PID: {worker_proc.pid}) 已成功終止。")
+                        except subprocess.TimeoutExpired:
+                            log.warning(f"⚠️ 終止殭屍 Worker (PID: {worker_proc.pid}) 超時，將強制終止。")
+                            worker_proc.kill()
+
+                        # 等待一小段時間再重啟
+                        time.sleep(2)
+
+                        # 重啟程序 (與上面「監工職責」的邏輯相同)
+                        log.info("🔧 正在重啟 Worker...")
+                        worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=worker_env)
+                        processes[-1] = worker_proc
+                        log.info(f"✅ 新的 Worker 程序已啟動，PID: {worker_proc.pid}")
+
+                        worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker', None, None))
+                        worker_stderr_thread = threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr', None, None))
+                        threads[-2:] = [worker_stdout_thread, worker_stderr_thread]
+                        for t in [worker_stdout_thread, worker_stderr_thread]:
+                            t.daemon = True
+                            t.start()
+
+                else:
+                    # 如果從未有過心跳，給它一些啟動時間
+                    log.info("暫未偵測到 Worker 心跳，可能正在啟動中...")
+
+            except Exception as e:
+                log.error(f"在檢查 Worker 心跳時發生錯誤: {e}", exc_info=True)
+
+            # --- 主迴圈等待 ---
+            time.sleep(15) # 每 15 秒檢查一次
 
     except (Exception, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):

@@ -39,24 +39,28 @@ def main():
     try:
         log.info("--- [WebServer] 正在啟動 orchestrator.py ---")
 
-        env = os.environ.copy()
-        # JULES'S FINAL FIX (2025-09-02): 強制設定 API_MODE 為 mock
-        # 這是為了解決環境變數在複雜的程序鏈中可能遺失的問題。
-        # 確保為 Playwright 啟動的伺服器始終處於模擬模式。
-        env['API_MODE'] = 'mock'
+        # --- 最終修復 (2025-09-02) ---
+        # 根本原因分析：直接在 subprocess.Popen 中設定 env={'PYTHONPATH': ...} 的方式，
+        # 在經過 bun -> cross-env -> playwright 的複雜呼叫鏈後，似乎並未被子程序正確繼承。
+        # 唯一的、最可靠的解決方法是像在 shell 中一樣，將環境變數的設定作為指令本身的一部分。
+        # 我們使用 `shell=True` 來執行一個包含環境變數設定的完整 shell 指令。
+        # 雖然 `shell=True` 通常有安全隱憂，但在這個所有路徑和參數都由我們內部控制的
+        # 特定情境下，是安全且必要的。
+
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         src_path = os.path.join(project_root, 'src')
-        env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        orchestrator_path = os.path.join(project_root, 'src', 'core', 'orchestrator.py')
 
-        server_cmd = [
-            sys.executable,
-            "-u",
-            "src/core/orchestrator.py",
-            "--port",
-            "42649"
-        ]
+        # 將指令組合成一個 shell 字串
+        command_string = (
+            f"PYTHONPATH={src_path} API_MODE=mock "
+            f"{sys.executable} -u {orchestrator_path} --port 42649"
+        )
 
-        server_proc = subprocess.Popen(server_cmd, stdout=sys.stdout, stderr=sys.stderr, env=env)
+        log.info(f"--- [WebServer] 執行指令: {command_string} ---")
+
+        # 使用 shell=True 執行
+        server_proc = subprocess.Popen(command_string, stdout=sys.stdout, stderr=sys.stderr, shell=True)
 
         log.info(f"--- [WebServer] Orchestrator 已啟動 (PID: {server_proc.pid}) ---")
         log.info("--- [WebServer] Playwright 將接管並等待健康檢查 URL... ---")
