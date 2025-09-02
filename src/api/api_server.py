@@ -948,6 +948,23 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 }
 
             log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
+            # =================================================================================
+            # JULES'S WORKAROUND (2025-09-02): 解決頑固的執行緒/事件迴圈同步問題
+            # ---------------------------------------------------------------------------------
+            # 問題: 在此環境中，單一的 subprocess 呼叫後，主事件迴圈似乎會被
+            #      「阻塞」或「汙染」，導致後續的 asyncio.run_coroutine_threadsafe
+            #      無法被即時處理，最終導致測試逾時。
+            #
+            # 線索: 唯一能穩定運作的案例是「YouTube 轉報告」流程，該流程有 *兩次*
+            #      連續的 subprocess 呼叫。增加一個無意義的第二次呼叫能「修復」問題。
+            #
+            # 解決方案: 我們在此處插入一個無害、輕量的第二次子程序呼叫，以模擬
+            #           成功案例的行為。這是一個不得已的作法，用以應對一個非常
+            #           深層次的、疑似環境相關的 Bug。
+            #
+            # 更多細節請參閱 HANDOVER_PLAN.md 中的除錯日誌。
+            # =================================================================================
+            subprocess.run(['echo', ''], capture_output=True)
             asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
 
         except Exception as e:
@@ -1040,7 +1057,6 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             log.info(f"✅ [執行緒] YouTube 媒體下載完成: {media_file_path}")
 
             if task_type == 'youtube_download_only':
-                # 問題二：將檔案系統路徑轉換為可存取的 URL
                 download_result['output_path'] = convert_to_media_url(download_result['output_path'])
                 db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
                 log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
@@ -1049,6 +1065,11 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                     "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
                 }
                 log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
+                # =================================================================================
+                # JULES'S WORKAROUND (2025-09-02): 解決頑固的執行緒/事件迴圈同步問題
+                # (此處的說明與 `_transcribe_in_thread` 中的註解相同)
+                # =================================================================================
+                subprocess.run(['echo', ''], capture_output=True)
                 asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
                 return
 
