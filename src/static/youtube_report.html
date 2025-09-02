@@ -61,7 +61,7 @@
 
         <div class="card">
             <h2>▶️ 輸入 YouTube 影片</h2>
-            <fieldset id="youtube-controls-fieldset" disabled>
+            <fieldset id="youtube-controls-fieldset">
                 <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
                     <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                         <input type="text" class="youtube-url-input form-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px;">
@@ -102,7 +102,8 @@
                         </div>
                     </div>
                 </div>
-                 <div style="text-align: center; margin-top: 24px;">
+                 <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                    <button id="download-audio-only-btn" data-testid="download-audio-only-button" disabled>🎧 僅下載音訊</button>
                     <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
                 </div>
             </fieldset>
@@ -141,9 +142,11 @@
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
             const apiKeyStatus = document.getElementById('api-key-status').querySelector('span');
             const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-button');
+            const downloadAudioOnlyBtn = document.getElementById('download-audio-only-btn');
             const geminiModelSelect = document.getElementById('gemini-model-select');
             const addYoutubeRowBtn = document.getElementById('add-youtube-row-btn');
             const youtubeLinkList = document.getElementById('youtube-link-list');
+            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
             const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
             const ytOutputFormatSelect = document.getElementById('yt-output-format-select');
 
@@ -151,8 +154,13 @@
                 apiKeyStatus.style.color = 'inherit';
                 apiKeyStatus.style.fontStyle = 'normal';
                 const isValid = state === 'valid';
+
                 startYoutubeProcessingBtn.disabled = !isValid;
                 youtubeParamsFieldset.disabled = !isValid;
+
+                const hasUrl = Array.from(youtubeLinkList.querySelectorAll('.youtube-url-input')).some(input => input.value.trim() !== '');
+                downloadAudioOnlyBtn.disabled = !hasUrl;
+                youtubeControlsFieldset.disabled = false;
 
                 switch (state) {
                     case 'valid':
@@ -235,7 +243,10 @@
                 }
             });
 
-            startYoutubeProcessingBtn.addEventListener('click', async () => {
+            async function processYoutubeRequest(downloadOnly = false) {
+                const button = downloadOnly ? downloadAudioOnlyBtn : startYoutubeProcessingBtn;
+                const originalText = button.textContent;
+
                 const requests = Array.from(youtubeLinkList.querySelectorAll('.youtube-link-row')).map(row => ({
                     url: row.querySelector('.youtube-url-input').value.trim(),
                     filename: row.querySelector('.youtube-filename-input').value.trim(),
@@ -246,23 +257,25 @@
                     return;
                 }
 
-                const selectedTasks = Array.from(document.querySelectorAll('input[name="yt-task"]:checked')).map(cb => cb.value);
-                if (selectedTasks.length === 0) {
-                    AppInitializer.showStatusMessage('請至少選擇一個 AI 分析任務。', true);
-                    return;
+                if (!downloadOnly) {
+                    const selectedTasks = Array.from(document.querySelectorAll('input[name="yt-task"]:checked')).map(cb => cb.value);
+                    if (selectedTasks.length === 0) {
+                        AppInitializer.showStatusMessage('請至少選擇一個 AI 分析任務。', true);
+                        return;
+                    }
                 }
 
                 const payload = {
                     requests: requests,
                     model: geminiModelSelect.value,
-                    download_only: false,
-                    tasks: selectedTasks.join(','),
+                    download_only: downloadOnly,
+                    tasks: downloadOnly ? '' : Array.from(document.querySelectorAll('input[name="yt-task"]:checked')).map(cb => cb.value).join(','),
                     output_format: ytOutputFormatSelect.value,
                     api_key: localStorage.getItem('googleApiKey')
                 };
 
-                startYoutubeProcessingBtn.disabled = true;
-                startYoutubeProcessingBtn.textContent = '正在建立任務...';
+                button.disabled = true;
+                button.textContent = '正在建立任務...';
 
                 try {
                     const response = await fetch('/api/youtube/process', {
@@ -272,7 +285,7 @@
                     });
                     if (!response.ok) throw new Error((await response.json()).detail);
 
-                    AppInitializer.showStatusMessage(`${requests.length} 個 YouTube 分析任務已成功建立！`, false);
+                    AppInitializer.showStatusMessage(`${requests.length} 個任務已成功建立！`, false);
                     youtubeLinkList.querySelectorAll('.youtube-link-row').forEach((row, index) => {
                         if (index === 0) {
                             row.querySelector('.youtube-url-input').value = '';
@@ -281,12 +294,20 @@
                             row.remove();
                         }
                     });
+                    updateApiKeyUI(localStorage.getItem('googleApiKey') ? 'valid' : 'not_provided');
                 } catch (error) {
-                    AppInitializer.showStatusMessage(`處理 YouTube 任務時發生錯誤: ${error.message}`, true);
+                    AppInitializer.showStatusMessage(`處理任務時發生錯誤: ${error.message}`, true);
                 } finally {
-                    startYoutubeProcessingBtn.disabled = false;
-                    startYoutubeProcessingBtn.textContent = '🚀 分析影片 (Gemini)';
+                    button.disabled = false;
+                    button.textContent = originalText;
                 }
+            }
+
+            startYoutubeProcessingBtn.addEventListener('click', () => processYoutubeRequest(false));
+            downloadAudioOnlyBtn.addEventListener('click', () => processYoutubeRequest(true));
+
+            youtubeLinkList.addEventListener('input', () => {
+                 updateApiKeyUI(localStorage.getItem('googleApiKey') ? 'valid' : 'not_provided');
             });
 
             const storedApiKey = localStorage.getItem('googleApiKey');

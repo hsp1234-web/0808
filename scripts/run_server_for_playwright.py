@@ -11,11 +11,11 @@ log = logging.getLogger('run_server_for_playwright')
 def main():
     # --- 依賴與環境準備 ---
     try:
-        # 安裝 psmisc 以確保 fuser 指令存在
-        log.info("--- [WebServer] 正在安裝 'psmisc' (提供 fuser)... ---")
+        # 安裝必要的系統依賴
+        log.info("--- [WebServer] 正在安裝 'psmisc' 和 'ffmpeg'... ---")
         subprocess.run(['sudo', 'apt-get', 'update'], check=True)
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'psmisc'], check=True)
-        log.info("--- [WebServer] 'psmisc' 安裝成功。 ---")
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'psmisc', 'ffmpeg'], check=True)
+        log.info("--- [WebServer] 'psmisc' 和 'ffmpeg' 安裝成功。 ---")
 
         # 清理目標埠號
         log.info("--- [WebServer] 正在清理目標埠號 42649... ---")

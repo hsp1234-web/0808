@@ -71,59 +71,68 @@ function renderDashboard() {
     }
 }
 
+/**
+ * 根據任務資訊產生對應的 HTML 字串。
+ * @param {object} task - 任務物件。
+ * @returns {string} 代表該任務的 HTML 字串。
+ */
 function getTaskHtml(task) {
     const isOngoing = ['starting', 'downloading', 'processing', 'analyzing', 'transcribing', 'generating'].includes(task.status);
-    const displayName = (task.result && task.result.video_title) || (task.payload && task.payload.original_filename) || task.url || task.task_id;
-    const fullDisplayName = (task.payload && task.payload.original_filename) || task.url || task.task_id;
+    const result = task.result || {};
+    const payload = task.payload || {};
+
+    const displayName = result.video_title || payload.original_filename || task.url || task.task_id;
+    const fullDisplayName = payload.original_filename || task.url || task.task_id;
     const taskType = task.type || '未知';
 
     let statusHtml = '';
+
     if (isOngoing) {
         const elapsed = task.startTime ? `(${Math.floor((Date.now() - task.startTime) / 1000)}s)` : '';
         statusHtml = `<span class="task-status status-processing">${task.message || task.status} ${elapsed}</span>`;
     } else if (task.status === 'completed') {
         const buttons = [];
+        const isReportTask = ['gemini_process', 'youtube_process_chain'].includes(task.type);
+        const isTranscriptionTask = task.type === 'transcribe';
+        const isDownloadTask = ['download', 'youtube_download_only'].includes(task.type);
 
-        // JULES'S FIX (2025-09-01): 擴大條件判斷，以涵蓋所有應被視為「報告」的任務類型。
-        // 舊的邏輯只檢查 'gemini_process'，但後端可能會回傳 'youtube_process_chain'
-        // 或甚至是 'youtube_download_only' 作為最終的完成類型。
-        const isReportTask = ['gemini_process', 'youtube_process_chain', 'youtube_download_only'].includes(task.type);
+        const artifactPath = result.output_path || ''; // 主要產出物 (報告、逐字稿)
+        const sourcePath = result.source_path || (isDownloadTask ? artifactPath : ''); // 原始檔 (音訊、影片)
 
-        if (isReportTask) {
-            const result = task.result || {};
-            const outputPath = result.output_path || '';
+        // 1. 報告任務的專屬按鈕
+        if (isReportTask && artifactPath) {
+            const fileType = artifactPath.includes('.html') ? 'text/html' : 'text/plain';
+            buttons.push(`<button class="button-like btn-details" data-task-id="${task.task_id}" data-testid="task-details-button">詳細資料</button>`);
+            buttons.push(`<button class="button-like btn-preview" data-task-id="${task.task_id}" data-file-type="${fileType}" data-testid="task-preview-button">預覽報告</button>`);
+            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-artifact-button">下載產出</a>`);
+        }
 
-            // 如果沒有輸出路徑，則不顯示任何按鈕
-            if (outputPath) {
-                const extension = outputPath.includes('.html') ? '.html' : '.txt';
-                const fileType = extension === '.html' ? 'text/html' : 'text/plain';
-
-                // 1. 詳細資料按鈕
-                buttons.push(`<button class="button-like btn-details" data-task-id="${task.task_id}" data-testid="task-details-button">詳細資料</button>`);
-                // 2. 預覽按鈕
-                buttons.push(`<button class="button-like btn-preview" data-task-id="${task.task_id}" data-file-type="${fileType}" data-testid="task-preview-button">預覽</button>`);
-                // 3. 下載產出按鈕
-                buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-button">下載產出</a>`);
+        // 2. 轉錄任務的按鈕
+        if (isTranscriptionTask) {
+            if (result.transcript_path) { // 優先使用專用的逐字稿路徑
+                 buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-artifact-button">下載產出</a>`);
             }
+            // 預覽媒體按鈕，指向原始上傳的檔案
+            if (result.output_path) {
+                buttons.push(`<button class="button-like btn-preview-media" data-task-id="${task.task_id}" data-testid="task-preview-media-button">預覽媒體</button>`);
+            }
+        }
 
-        } else { // 處理 'transcribe' 和 'download' 任務
-            // JULES'S FIX (2025-09-01): 根據 Code Review 的回饋，完整還原轉錄和下載任務的按鈕。
-            // 確保「預覽媒體」按鈕能正確顯示。
+        // 3. 下載任務的按鈕
+        if (isDownloadTask && sourcePath) {
+            buttons.push(`<button class="button-like btn-preview-media" data-task-id="${task.task_id}" data-testid="task-preview-media-button">預覽媒體</button>`);
+            buttons.push(`<a href="/api/download/${task.task_id}?type=source" class="button-like btn-download" data-testid="task-download-source-button">下載媒體</a>`);
+            buttons.push(`<button class="button-like btn-rename" data-task-id="${task.task_id}" data-testid="task-rename-button">修改名稱</button>`);
 
-            // 1. 下載產出按鈕 (例如：逐字稿 .txt)
-            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-button">下載產出</a>`);
-
-            // 2. 預覽媒體按鈕 (例如：原始的 .mp3 音訊檔)
-            // 這裡的 output_path 通常指向原始的上傳或下載檔案，而不是轉錄結果。
-            const result = task.result || {};
-            if ((task.type === 'transcribe' || task.type === 'download') && result.output_path) {
-                 buttons.push(`<a href="${result.output_path}" target="_blank" class="button-like btn-preview" data-testid="task-preview-media-button">預覽媒體</a>`);
+            const isAudio = /\.(mp3|m4a|wav|flac|ogg)$/i.test(sourcePath);
+            if (isAudio) {
+                buttons.push(`<button class="button-like btn-send-to-whisper" data-task-id="${task.task_id}" data-testid="task-send-to-transcriber-button">送至轉錄區</button>`);
             }
         }
 
         statusHtml = `<div class="task-actions">${buttons.join('')}</div>`;
-    } else {
-        statusHtml = `<span class="task-status status-failed">${task.status}: ${task.error || '未知錯誤'}</span>`;
+    } else { // FAILED
+        statusHtml = `<span class="task-status status-failed" title="${task.error || '未知錯誤'}">${task.status}</span>`;
     }
 
     return `<div class="task-item" data-task-id="${task.task_id}">
@@ -132,26 +141,35 @@ function getTaskHtml(task) {
             </div>`;
 }
 
+
+/**
+ * 根據全域狀態重新渲染所有任務列表。
+ */
 function renderTaskLists() {
     const { tasks } = globalState;
     const ongoingTasksContainer = document.getElementById('ongoing-tasks');
     const completedTasksContainer = document.getElementById('completed-tasks');
     const youtubeReportsContainer = document.getElementById('youtube-file-browser');
 
-    const ongoingTasks = tasks.filter(t => ['starting', 'downloading', 'processing', 'analyzing', 'transcribing', 'generating'].includes(t.status));
-    const finishedTasks = tasks.filter(t => ['completed', 'failed'].includes(t.status));
+    const ongoingTasks = tasks.filter(t => ['starting', 'downloading', 'processing', 'analyzing', 'transcribing', 'generating'].includes(t.status))
+                              .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const finishedTasks = tasks.filter(t => ['completed', 'failed'].includes(t.status))
+                               .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    const youtubeReports = finishedTasks.filter(t => t.type === 'gemini_process');
-    const otherCompletedTasks = finishedTasks.filter(t => t.type !== 'gemini_process');
+    if (youtubeReportsContainer && window.location.pathname.includes('youtube_report.html')) {
+        const reportTasks = finishedTasks.filter(t => ['gemini_process', 'youtube_process_chain'].includes(t.type));
+        youtubeReportsContainer.innerHTML = reportTasks.length > 0 ? reportTasks.map(getTaskHtml).join('') : `<p>尚無已完成的報告</p>`;
+
+        const otherCompletedTasks = finishedTasks.filter(t => !['gemini_process', 'youtube_process_chain'].includes(t.type));
+        if (completedTasksContainer) {
+            completedTasksContainer.innerHTML = otherCompletedTasks.length > 0 ? otherCompletedTasks.map(getTaskHtml).join('') : `<p>尚無其他完成的任務</p>`;
+        }
+    } else if (completedTasksContainer) {
+        completedTasksContainer.innerHTML = finishedTasks.length > 0 ? finishedTasks.map(getTaskHtml).join('') : `<p>尚無完成的任務</p>`;
+    }
 
     if (ongoingTasksContainer) {
         ongoingTasksContainer.innerHTML = ongoingTasks.length > 0 ? ongoingTasks.map(getTaskHtml).join('') : `<p>暫無執行中任務</p>`;
-    }
-    if (completedTasksContainer) {
-        completedTasksContainer.innerHTML = otherCompletedTasks.length > 0 ? otherCompletedTasks.map(getTaskHtml).join('') : `<p>尚無完成的任務</p>`;
-    }
-    if (youtubeReportsContainer) {
-        youtubeReportsContainer.innerHTML = youtubeReports.length > 0 ? youtubeReports.map(getTaskHtml).join('') : `<p>尚無已完成的報告</p>`;
     }
 }
 
@@ -205,15 +223,53 @@ function renderUI() {
 
 // --- Modal Logic ---
 
-function openPreviewModal(task) {
+function openMediaPreviewModal(task) {
     const modal = document.getElementById('preview-modal');
     const title = document.getElementById('modal-title');
     const body = modal.querySelector('.modal-body');
     const result = task.result || {};
-    const outputPath = result.output_path || '';
+
+    const mediaPath = result.source_path || result.output_path;
+    if (!mediaPath) {
+        showStatusMessage('找不到媒體檔案路徑。', true);
+        return;
+    }
+
+    const isVideo = /\.(mp4|webm|mov)$/i.test(mediaPath);
+    const isAudio = /\.(mp3|m4a|wav|flac|ogg)$/i.test(mediaPath);
+
+    title.textContent = `預覽媒體: ${result.video_title || task.payload.original_filename}`;
+    body.innerHTML = '';
+
+    let mediaElement;
+    if (isVideo) {
+        mediaElement = document.createElement('video');
+    } else if (isAudio) {
+        mediaElement = document.createElement('audio');
+    } else {
+        body.innerHTML = `<p>不支援的媒體類型預覽。</p>`;
+        modal.style.display = 'flex';
+        return;
+    }
+
+    mediaElement.src = mediaPath;
+    mediaElement.controls = true;
+    mediaElement.autoplay = true;
+    mediaElement.style.width = '100%';
+    body.appendChild(mediaElement);
+
+    modal.style.display = 'flex';
+}
+
+function openReportPreviewModal(task) {
+    const modal = document.getElementById('preview-modal');
+    const title = document.getElementById('modal-title');
+    const body = modal.querySelector('.modal-body');
+    const result = task.result || {};
+    const outputPath = result.transcript_path || result.output_path || '';
     const fileType = outputPath.includes('.html') ? 'text/html' : 'text/plain';
 
-    title.textContent = `預覽: ${ (result.video_title || task.payload.original_filename) }`;
+    title.textContent = `預覽報告: ${ (result.video_title || task.payload.original_filename) }`;
     body.innerHTML = '正在載入預覽...';
 
     if (fileType === 'text/html') {
@@ -224,7 +280,7 @@ function openPreviewModal(task) {
         iframe.style.border = 'none';
         body.innerHTML = '';
         body.appendChild(iframe);
-    } else { // text/plain
+    } else {
         fetch(outputPath)
             .then(res => res.text())
             .then(text => {
@@ -249,7 +305,7 @@ function openDetailsModal(task) {
 
     title.textContent = `任務詳細資訊: ${ (result.video_title || task.payload.original_filename) }`;
     body.innerHTML = `
-        <p><strong>總執行時間:</strong> ${result.processing_duration_seconds || 'N/A'} 秒</p>
+        <p><strong>總執行時間:</strong> ${result.processing_duration_seconds?.toFixed(2) || 'N/A'} 秒</p>
         <p><strong>總 Token 消耗:</strong> ${result.total_tokens_used || 'N/A'} tokens</p>
         <p><strong>報告類型:</strong> ${ (result.output_path || '').includes('.html') ? 'HTML' : 'TXT'}</p>
         <p><strong>任務 ID:</strong> <small>${task.task_id}</small></p>
@@ -257,36 +313,110 @@ function openDetailsModal(task) {
     modal.style.display = 'flex';
 }
 
+async function renameTask(taskId) {
+    const task = globalState.tasks.find(t => t.task_id === taskId);
+    if (!task) return;
+
+    const currentName = task.result.video_title || task.payload.original_filename;
+    const newName = prompt("請輸入新的檔案名稱 (不需包含副檔名):", currentName);
+
+    if (newName && newName.trim() && newName.trim() !== currentName) {
+        const sanitizedName = newName.trim().replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
+        try {
+            const response = await fetch(`/api/rename/${taskId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ new_filename: sanitizedName })
+            });
+            if (!response.ok) throw new Error((await response.json()).detail);
+            showStatusMessage('檔案重新命名成功！', false);
+            const tasks = await (await fetch('/api/tasks')).json();
+            updateStateAndRender({ tasks });
+        } catch (error) {
+            showStatusMessage(`重新命名失敗: ${error.message}`, true);
+        }
+    }
+}
+
+async function sendToTranscriber(taskId) {
+    const task = globalState.tasks.find(t => t.task_id === taskId);
+    if (!task) return;
+
+    const mediaPath = task.result.source_path || task.result.output_path;
+    if (!mediaPath) {
+        showStatusMessage('找不到媒體檔案路徑。', true);
+        return;
+    }
+
+    showStatusMessage('正在準備檔案...', false, 2000);
+    try {
+        const response = await fetch(mediaPath);
+        if (!response.ok) throw new Error('無法從伺服器獲取音訊檔案');
+        const audioBlob = await response.blob();
+        const filename = mediaPath.split('/').pop();
+        const audioFile = new File([audioBlob], filename, { type: response.headers.get('Content-Type') });
+
+        localStorage.setItem('fileToSend', JSON.stringify({
+            name: audioFile.name,
+            type: audioFile.type,
+            size: audioFile.size
+        }));
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            sessionStorage.setItem('fileToSend_data', e.target.result);
+            window.location.href = '/static/transcribe.html';
+        };
+        reader.readAsDataURL(audioBlob);
+
+    } catch (error) {
+        showStatusMessage(`傳送至轉錄區失敗: ${error.message}`, true);
+    }
+}
+
 function setupModalListeners() {
     const previewModal = document.getElementById('preview-modal');
     const detailsModal = document.getElementById('details-modal');
 
     const closeModal = (modal) => {
-        if (modal) modal.style.display = 'none';
+        if (!modal) return;
+        modal.style.display = 'none';
+        const mediaElement = modal.querySelector('video, audio');
+        if (mediaElement) {
+            mediaElement.pause();
+            mediaElement.src = '';
+        }
+        const body = modal.querySelector('.modal-body');
+        if (body) body.innerHTML = '';
     };
 
-    // Close buttons
     document.getElementById('modal-close-btn')?.addEventListener('click', () => closeModal(previewModal));
     document.getElementById('details-modal-close-btn')?.addEventListener('click', () => closeModal(detailsModal));
     document.getElementById('details-modal-ok-btn')?.addEventListener('click', () => closeModal(detailsModal));
 
-    // Clicking on the overlay
     previewModal?.addEventListener('click', (e) => e.target === previewModal && closeModal(previewModal));
     detailsModal?.addEventListener('click', (e) => e.target === detailsModal && closeModal(detailsModal));
 
-    // Event delegation for dynamically created buttons
     document.body.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.classList.contains('btn-preview') || target.classList.contains('btn-details')) {
-            const taskId = target.dataset.taskId;
-            const task = globalState.tasks.find(t => t.task_id === taskId);
-            if (task) {
-                if (target.classList.contains('btn-preview')) {
-                    openPreviewModal(task);
-                } else if (target.classList.contains('btn-details')) {
-                    openDetailsModal(task);
-                }
-            }
+        const target = e.target.closest('button, a');
+        if (!target) return;
+
+        const taskId = target.dataset.taskId;
+        if (!taskId) return;
+
+        const task = globalState.tasks.find(t => t.task_id === taskId);
+        if (!task) return;
+
+        if (target.classList.contains('btn-preview')) {
+            openReportPreviewModal(task);
+        } else if (target.classList.contains('btn-details')) {
+            openDetailsModal(task);
+        } else if (target.classList.contains('btn-preview-media')) {
+            openMediaPreviewModal(task);
+        } else if (target.classList.contains('btn-rename')) {
+            renameTask(taskId);
+        } else if (target.classList.contains('btn-send-to-whisper')) {
+            sendToTranscriber(taskId);
         }
     });
 }
@@ -299,7 +429,7 @@ export const AppInitializer = {
                 setActiveNavButton(pageConfig.pageId);
             }
             setupWebSocket();
-            setupModalListeners(); // Set up modal listeners
+            setupModalListeners();
             try {
                 const response = await fetch('/api/tasks');
                 const tasks = await response.json();
@@ -324,7 +454,6 @@ export const AppInitializer = {
 
 AppInitializer.showStatusMessage = showStatusMessage;
 
-// --- For Testing Purposes ---
 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     window.__handleTestWebSocketMessage = (message) => {
         const { type, payload } = message;
