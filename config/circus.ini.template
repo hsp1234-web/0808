@@ -25,3 +25,14 @@ stderr_stream.class = FileStream
 stderr_stream.filename = /app/logs/api_server.err
 autostart = True
 restart_on_error = True
+
+[watcher:worker]
+cmd = %%PYTHON_EXEC%% -m worker.worker
+env.API_MODE = mock
+working_dir = /app/src
+stdout_stream.class = FileStream
+stdout_stream.filename = /app/logs/worker.log
+stderr_stream.class = FileStream
+stderr_stream.filename = /app/logs/worker.err
+autostart = True
+restart_on_error = True

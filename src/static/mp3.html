@@ -782,6 +782,9 @@
             const modelStatus = {};
             let currentFontSize = 100;
             let isInitialized = false; // JULES'S FIX: Add flag to prevent re-initialization
+            let pollingIntervalId = null; // For fallback polling
+            let heartbeatIntervalId = null; // For WebSocket ping
+            let pongTimeoutId = null; // To check for pong response
 
             // --- JULES'S NEW FEATURE (V2): Robust State Syncing ---
             let appState = {
@@ -901,11 +904,6 @@
                 }
             };
 
-            const startPolling = (interval = 10000) => {
-                logAction('start-polling', `interval: ${interval}ms`);
-                setInterval(fetchTaskHistory, interval);
-            };
-
             // --- 預覽 Modal 彈窗邏輯 ---
             /**
              * 開啟預覽彈窗，並根據檔案類型顯示內容。
@@ -1016,15 +1014,45 @@
             };
 
             const setupWebSocket = () => {
+                if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                    return; // 防止重複連線
+                }
+
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
                 socket = new WebSocket(wsUrl);
+
+                const heartbeat = () => {
+                    if (!socket || socket.readyState !== WebSocket.OPEN) {
+                        return;
+                    }
+                    // 如果上一個 pong 尚未收到，則終止連線
+                    pongTimeoutId = setTimeout(() => {
+                        logAction('websocket-pong-timeout');
+                        console.warn("WebSocket pong 超時，正在終止連線...");
+                        socket.close(); // 這會觸發 onclose 中的重連邏輯
+                    }, 5000); // 5 秒內未收到 pong 則視為超時
+
+                    socket.send(JSON.stringify({type: 'ping'}));
+                };
 
                 socket.onopen = () => {
                     console.log('WebSocket 連線成功');
                     logAction('websocket-connect-success');
                     statusText.textContent = '已連線';
                     statusLight.className = 'status-light status-green';
+
+                    // 清除備援輪詢
+                    if (pollingIntervalId) {
+                        clearInterval(pollingIntervalId);
+                        pollingIntervalId = null;
+                        logAction('polling-stopped');
+                    }
+
+                    // 啟動心跳機制
+                    if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+                    heartbeatIntervalId = setInterval(heartbeat, 15000); // 每 15 秒發送 ping
+
                     if (!isInitialized) {
                         initializeYouTubeTab();
                         isInitialized = true;
@@ -1032,29 +1060,55 @@
                 };
 
                 socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
+
                 socket.onclose = () => {
                     console.log('WebSocket 連線已關閉');
                     logAction('websocket-connect-close');
-                    statusText.textContent = '已離線';
+                    statusText.textContent = '已離線 (正在嘗試重連...)';
                     statusLight.className = 'status-light status-yellow';
-                    setTimeout(setupWebSocket, 3000);
+
+                    // 清除心跳和超時
+                    if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+                    if (pongTimeoutId) clearTimeout(pongTimeoutId);
+
+                    // 啟動備援輪詢
+                    if (!pollingIntervalId) {
+                        logAction('polling-started');
+                        // 立即執行一次，然後設定間隔
+                        fetchTaskHistory();
+                        pollingIntervalId = setInterval(fetchTaskHistory, 10000);
+                    }
+
+                    // 嘗試重連
+                    setTimeout(setupWebSocket, 5000); // 增加重連延遲
                 };
+
                 socket.onerror = (error) => {
                     console.error('WebSocket 發生錯誤:', error);
                     logAction('websocket-connect-error');
                     statusText.textContent = '連線錯誤';
+                    socket.close(); // 發生錯誤時也觸發 onclose
                 };
             };
 
             const handleWebSocketMessage = (message) => {
                 console.log(`[WebSocket Received]: ${JSON.stringify(message)}`);
                 const { type, payload } = message;
-                if (type === 'DOWNLOAD_STATUS') {
+
+                if (type === 'pong') {
+                    // 收到了 pong 回應，清除超時
+                    clearTimeout(pongTimeoutId);
+                    return;
+                }
+
+                if (type === 'NEW_TASK_CREATED') {
+                    // 一個新任務被建立了，將其加入 UI
+                    dispatchStatusUpdate(payload);
+                } else if (type === 'DOWNLOAD_STATUS') {
                     handleDownloadStatus(payload);
-                } else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
-                    handleTranscriptionUpdate(type, payload);
-                } else if (type === 'YOUTUBE_STATUS') {
-                    handleYoutubeStatus(payload);
+                } else if (type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE' || type === 'YOUTUBE_STATUS') {
+                    // 這些是既有的任務狀態更新
+                    dispatchStatusUpdate(payload);
                 }
             };
 
@@ -2194,8 +2248,7 @@
 
 
             initialLoad();
-            setupWebSocket(); // WebSocket is still needed for real-time updates
-            startPolling(); // Start the backup polling mechanism
+            setupWebSocket(); // This will handle connection, heartbeat, and fallback polling.
             updateFileDisplay();
             checkSystemReadiness(); // Start the readiness check
 

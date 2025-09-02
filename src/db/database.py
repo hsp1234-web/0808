@@ -43,21 +43,25 @@ def initialize_database():
                 CREATE TABLE IF NOT EXISTS tasks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL UNIQUE,
-                    status TEXT NOT NULL DEFAULT '處理中',
+                    status TEXT NOT NULL DEFAULT 'pending',
                     progress INTEGER DEFAULT 0,
                     payload TEXT,
                     result TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     type TEXT DEFAULT 'transcribe',
-                    depends_on TEXT
+                    depends_on TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    last_attempt_at TIMESTAMP
                 )
             """)
             # Add columns if they don't exist (for migration)
             migrations = {
                 "progress": "INTEGER DEFAULT 0",
                 "type": "TEXT DEFAULT 'transcribe'",
-                "depends_on": "TEXT"
+                "depends_on": "TEXT",
+                "retry_count": "INTEGER DEFAULT 0",
+                "last_attempt_at": "TIMESTAMP"
             }
             for col, col_type in migrations.items():
                 try:
@@ -172,7 +176,7 @@ def add_task(task_id: str, payload: str, task_type: str = 'transcribe', depends_
     :param depends_on: 此任務所依賴的另一個任務的 task_id。
     :return: 如果成功新增則回傳 True，否則回傳 False。
     """
-    sql = "INSERT INTO tasks (task_id, payload, status, type, depends_on) VALUES (?, ?, '處理中', ?, ?)"
+    sql = "INSERT INTO tasks (task_id, payload, status, type, depends_on) VALUES (?, ?, 'pending', ?, ?)"
     conn = get_db_connection()
     if not conn: return False
     log.info(f"DB:{DB_FILE} 準備新增 '{task_type}' 任務: {task_id} (依賴: {depends_on or '無'})")
@@ -210,24 +214,25 @@ def fetch_and_lock_task() -> dict | None:
             #    - 優先處理無依賴的任務 (例如下載任務)
             #    - 對於有依賴的任務，只有在其依賴的任務已完成時才選取
             sql = """
-                SELECT id, task_id, payload, type
+                SELECT id, task_id, payload, type, depends_on
                 FROM tasks
-                WHERE status = '處理中' AND (
+                WHERE status = 'pending' AND (
                     depends_on IS NULL OR
-                    depends_on IN (SELECT task_id FROM tasks WHERE status = '已完成')
+                    depends_on IN (SELECT task_id FROM tasks WHERE status = 'completed')
                 )
-                ORDER BY depends_on NULLS FIRST, created_at
+                ORDER BY created_at
                 LIMIT 1
             """
             cursor.execute(sql)
             task = cursor.fetchone()
 
             if task:
-                # 2. 如果找到任務，立刻更新其狀態
+                # 2. 如果找到任務，立刻更新其狀態並記錄嘗試時間
                 task_id_to_process = task["id"]
                 log.info(f"🔒 找到並鎖定任務 ID: {task['task_id']} (資料庫 id: {task_id_to_process})")
                 cursor.execute(
-                    "UPDATE tasks SET status = 'processing' WHERE id = ?", (task_id_to_process,)
+                    "UPDATE tasks SET status = 'processing', last_attempt_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (task_id_to_process,)
                 )
                 return dict(task)
             else:
