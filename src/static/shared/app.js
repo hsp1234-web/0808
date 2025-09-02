@@ -82,9 +82,32 @@ function getTaskHtml(task) {
         const elapsed = task.startTime ? `(${Math.floor((Date.now() - task.startTime) / 1000)}s)` : '';
         statusHtml = `<span class="task-status status-processing">${task.message || task.status} ${elapsed}</span>`;
     } else if (task.status === 'completed') {
-        statusHtml = `<div class="task-actions">
-                        <a href="/api/download/${task.task_id}" class="button-like btn-download">下載</a>
-                      </div>`;
+        const buttons = [];
+
+        if (task.type === 'gemini_process') {
+            const result = task.result || {};
+            const outputPath = result.output_path || '';
+            const extension = outputPath.includes('.html') ? '.html' : '.txt';
+            const fileType = extension === '.html' ? 'text/html' : 'text/plain';
+
+            // 1. Details Button
+            buttons.push(`<button class="button-like btn-details" data-task-id="${task.task_id}">詳細資料</button>`);
+            // 2. Preview Button
+            buttons.push(`<button class="button-like btn-preview" data-task-id="${task.task_id}" data-file-type="${fileType}">預覽</button>`);
+            // 3. Download Button
+            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download">下載產出</a>`);
+
+        } else { // For transcribe and download tasks
+            // Download button for the primary artifact (transcript, etc.)
+            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download">下載產出</a>`);
+
+            // Preview button for the original media file
+            if ((task.type === 'transcribe' || task.type === 'download') && task.result && task.result.output_path) {
+                 buttons.push(`<a href="${task.result.output_path}" target="_blank" class="button-like btn-preview">預覽媒體</a>`);
+            }
+        }
+
+        statusHtml = `<div class="task-actions">${buttons.join('')}</div>`;
     } else {
         statusHtml = `<span class="task-status status-failed">${task.status}: ${task.error || '未知錯誤'}</span>`;
     }
@@ -166,6 +189,95 @@ function renderUI() {
     renderTaskLists();
 }
 
+// --- Modal Logic ---
+
+function openPreviewModal(task) {
+    const modal = document.getElementById('preview-modal');
+    const title = document.getElementById('modal-title');
+    const body = modal.querySelector('.modal-body');
+    const result = task.result || {};
+    const outputPath = result.output_path || '';
+    const fileType = outputPath.includes('.html') ? 'text/html' : 'text/plain';
+
+    title.textContent = `預覽: ${ (result.video_title || task.payload.original_filename) }`;
+    body.innerHTML = '正在載入預覽...';
+
+    if (fileType === 'text/html') {
+        const iframe = document.createElement('iframe');
+        iframe.src = outputPath;
+        iframe.style.width = '100%';
+        iframe.style.height = '75vh';
+        iframe.style.border = 'none';
+        body.innerHTML = '';
+        body.appendChild(iframe);
+    } else { // text/plain
+        fetch(outputPath)
+            .then(res => res.text())
+            .then(text => {
+                const pre = document.createElement('pre');
+                pre.style.whiteSpace = 'pre-wrap';
+                pre.textContent = text;
+                body.innerHTML = '';
+                body.appendChild(pre);
+            })
+            .catch(err => {
+                body.textContent = `預覽載入失敗: ${err.message}`;
+            });
+    }
+    modal.style.display = 'flex';
+}
+
+function openDetailsModal(task) {
+    const modal = document.getElementById('details-modal');
+    const title = document.getElementById('details-modal-title');
+    const body = document.getElementById('details-modal-body');
+    const result = task.result || {};
+
+    title.textContent = `任務詳細資訊: ${ (result.video_title || task.payload.original_filename) }`;
+    body.innerHTML = `
+        <p><strong>總執行時間:</strong> ${result.processing_duration_seconds || 'N/A'} 秒</p>
+        <p><strong>總 Token 消耗:</strong> ${result.total_tokens_used || 'N/A'} tokens</p>
+        <p><strong>報告類型:</strong> ${ (result.output_path || '').includes('.html') ? 'HTML' : 'TXT'}</p>
+        <p><strong>任務 ID:</strong> <small>${task.task_id}</small></p>
+    `;
+    modal.style.display = 'flex';
+}
+
+function setupModalListeners() {
+    const previewModal = document.getElementById('preview-modal');
+    const detailsModal = document.getElementById('details-modal');
+
+    const closeModal = (modal) => {
+        if (modal) modal.style.display = 'none';
+    };
+
+    // Close buttons
+    document.getElementById('modal-close-btn')?.addEventListener('click', () => closeModal(previewModal));
+    document.getElementById('details-modal-close-btn')?.addEventListener('click', () => closeModal(detailsModal));
+    document.getElementById('details-modal-ok-btn')?.addEventListener('click', () => closeModal(detailsModal));
+
+    // Clicking on the overlay
+    previewModal?.addEventListener('click', (e) => e.target === previewModal && closeModal(previewModal));
+    detailsModal?.addEventListener('click', (e) => e.target === detailsModal && closeModal(detailsModal));
+
+    // Event delegation for dynamically created buttons
+    document.body.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('btn-preview') || target.classList.contains('btn-details')) {
+            const taskId = target.dataset.taskId;
+            const task = globalState.tasks.find(t => t.task_id === taskId);
+            if (task) {
+                if (target.classList.contains('btn-preview')) {
+                    openPreviewModal(task);
+                } else if (target.classList.contains('btn-details')) {
+                    openDetailsModal(task);
+                }
+            }
+        }
+    });
+}
+
+
 export const AppInitializer = {
     init: function(pageConfig = {}) {
         document.addEventListener('DOMContentLoaded', async () => {
@@ -173,6 +285,7 @@ export const AppInitializer = {
                 setActiveNavButton(pageConfig.pageId);
             }
             setupWebSocket();
+            setupModalListeners(); // Set up modal listeners
             try {
                 const response = await fetch('/api/tasks');
                 const tasks = await response.json();

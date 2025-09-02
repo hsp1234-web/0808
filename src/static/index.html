@@ -65,5 +65,32 @@
         import { AppInitializer } from '/static/shared/app.js';
         AppInitializer.init({ pageId: 'index' });
     </script>
+
+    <!-- Modals -->
+    <div id="preview-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">預覽</h2>
+                <button id="modal-close-btn" class="modal-close-button">&times;</button>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="modal-copy-link-btn">複製連結</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="details-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="details-modal-title">任務詳細資訊</h2>
+                <button id="details-modal-close-btn" class="modal-close-button">&times;</button>
+            </div>
+            <div id="details-modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                 <button id="details-modal-ok-btn">確認</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
