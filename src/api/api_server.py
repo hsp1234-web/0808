@@ -18,6 +18,7 @@ from typing import Optional, Dict, List
 from contextlib import asynccontextmanager
 from urllib.parse import unquote, quote
 from pydantic import BaseModel
+import queue
 import psutil
 
 # --- 修正模組匯入路徑 ---
@@ -98,6 +99,27 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# --- 廣播佇列 ---
+# JULES'S FIX (2025-09-02): 使用執行緒安全的佇列來取代 run_coroutine_threadsafe
+# 這是解決執行緒與 asyncio 事件迴圈之間同步問題的穩健作法。
+broadcast_queue = queue.Queue()
+
+async def broadcast_consumer():
+    """一個非同步的消費者，從佇列中取出訊息並廣播。"""
+    log.info("📢 廣播消費者已啟動，等待訊息...")
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            # 在執行器中執行阻塞的 queue.get()，避免阻塞事件迴圈
+            message = await loop.run_in_executor(None, broadcast_queue.get)
+            if message is None: # 使用 None 作為信號來停止消費者
+                log.info("📢 廣播消費者收到停止信號。")
+                break
+            await manager.broadcast_json(message)
+            broadcast_queue.task_done()
+        except Exception as e:
+            log.error(f"📢 廣播消費者發生錯誤: {e}", exc_info=True)
+
 
 # --- DB 客戶端 ---
 # 在模組加載時獲取客戶端單例
@@ -110,8 +132,18 @@ async def lifespan(app: FastAPI):
     # 在應用程式啟動時執行的程式碼
     setup_database_logging()
     log.info("資料庫日誌處理器已透過 lifespan 事件設定。")
+
+    # 啟動廣播消費者背景任務
+    consumer_task = asyncio.create_task(broadcast_consumer())
+    log.info("✅ 廣播消費者任務已建立。")
+
     yield
-    # 可以在此處加入應用程式關閉時執行的程式碼
+
+    # 在應用程式關閉時執行的程式碼
+    log.info("應用程式正在關閉，正在停止廣播消費者...")
+    broadcast_queue.put(None) # 發送停止信號
+    await consumer_task # 等待消費者處理完畢
+    log.info("✅ 廣播消費者已成功停止。")
 
 # --- FastAPI 應用實例 ---
 app = FastAPI(title="鳳凰音訊轉錄儀 API (v3 - 重構)", version="3.0", lifespan=lifespan)
@@ -799,10 +831,9 @@ async def process_youtube_urls(request: Request):
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
 
 
-def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
+def trigger_model_download(model_size: str):
     """
-    在一個單獨的執行緒中執行模型下載，並透過 WebSocket 回報結果。
-    這個版本會逐行讀取 stdout 來獲取即時的 JSON 進度更新。
+    在一個單獨的執行緒中執行模型下載，並透過佇列將結果傳回主事件迴圈進行廣播。
     """
     def _download_in_thread():
         log.info(f"🧵 [執行緒] 開始下載模型: {model_size}")
@@ -816,10 +847,9 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                bufsize=1 # Line-buffered
+                bufsize=1
             )
 
-            # 逐行讀取 stdout 以獲取進度更新
             if process.stdout:
                 for line in iter(process.stdout.readline, ''):
                     line = line.strip()
@@ -827,22 +857,20 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                         continue
                     try:
                         data = json.loads(line)
-                        # 建立 WebSocket 訊息
                         message = {
                             "type": "DOWNLOAD_STATUS",
                             "payload": {
                                 "model": model_size,
                                 "status": "downloading",
-                                **data  # 這會包含 'type', 'percent', 'description' 等
+                                **data
                             }
                         }
-                        asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+                        broadcast_queue.put(message)
                     except json.JSONDecodeError:
                         log.warning(f"[執行緒] 無法解析來自 transcriber 的下載進度 JSON: {line}")
 
-            process.wait() # 等待程序結束
+            process.wait()
 
-            # 根據程序的返回碼決定最終狀態
             if process.returncode == 0:
                 log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
                 message = {
@@ -857,7 +885,7 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                     "payload": {"model": model_size, "status": "failed", "error": stderr_output}
                 }
 
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+            broadcast_queue.put(message)
 
         except Exception as e:
             log.error(f"❌ [執行緒] 下載執行緒中發生嚴重錯誤: {e}", exc_info=True)
@@ -865,22 +893,20 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                 "type": "DOWNLOAD_STATUS",
                 "payload": {"model": model_size, "status": "failed", "error": str(e)}
             }
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(message), loop)
+            broadcast_queue.put(message)
 
-    # 建立並啟動執行緒
     thread = threading.Thread(target=_download_in_thread)
     thread.start()
 
 
-def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, loop: asyncio.AbstractEventLoop, original_filename: Optional[str] = None):
+def trigger_transcription(task_id: str, file_path: str, model_size: str, language: Optional[str], beam_size: int, original_filename: Optional[str] = None):
     """
-    在一個單獨的執行緒中執行轉錄，並透過 WebSocket 即時串流結果。
+    在一個單獨的執行緒中執行轉錄，並透過佇列將結果傳回主事件迴圈進行廣播。
     """
     def _transcribe_in_thread():
         display_name = original_filename or file_path
         log.info(f"🧵 [執行緒] 開始處理轉錄任務: {task_id}，檔案: {display_name}")
 
-        # 問題二：將所有輸出統一到 uploads 目錄下，以便提供靜態檔案服務
         output_dir = UPLOADS_DIR / "transcripts"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file_path = output_dir / f"{task_id}.txt"
@@ -893,7 +919,7 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 str(tool_script_path),
                 "--command=transcribe",
                 f"--audio_file={file_path}",
-                f"--output_file={output_file_path}", # 使用新的路徑
+                f"--output_file={output_file_path}",
                 f"--model_size={model_size}",
             ]
             if language:
@@ -915,22 +941,18 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 "type": "TRANSCRIPTION_STATUS",
                 "payload": {"task_id": task_id, "status": "starting", "filename": start_message_filename}
             }
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(start_message), loop)
+            broadcast_queue.put(start_message)
 
-            # JULES'S FINAL FIX (2025-09-02): 使用 communicate() 來避免 I/O 死鎖
             stdout_output, stderr_output = process.communicate()
 
             if process.returncode == 0:
-                # 即使我們不處理 stdout_output，也要確保子程序成功完成
                 log.info(f"✅ [執行緒] 轉錄子程序 '{task_id}' 成功完成。")
-                # 由於 mock script 現在會寫入檔案，我們直接讀取它
                 final_transcript = output_file_path.read_text(encoding='utf-8').strip()
 
-                # 問題二：將檔案系統路徑轉換為可存取的 URL
                 final_result_obj = {
                     "transcript": final_transcript,
                     "transcript_path": convert_to_media_url(str(output_file_path)),
-                    "output_path": convert_to_media_url(str(output_file_path)) # 增加一個通用的 output_path
+                    "output_path": convert_to_media_url(str(output_file_path))
                 }
                 db_client.update_task_status(task_id, '已完成', json.dumps(final_result_obj))
                 log.info(f"✅ [執行緒] 已將任務 {task_id} 的狀態和結果更新至資料庫。")
@@ -940,15 +962,15 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                     "payload": {"task_id": task_id, "status": "已完成", "result": final_result_obj}
                 }
             else:
-                stderr_output = process.stderr.read() if process.stderr else "N/A"
-                log.error(f"❌ [執行緒] 轉錄任務 '{task_id}' 失敗。返回碼: {process.returncode}。Stderr: {stderr_output}")
+                stderr_output_msg = stderr_output or "N/A"
+                log.error(f"❌ [執行緒] 轉錄任務 '{task_id}' 失敗。返回碼: {process.returncode}。Stderr: {stderr_output_msg}")
                 final_message = {
                     "type": "TRANSCRIPTION_STATUS",
-                    "payload": {"task_id": task_id, "status": "failed", "error": stderr_output}
+                    "payload": {"task_id": task_id, "status": "failed", "error": stderr_output_msg}
                 }
 
-            log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
+            log.info(f"✅ [執行緒] 準備將最終訊息放入佇列: {json.dumps(final_message)}")
+            broadcast_queue.put(final_message)
 
         except Exception as e:
             log.error(f"❌ [執行緒] 轉錄執行緒中發生嚴重錯誤: {e}", exc_info=True)
@@ -956,14 +978,14 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                 "type": "TRANSCRIPTION_STATUS",
                 "payload": {"task_id": task_id, "status": "failed", "error": str(e)}
             }
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(error_message), loop)
+            broadcast_queue.put(error_message)
 
     thread = threading.Thread(target=_transcribe_in_thread)
     thread.start()
 
 
-def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
-    """在一個單獨的執行緒中執行 YouTube 處理流程（已更新為彈性模式）。"""
+def trigger_youtube_processing(task_id: str):
+    """在一個單獨的執行緒中執行 YouTube 處理流程，並透過佇列回報結果。"""
     def _process_in_thread():
         log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: {task_id}")
 
@@ -981,12 +1003,11 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             custom_filename = payload.get("custom_filename")
             download_type = payload.get("download_type", "audio")
 
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+            broadcast_queue.put({
                 "type": "YOUTUBE_STATUS",
                 "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載 ({download_type}): {url}", "task_type": task_type}
-            }), loop)
+            })
 
-            # JULES DEBUG (2025-08-31): 為了 E2E 測試的穩定性，新增 mock URL 判斷
             if url.startswith("mock://"):
                 downloader_script_path = ROOT_DIR / "src" / "tools" / "mock_downloader_for_test.py"
             else:
@@ -1002,13 +1023,6 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 cmd_dl.extend(["--cookies-file", str(cookies_path)])
 
             proc_env = os.environ.copy()
-            # JULES'S FIX (2025-08-30): 重構 I/O 處理以解決死鎖問題
-            # 舊的寫法是逐行讀取 stderr，但如果 stdout 的緩衝區被填滿，子程序會被阻塞，
-            # 而父程序卻在等待 stderr，從而導致死鎖。
-            #
-            # 新的寫法使用 communicate()，它會安全地讀取兩個流直到程序結束，
-            # 雖然會失去即時的進度回報，但能完全避免死鎖，確保任務能正確完成。
-            # 這是根據 POC 成功案例的模式進行的重構。
             process_dl = subprocess.Popen(
                 cmd_dl,
                 stdout=subprocess.PIPE,
@@ -1018,29 +1032,21 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 env=proc_env
             )
 
-            # communicate() 會讀取所有輸出直到程序結束，並返回結果。
-            # 這能有效避免緩衝區填滿導致的死鎖。
             stdout_output, stderr_output = process_dl.communicate()
 
-            # 在程序結束後，檢查返回碼
             if process_dl.returncode != 0:
-                # 將 stderr 的內容包含在錯誤訊息中，以便除錯
                 log.error(f"❌ [執行緒] youtube_downloader.py 執行失敗。Stderr: {stderr_output}")
-                # 我們從 stdout 中解析 JSON，因為即使失敗，腳本也會輸出一個錯誤 JSON
-                # 但如果 stdout 是空的，就使用 stderr 作為錯誤訊息
                 if stdout_output:
                     raise RuntimeError(stdout_output)
                 else:
                     raise RuntimeError(f"youtube_downloader.py 執行失敗，返回碼 {process_dl.returncode}。錯誤: {stderr_output}")
 
-            # 如果成功，stdout 應該包含最終的 JSON 結果
             download_result = json.loads(stdout_output)
-            media_file_path = download_result['output_path'] # This is an absolute path
+            media_file_path = download_result['output_path']
             video_title = download_result.get('video_title', '無標題影片')
             log.info(f"✅ [執行緒] YouTube 媒體下載完成: {media_file_path}")
 
             if task_type == 'youtube_download_only':
-                # 問題二：將檔案系統路徑轉換為可存取的 URL
                 download_result['output_path'] = convert_to_media_url(download_result['output_path'])
                 db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
                 log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
@@ -1048,8 +1054,8 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                     "type": "YOUTUBE_STATUS",
                     "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
                 }
-                log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(final_message)}")
-                asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
+                log.info(f"✅ [執行緒] 準備將最終訊息放入佇列: {json.dumps(final_message)}")
+                broadcast_queue.put(final_message)
                 return
 
             db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
@@ -1062,16 +1068,15 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             model = process_payload['model']
             tasks_to_run = process_payload.get('tasks', 'summary,transcript')
             output_format = process_payload.get('output_format', 'html')
-            api_key = process_payload.get('api_key') # 從任務酬載中讀取金鑰
+            api_key = process_payload.get('api_key')
 
             log.info(f"執行 Gemini 分析，任務: '{tasks_to_run}', 格式: '{output_format}'")
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+            broadcast_queue.put({
                 "type": "YOUTUBE_STATUS",
                 "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析...", "task_type": "gemini_process"}
-            }), loop)
+            })
 
             processor_script_path = ROOT_DIR / "src" / "tools" / ("mock_gemini_processor.py" if IS_MOCK_MODE else "gemini_processor.py")
-            # 問題二：將報告也輸出到 uploads 目錄下
             report_output_dir = UPLOADS_DIR / "reports"
             report_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1088,24 +1093,18 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
 
             proc_env = os.environ.copy()
             if api_key:
-                proc_env["GOOGLE_API_KEY"] = api_key # 將金鑰設定到子程序的環境變數中
+                proc_env["GOOGLE_API_KEY"] = api_key
 
             log.info(f"任務 {dependent_task_id}: 正要啟動 gemini_processor.py 子程序...")
             process_gemini = subprocess.Popen(
                 cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env
             )
 
-            # JULES'S FIX (2025-09-01): Refactor I/O handling to prevent deadlocks.
-            # Reading stderr line-by-line while stdout buffer might fill up is a classic deadlock scenario.
-            # The safer approach is to use communicate() to get both streams after the process finishes.
-            # This sacrifices real-time progress updates for stability and correctness, which is the right trade-off here.
             log.info(f"任務 {dependent_task_id}: 正在等待 gemini_processor.py 子程序完成...")
             stdout_output, stderr_output = process_gemini.communicate()
             log.info(f"任務 {dependent_task_id}: gemini_processor.py 子程序已結束。返回碼: {process_gemini.returncode}")
 
             if process_gemini.returncode != 0:
-                # Log the full stderr for debugging purposes, then raise the error with stdout,
-                # as the tool is designed to put the final error JSON in stdout.
                 log.error(f"❌ [執行緒] gemini_processor.py 執行失敗。Stderr: {stderr_output}")
                 if stdout_output:
                     raise RuntimeError(stdout_output)
@@ -1113,7 +1112,6 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                     raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stderr_output}")
 
             process_result = json.loads(stdout_output)
-            # 問題二：將結果中的所有檔案路徑轉換為 URL
             for key in ["output_path", "html_report_path", "pdf_report_path"]:
                  if key in process_result and process_result[key]:
                     process_result[key] = convert_to_media_url(process_result[key])
@@ -1121,7 +1119,6 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             db_client.update_task_status(dependent_task_id, '已完成', json.dumps(process_result))
             log.info(f"✅ [執行緒] Gemini AI 處理完成。")
 
-            # JULES'S FIX (2025-08-31): 補上遺失的 WebSocket 廣播
             final_payload = {
                 "task_id": dependent_task_id,
                 "status": "completed",
@@ -1129,9 +1126,9 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
                 "result": process_result
             }
             update_message = {"type": "YOUTUBE_STATUS", "payload": final_payload}
-            log.info(f"✅ [執行緒] 準備廣播最終訊息: {json.dumps(update_message)}")
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(update_message), loop)
-            log.info(f"✅ [執行緒] 已廣播 Gemini AI 任務完成訊息。")
+            log.info(f"✅ [執行緒] 準備將最終訊息放入佇列: {json.dumps(update_message)}")
+            broadcast_queue.put(update_message)
+            log.info(f"✅ [執行緒] Gemini AI 任務完成訊息已放入佇列。")
 
         except Exception as e:
             log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
@@ -1146,10 +1143,10 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             except (json.JSONDecodeError, TypeError):
                 pass
             db_client.update_task_status(failed_task_id, 'failed', json.dumps(error_payload))
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+            broadcast_queue.put({
                 "type": "YOUTUBE_STATUS",
                 "payload": {"task_id": failed_task_id, "status": "failed", **error_payload}
-            }), loop)
+            })
 
     thread = threading.Thread(target=_process_in_thread)
     thread.start()
@@ -1213,8 +1210,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "type": "DOWNLOAD_STATUS",
                             "payload": {"model": model_size, "status": "starting", "progress": 0}
                         })
-                        loop = asyncio.get_running_loop()
-                        trigger_model_download(model_size, loop)
+                        trigger_model_download(model_size)
                     else:
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
 
@@ -1245,18 +1241,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         display_name = original_filename or file_path
                         log.info(f"收到開始轉錄 '{display_name}' 的請求 (來自任務 {task_id})。")
-                        loop = asyncio.get_running_loop()
-                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop, original_filename=original_filename)
+                        trigger_transcription(task_id, file_path, model_size, language, beam_size, original_filename=original_filename)
 
                 elif msg_type == "START_YOUTUBE_PROCESSING":
-                    task_id = payload.get("task_id") # This is the download_task_id
+                    task_id = payload.get("task_id")
                     if not task_id:
                         await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
                         continue
 
                     log.info(f"收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: {task_id})。")
-                    loop = asyncio.get_running_loop()
-                    trigger_youtube_processing(task_id, loop)
+                    trigger_youtube_processing(task_id)
 
                 else:
                     await manager.broadcast_json({
@@ -1273,7 +1267,6 @@ async def websocket_endpoint(websocket: WebSocket):
         log.info("WebSocket 用戶端已離線。")
     except Exception as e:
         log.error(f"WebSocket 發生未預期錯誤: {e}", exc_info=True)
-        # 確保在發生錯誤時也中斷連線
         if websocket in manager.active_connections:
             manager.disconnect(websocket)
 
