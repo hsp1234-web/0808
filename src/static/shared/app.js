@@ -84,26 +84,40 @@ function getTaskHtml(task) {
     } else if (task.status === 'completed') {
         const buttons = [];
 
-        if (task.type === 'gemini_process') {
+        // JULES'S FIX (2025-09-01): 擴大條件判斷，以涵蓋所有應被視為「報告」的任務類型。
+        // 舊的邏輯只檢查 'gemini_process'，但後端可能會回傳 'youtube_process_chain'
+        // 或甚至是 'youtube_download_only' 作為最終的完成類型。
+        const isReportTask = ['gemini_process', 'youtube_process_chain', 'youtube_download_only'].includes(task.type);
+
+        if (isReportTask) {
             const result = task.result || {};
             const outputPath = result.output_path || '';
-            const extension = outputPath.includes('.html') ? '.html' : '.txt';
-            const fileType = extension === '.html' ? 'text/html' : 'text/plain';
 
-            // 1. Details Button
-            buttons.push(`<button class="button-like btn-details" data-task-id="${task.task_id}">詳細資料</button>`);
-            // 2. Preview Button
-            buttons.push(`<button class="button-like btn-preview" data-task-id="${task.task_id}" data-file-type="${fileType}">預覽</button>`);
-            // 3. Download Button
-            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download">下載產出</a>`);
+            // 如果沒有輸出路徑，則不顯示任何按鈕
+            if (outputPath) {
+                const extension = outputPath.includes('.html') ? '.html' : '.txt';
+                const fileType = extension === '.html' ? 'text/html' : 'text/plain';
 
-        } else { // For transcribe and download tasks
-            // Download button for the primary artifact (transcript, etc.)
-            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download">下載產出</a>`);
+                // 1. 詳細資料按鈕
+                buttons.push(`<button class="button-like btn-details" data-task-id="${task.task_id}" data-testid="task-details-button">詳細資料</button>`);
+                // 2. 預覽按鈕
+                buttons.push(`<button class="button-like btn-preview" data-task-id="${task.task_id}" data-file-type="${fileType}" data-testid="task-preview-button">預覽</button>`);
+                // 3. 下載產出按鈕
+                buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-button">下載產出</a>`);
+            }
 
-            // Preview button for the original media file
-            if ((task.type === 'transcribe' || task.type === 'download') && task.result && task.result.output_path) {
-                 buttons.push(`<a href="${task.result.output_path}" target="_blank" class="button-like btn-preview">預覽媒體</a>`);
+        } else { // 處理 'transcribe' 和 'download' 任務
+            // JULES'S FIX (2025-09-01): 根據 Code Review 的回饋，完整還原轉錄和下載任務的按鈕。
+            // 確保「預覽媒體」按鈕能正確顯示。
+
+            // 1. 下載產出按鈕 (例如：逐字稿 .txt)
+            buttons.push(`<a href="/api/download/${task.task_id}?type=artifact" class="button-like btn-download" data-testid="task-download-button">下載產出</a>`);
+
+            // 2. 預覽媒體按鈕 (例如：原始的 .mp3 音訊檔)
+            // 這裡的 output_path 通常指向原始的上傳或下載檔案，而不是轉錄結果。
+            const result = task.result || {};
+            if ((task.type === 'transcribe' || task.type === 'download') && result.output_path) {
+                 buttons.push(`<a href="${result.output_path}" target="_blank" class="button-like btn-preview" data-testid="task-preview-media-button">預覽媒體</a>`);
             }
         }
 
