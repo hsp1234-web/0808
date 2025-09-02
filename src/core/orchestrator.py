@@ -139,7 +139,27 @@ def main():
             t.daemon = True
             t.start()
 
-        log.info("🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。")
+        # 4. 啟動 Worker
+        log.info("🔧 正在啟動 Worker...")
+        worker_cmd = [sys.executable, "src/worker/worker.py"]
+        if args.mock:
+            worker_cmd.append("--mock")
+
+        worker_env = os.environ.copy()
+        if args.mock:
+            worker_env["API_MODE"] = "mock"
+
+        worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=worker_env)
+        processes.append(worker_proc)
+        log.info(f"Worker 程序已啟動，PID: {worker_proc.pid}")
+
+        worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker', None, None))
+        worker_stderr_thread = threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr', None, None))
+        threads.extend([worker_stdout_thread, worker_stderr_thread])
+        for t in [worker_stdout_thread, worker_stderr_thread]:
+            t.daemon = True
+            t.start()
+
         log.info("--- [協調器進入監控模式] ---")
 
         last_heartbeat_time = time.time()
