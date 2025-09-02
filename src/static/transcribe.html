@@ -74,6 +74,12 @@
                         <input type="number" id="beam-size-input" value="1" min="1" max="10" class="form-input">
                         <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
                     </div>
+                    <button id="confirm-settings-btn">✓ 確認設定</button>
+                    <!-- 模型下載進度條 -->
+                    <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
+                        <div id="model-progress-bar" class="progress-bar"></div>
+                        <span id="model-progress-text" class="progress-text"></span>
+                    </div>
                 </div>
                 <div class="flex-col">
                     <h3>📤 步驟 2: 上傳檔案</h3>
@@ -206,6 +212,34 @@
             });
 
             updateFileDisplay();
+
+            const confirmBtn = document.getElementById('confirm-settings-btn');
+            const modelProgressContainer = document.getElementById('model-progress-container');
+            const modelProgressBar = document.getElementById('model-progress-bar');
+            const modelProgressText = document.getElementById('model-progress-text');
+
+            confirmBtn.addEventListener('click', () => {
+                const selectedModel = modelSelect.value;
+                AppInitializer.showStatusMessage(`正在請求 ${selectedModel} 模型...`, false, 3000);
+                confirmBtn.disabled = true;
+                modelProgressContainer.classList.remove('hidden');
+                modelProgressText.textContent = `正在請求 ${selectedModel} 模型...`;
+
+                // 現在可以從 AppInitializer 存取 socket
+                if (AppInitializer.socket && AppInitializer.socket.readyState === WebSocket.OPEN) {
+                    AppInitializer.socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: selectedModel } }));
+                } else {
+                    AppInitializer.showStatusMessage('WebSocket 未連線，無法下載模型。', true);
+                    confirmBtn.disabled = false;
+                    modelProgressContainer.classList.add('hidden');
+                }
+            });
+
+            // 新增一個監聽器來處理模型下載進度
+            // 注意：這需要 app.js 中的 onmessage 處理器能發送一個自訂事件或直接更新UI
+            // 為了簡單起見，我們假設 app.js 會處理 'DOWNLOAD_STATUS' 類型的 WebSocket 訊息
+            // 並更新 #model-progress-bar 和 #model-progress-text
+            // (這部分邏輯需要在 app.js 中添加)
         });
 
         // 初始化共享應用程式邏輯

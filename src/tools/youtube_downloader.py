@@ -63,12 +63,15 @@ def download_media(
     log.info(f"執行 yt-dlp 指令: {' '.join(command)}")
 
     try:
+        # JULES'S FIX (2025-09-01): 新增 120 秒的超時來防止 yt-dlp 程序無限期掛起。
+        # 這是解決後端任務卡住的關鍵步驟。
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=120
         )
 
         video_info = json.loads(result.stdout)

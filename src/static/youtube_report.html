@@ -135,24 +135,27 @@
     <script type="module">
         import { AppInitializer } from '/static/shared/app.js';
 
+        // 此處為 youtube_report.html 頁面專屬的邏輯
         document.addEventListener('DOMContentLoaded', () => {
             const apiKeyInput = document.getElementById('api-key-input');
             const saveApiKeyBtn = document.getElementById('save-api-key-btn');
             const clearApiKeyBtn = document.getElementById('clear-api-key-btn');
-            const apiKeyStatus = document.getElementById('api-key-status').querySelector('span');
-            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-button');
+            const apiKeyStatus = document.getElementById('api-key-status')?.querySelector('span');
+            const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
             const geminiModelSelect = document.getElementById('gemini-model-select');
+            const youtubeControlsFieldset = document.getElementById('youtube-controls-fieldset');
             const addYoutubeRowBtn = document.getElementById('add-youtube-row-btn');
             const youtubeLinkList = document.getElementById('youtube-link-list');
-            const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
             const ytOutputFormatSelect = document.getElementById('yt-output-format-select');
 
             function updateApiKeyUI(state, message) {
+                if (!apiKeyStatus) return;
                 apiKeyStatus.style.color = 'inherit';
                 apiKeyStatus.style.fontStyle = 'normal';
+
                 const isValid = state === 'valid';
-                startYoutubeProcessingBtn.disabled = !isValid;
-                youtubeParamsFieldset.disabled = !isValid;
+                if(startYoutubeProcessingBtn) startYoutubeProcessingBtn.disabled = !isValid;
+                if(youtubeControlsFieldset) youtubeControlsFieldset.disabled = !isValid;
 
                 switch (state) {
                     case 'valid':
@@ -179,8 +182,10 @@
                 const apiKey = localStorage.getItem('googleApiKey');
                 if (!apiKey) {
                     updateApiKeyUI('not_provided');
+                    if(geminiModelSelect) geminiModelSelect.innerHTML = '<option>請先儲存有效的金鑰</option>';
                     return;
                 }
+
                 updateApiKeyUI('validating');
                 try {
                     const response = await fetch('/api/youtube/models', {
@@ -189,18 +194,24 @@
                         body: JSON.stringify({ api_key: apiKey }),
                     });
                     const result = await response.json();
-                    if (!response.ok) throw new Error(result.detail);
+                    if (!response.ok) throw new Error(result.detail || '伺服器錯誤');
 
                     updateApiKeyUI('valid', '金鑰有效');
-                    geminiModelSelect.innerHTML = '';
-                    result.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.id;
-                        option.textContent = model.name;
-                        geminiModelSelect.appendChild(option);
-                    });
+                    if(geminiModelSelect) {
+                        geminiModelSelect.innerHTML = '';
+                        result.models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.id;
+                            option.textContent = model.name;
+                            if (model.id.includes('1.5-flash')) { // 預設選中 Flash 模型
+                                option.selected = true;
+                            }
+                            geminiModelSelect.appendChild(option);
+                        });
+                    }
                 } catch (error) {
                     updateApiKeyUI('invalid', error.message);
+                    if(geminiModelSelect) geminiModelSelect.innerHTML = '<option>金鑰無效或載入失敗</option>';
                 }
             }
 
@@ -209,6 +220,8 @@
                 if (apiKey) {
                     localStorage.setItem('googleApiKey', apiKey);
                     validateAndLoadModels();
+                } else {
+                    AppInitializer.showStatusMessage('API 金鑰不能為空', true);
                 }
             });
 
@@ -238,7 +251,7 @@
             startYoutubeProcessingBtn.addEventListener('click', async () => {
                 const requests = Array.from(youtubeLinkList.querySelectorAll('.youtube-link-row')).map(row => ({
                     url: row.querySelector('.youtube-url-input').value.trim(),
-                    filename: row.querySelector('.youtube-filename-input').value.trim(),
+                    custom_filename: row.querySelector('.youtube-filename-input').value.trim(),
                 })).filter(req => req.url);
 
                 if (requests.length === 0) {
@@ -289,6 +302,8 @@
                 }
             });
 
+
+            // Initial load
             const storedApiKey = localStorage.getItem('googleApiKey');
             if (storedApiKey) {
                 apiKeyInput.value = storedApiKey;
@@ -298,6 +313,7 @@
             }
         });
 
+        // 初始化共享應用程式邏輯
         AppInitializer.init({ pageId: 'youtube_report' });
     </script>
 
