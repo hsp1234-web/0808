@@ -19,7 +19,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 log = logging.getLogger('worker')
 
 # --- 常數設定 ---
-API_SERVER_URL = "http://127.0.0.1:8001"
+API_PORT = os.environ.get("API_PORT", "8001")
+API_SERVER_URL = f"http://127.0.0.1:{API_PORT}"
 API_HEALTH_ENDPOINT = f"{API_SERVER_URL}/api/health"
 API_NOTIFY_ENDPOINT = f"{API_SERVER_URL}/api/internal/notify_task_update"
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -189,6 +190,21 @@ async def process_youtube_task(task: dict):
         db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
         await notify_api_server(task_id, 'failed', error_payload)
 
+async def heartbeat_task():
+    """定期向資料庫發送心跳，表明 Worker 處於活動狀態。"""
+    log.info("❤️ 心跳任務已啟動，將每 10 秒回報一次狀態。")
+    while True:
+        try:
+            # 使用 time.time() 獲取 Unix 時間戳
+            current_timestamp = time.time()
+            db_client.set_app_state("worker_last_heartbeat", str(current_timestamp))
+            log.debug(f"❤️ 心跳已發送: {current_timestamp}")
+        except Exception as e:
+            log.error(f"❌ 發送心跳時發生錯誤: {e}", exc_info=True)
+        # 等待 10 秒
+        await asyncio.sleep(10)
+
+
 async def notify_api_server(task_id: str, status: str, result: dict = None):
     """通知 API 伺服器任務已更新 (異步版本)"""
     try:
@@ -229,29 +245,13 @@ async def main_loop():
         else:
             await asyncio.sleep(2)
 
-async def health_handshake():
-    """健康握手協議 (異步版本)"""
-    log.info("🤝 開始與 API 伺服器進行健康握手...")
-    max_retries = 30
-    retry_delay = 2
-    async with httpx.AsyncClient() as client:
-        for attempt in range(max_retries):
-            try:
-                response = await client.get(API_HEALTH_ENDPOINT, timeout=5)
-                if response.status_code == 200:
-                    log.info("✅ 健康握手成功！API 伺服器已準備就緒。")
-                    return True
-            except httpx.RequestError:
-                log.warning(f"連接 API 伺服器失敗，將在 {retry_delay} 秒後重試... ({attempt + 1}/{max_retries})")
-            except Exception as e:
-                log.error(f"健康握手時發生未預期錯誤: {e}")
-            await asyncio.sleep(retry_delay)
-    log.critical("❌ 健康握手失敗，無法在指定時間內連接到 API 伺服器。Worker 將退出。")
-    return False
-
 async def main():
-    if await health_handshake():
-        await main_loop()
+    # 在新架構中，Orchestrator 負責確保所有服務就緒。
+    # Worker 可以直接開始其核心任務：發送心跳和處理任務。
+    log.info("Worker 直接啟動，不再執行健康握手。")
+    loop = asyncio.get_running_loop()
+    loop.create_task(heartbeat_task())
+    await main_loop()
 
 if __name__ == "__main__":
     # 安裝 uvloop (如果可用) 以獲得更佳效能

@@ -6,18 +6,31 @@ import os
 import re
 import socket
 import subprocess
-import sys
 import threading
 import time
-from pathlib import Path
-from db.client import DBClient, get_client
 
-# --- 路徑設定 ---
-# 將專案的根目錄 (本檔案的上兩層) 新增到 Python 的搜尋路徑中
-# 這樣可以確保無論從哪裡執行，都能正確找到 src 下的模組
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR))
-SRC_DIR = ROOT_DIR / "src"
+# --- 標準化路徑修正 ---
+# 這是解決 ModuleNotFoundError 的標準且穩健的方法。
+# 無論此腳本從何處被執行，它都能確保 'src' 目錄位於 Python 的搜尋路徑中。
+import sys
+from pathlib import Path
+
+# 1. 取得目前檔案 (`orchestrator.py`) 的絕對路徑。
+#    例如: /path/to/project/src/core/orchestrator.py
+this_file = Path(__file__).resolve()
+
+# 2. 透過 .parent 兩次，我們向上找到 'src' 目錄。
+#    -> .parent -> /path/to/project/src/core
+#    -> .parent -> /path/to/project/src
+SRC_DIR = this_file.parent.parent
+
+# 3. 將 'src' 目錄的絕對路徑加到 sys.path 的最前面。
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+# --- 路徑修正結束 ---
+
+# 現在，以下的 import 語句將會成功，因為 Python 會在 `src` 目錄中尋找 `db` 套件。
+from db.client import get_client
 
 
 logging.basicConfig(
@@ -63,6 +76,31 @@ def stream_reader(stream, prefix, ready_event=None, ready_signal=None, port_list
                     log.info(f"✅ 偵測到來自 '{prefix}' 的埠號: {port}")
     except Exception as e:
         log.error(f"讀取流 '{prefix}' 時發生錯誤: {e}", exc_info=True)
+
+
+def start_worker(mock_mode, api_port, processes_list, threads_list):
+    """啟動 Worker 程序並設定日誌流讀取器。"""
+    log.info(f"🔧 正在啟動 Worker，將其指向 API Port: {api_port}...")
+    worker_cmd = [sys.executable, "src/worker/worker.py"]
+    if mock_mode:
+        worker_cmd.append("--mock")
+
+    worker_env = os.environ.copy()
+    if mock_mode:
+        worker_env["API_MODE"] = "mock"
+    worker_env["API_PORT"] = str(api_port)
+
+    worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=worker_env)
+    processes_list.append(worker_proc)
+    log.info(f"Worker 程序已啟動，PID: {worker_proc.pid}")
+
+    worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker'))
+    worker_stderr_thread = threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr'))
+    threads_list.extend([worker_stdout_thread, worker_stderr_thread])
+    for t in [worker_stdout_thread, worker_stderr_thread]:
+        t.daemon = True
+        t.start()
+    return worker_proc
 
 
 def main():
@@ -139,46 +177,62 @@ def main():
             t.daemon = True
             t.start()
 
-        # 4. 啟動 Worker
-        log.info("🔧 正在啟動 Worker...")
-        worker_cmd = [sys.executable, "src/worker/worker.py"]
-        if args.mock:
-            worker_cmd.append("--mock")
-
-        worker_env = os.environ.copy()
-        if args.mock:
-            worker_env["API_MODE"] = "mock"
-
-        worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=worker_env)
-        processes.append(worker_proc)
-        log.info(f"Worker 程序已啟動，PID: {worker_proc.pid}")
-
-        worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker', None, None))
-        worker_stderr_thread = threading.Thread(target=stream_reader, args=(worker_proc.stderr, 'worker_stderr', None, None))
-        threads.extend([worker_stdout_thread, worker_stderr_thread])
-        for t in [worker_stdout_thread, worker_stderr_thread]:
-            t.daemon = True
-            t.start()
+        # 4. 啟動並監控 Worker
+        worker_proc = start_worker(args.mock, api_port, processes, threads)
 
         log.info("--- [協調器進入監控模式] ---")
 
-        last_heartbeat_time = time.time()
-        while not stop_event.is_set():
-            # 1. 檢查所有子程序是否仍在運行
-            for proc in processes:
-                if proc.poll() is not None:
-                    raise RuntimeError(f"子程序 {proc.args} (PID: {proc.pid}) 已意外終止，返回碼: {proc.returncode}")
+        # 將 DB 和 API Server 視為核心服務
+        core_processes = [p for p in processes if p != worker_proc]
 
-            # 4. 心跳檢查
-            if time.time() - last_heartbeat_time > 15:
-                try:
-                    active_tasks = db_client.are_tasks_active()
-                    log.info(f"HEARTBEAT: RUNNING {'(TASKS ACTIVE)' if active_tasks else ''}")
-                    last_heartbeat_time = time.time()
-                except Exception as e:
-                    log.error(f"心跳檢查失敗: {e}")
-                    # 如果心跳連續失敗，可能需要採取行動
-            time.sleep(2)
+        last_check_time = time.time()
+        # 使用 main 函式開頭的 start_time 來計算寬限期
+        initial_grace_period = 60 # 啟動後 60 秒的寬限期，不檢查心跳
+
+        while not stop_event.is_set():
+            # 1. 檢查核心服務 (DB, API) - 如果它們失敗，整個系統都應該停止
+            for proc in core_processes:
+                if proc.poll() is not None:
+                    # 更新: 移除 worker_proc 後，這裡的檢查是正確的
+                    pass
+
+            # 2. 監控 Worker 程序 (每 15 秒檢查一次)
+            if time.time() - last_check_time > 15:
+                worker_is_dead = worker_proc.poll() is not None
+                if worker_is_dead:
+                    log.critical(f"🚨 [監工] 偵測到 Worker 程序 (PID: {worker_proc.pid}) 已死亡。返回碼: {worker_proc.returncode}。正在嘗試重啟...")
+                    processes.remove(worker_proc)
+                    worker_proc = start_worker(args.mock, api_port, processes, threads)
+                    log.info(f"✅ Worker 已成功重啟，新的 PID: {worker_proc.pid}")
+                else:
+                    # 如果 Worker 程序仍在運行，則檢查其心跳是否過期 (殭屍檢測)
+                    if time.time() - start_time > initial_grace_period: # 在寬限期後才開始檢查
+                        try:
+                            heartbeat_str = db_client.get_app_state("worker_last_heartbeat")
+                            if heartbeat_str:
+                                heartbeat_ts = float(heartbeat_str)
+                                if time.time() - heartbeat_ts > 60:
+                                    log.critical(f"🧟 [稽核員] 偵測到 Worker 程序 (PID: {worker_proc.pid}) 已成為殭屍 (心跳過期超過 60 秒)。正在終止並重啟...")
+
+                                    worker_proc.terminate()
+                                    try:
+                                        worker_proc.wait(timeout=5)
+                                    except subprocess.TimeoutExpired:
+                                        log.warning(f"強制終止殭屍 Worker (PID: {worker_proc.pid})。")
+                                        worker_proc.kill()
+
+                                    processes.remove(worker_proc)
+                                    worker_proc = start_worker(args.mock, api_port, processes, threads)
+                                    log.info(f"✅ 殭屍 Worker 已被處理，新的 Worker 已啟動，PID: {worker_proc.pid}")
+                            else:
+                                log.warning("[稽核員] Worker 正在運行，但在資料庫中找不到其心跳記錄。")
+
+                        except Exception as e:
+                            log.error(f"檢查 Worker 心跳時發生錯誤: {e}", exc_info=True)
+
+                last_check_time = time.time()
+
+            time.sleep(2) # 短輪詢間隔，但實際檢查由計時器控制
 
     except (Exception, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):

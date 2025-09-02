@@ -844,8 +844,41 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 async def health_check():
-    """提供一個簡單的健康檢查端點。"""
-    return {"status": "ok", "message": "API Server is running."}
+    """
+    提供一個更全面的健康檢查端點。
+    它不僅檢查 API 伺服器自身，還會檢查 Worker 的心跳狀態。
+    """
+    log.debug("正在執行全面健康檢查...")
+    worker_heartbeat_str = db_client.get_app_state("worker_last_heartbeat")
+
+    if worker_heartbeat_str is None:
+        log.warning("健康檢查失敗：在資料庫中找不到 Worker 的心跳記錄。")
+        raise HTTPException(
+            status_code=503,
+            detail="服務目前無法使用 (原因: Worker 尚未回報心跳)"
+        )
+
+    try:
+        heartbeat_timestamp = float(worker_heartbeat_str)
+        current_time = time.time()
+        time_diff = current_time - heartbeat_timestamp
+
+        if time_diff > 30:
+            log.warning(f"健康檢查失敗：Worker 的心跳已過期 {time_diff:.1f} 秒。")
+            raise HTTPException(
+                status_code=503,
+                detail=f"服務目前無法使用 (原因: Worker 心跳過期 {time_diff:.1f} 秒)"
+            )
+
+        log.info(f"✅ 健康檢查成功：Worker 心跳正常 ({time_diff:.1f} 秒前)。")
+        return {"status": "ok", "message": "API Server and Worker are running."}
+
+    except (ValueError, TypeError) as e:
+        log.error(f"健康檢查失敗：無法解析 Worker 的心跳時間戳 '{worker_heartbeat_str}'。錯誤: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="伺服器內部錯誤 (原因: 無法解析心跳資料)"
+        )
 
 
 class AppStatePayload(BaseModel):
