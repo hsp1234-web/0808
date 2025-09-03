@@ -51,7 +51,7 @@ def main():
         server_cmd = [
             sys.executable,
             "-u",
-            "src/core/orchestrator.py",
+            "src/core/orchestrator_v2.py", # Use the v2 orchestrator
             "--port",
             "42649"
         ]
