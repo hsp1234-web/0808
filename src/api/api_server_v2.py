@@ -24,7 +24,7 @@ import psutil
 SRC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
-from db.client import get_client
+from db.client_v2 import get_client
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -56,7 +56,7 @@ log = logging.getLogger('api_server')
 def setup_database_logging():
     """設定資料庫日誌處理器。"""
     try:
-        from db.log_handler import DatabaseLogHandler
+        from db.log_handler_v2 import DatabaseLogHandler
         root_logger = logging.getLogger()
         # 檢查是否已經有同類型的 handler，避免重複加入
         if not any(isinstance(h, DatabaseLogHandler) for h in root_logger.handlers):
@@ -128,15 +128,17 @@ app.add_middleware(
 # 新的上傳檔案儲存目錄
 UPLOADS_DIR = ROOT_DIR / "uploads"
 # 靜態檔案目錄
-STATIC_DIR = ROOT_DIR / "src" / "static"
+STATIC_DIR = ROOT_DIR / "src_v2" / "static"
 
 # 確保目錄存在
 UPLOADS_DIR.mkdir(exist_ok=True)
 if not STATIC_DIR.exists():
     log.warning(f"靜態檔案目錄 {STATIC_DIR} 不存在，前端頁面可能無法載入。")
 else:
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
+    # 注意：我們不再使用 app.mount，因為所有 HTML 都由自訂路由提供服務
+    pass
+    # app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 # JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
 @app.get("/media/{file_path:path}")
@@ -192,10 +194,10 @@ def convert_to_media_url(absolute_path_str: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend(request: Request):
     """根端點，提供前端操作介面。"""
-    html_file_path = STATIC_DIR / "index.html"
+    html_file_path = STATIC_DIR / "index_v2.html"
     if not html_file_path.is_file():
         log.error(f"找不到前端檔案: {html_file_path}")
-        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (index.html)")
+        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (index_v2.html)")
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
@@ -224,7 +226,7 @@ def check_model_exists(model_size: str) -> bool:
     """
     # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
     force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
-    tool_script_path = ROOT_DIR / "src" / "tools" / ("mock_transcriber.py" if IS_MOCK_MODE or force_mock else "transcriber.py")
+    tool_script_path = ROOT_DIR / "src_v2" / "tools" / ("mock_transcriber_v2.py" if IS_MOCK_MODE or force_mock else "transcriber_v2.py")
     log.info(f"使用 '{tool_script_path}' 檢查模型 '{model_size}' 是否存在...")
 
     # 我們透過呼叫一個輕量級的工具腳本來檢查。
@@ -574,7 +576,7 @@ async def rename_task_file(task_id: str, request: Request):
 
 
 # --- 提示詞管理 API ---
-PROMPTS_FILE_PATH = ROOT_DIR / "src" / "prompts" / "default_prompts.json"
+PROMPTS_FILE_PATH = ROOT_DIR / "src_v2" / "prompts" / "default_prompts_v2.json"
 
 @app.get("/api/prompts")
 async def get_prompts():
@@ -647,7 +649,7 @@ async def validate_api_key(request: Request):
             log.info("模擬模式：將非空 API 金鑰視為有效。")
             return {"valid": True}
 
-        tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
+        tool_script_path = ROOT_DIR / "src_v2" / "tools" / "gemini_processor_v2.py"
         cmd = [sys.executable, str(tool_script_path), "--command=validate_key"]
 
         # JULES'S FIX V3: 建立一個最小化的乾淨環境來執行驗證。
@@ -701,7 +703,7 @@ async def get_youtube_models(payload: ApiKeyPayload):
 
         log.info(f"收到來自前端的 API 金鑰，將其用於獲取模型列表。")
 
-        tool_script_path = ROOT_DIR / "src" / "tools" / "gemini_processor.py"
+        tool_script_path = ROOT_DIR / "src_v2" / "tools" / "gemini_processor_v2.py"
         cmd = [sys.executable, str(tool_script_path), "--command=list_models"]
 
         # JULES DEBUG (2025-08-31): 根據最新分析報告，此處是修復模型載入失敗的關鍵。

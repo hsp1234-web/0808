@@ -6,7 +6,7 @@ import time
 from unittest.mock import patch
 
 # 由於我們要測試的目標是日誌處理器本身，我們需要匯入它
-from db.log_handler import DatabaseLogHandler
+from db.log_handler_v2 import DatabaseLogHandler
 
 @pytest.fixture
 def in_memory_db_handler(mocker):

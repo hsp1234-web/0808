@@ -30,7 +30,7 @@ if str(SRC_DIR) not in sys.path:
 # --- 路徑修正結束 ---
 
 # 現在，以下的 import 語句將會成功，因為 Python 會在 `src` 目錄中尋找 `db` 套件。
-from db.client import get_client
+from db.client_v2 import get_client
 
 
 logging.basicConfig(
@@ -81,7 +81,7 @@ def stream_reader(stream, prefix, ready_event=None, ready_signal=None, port_list
 def start_worker(mock_mode, api_port, processes_list, threads_list):
     """啟動 Worker 程序並設定日誌流讀取器。"""
     log.info(f"🔧 正在啟動 Worker，將其指向 API Port: {api_port}...")
-    worker_cmd = [sys.executable, "src/worker/worker.py"]
+    worker_cmd = [sys.executable, "src_v2/worker/worker_v2.py"]
     if mock_mode:
         worker_cmd.append("--mock")
 
@@ -116,7 +116,7 @@ def main():
         # 1. 啟動資料庫管理者
         log.info("🔧 正在啟動資料庫管理者...")
         db_manager_port_list = []
-        db_manager_cmd = [sys.executable, "src/db/manager.py"]
+        db_manager_cmd = [sys.executable, "src_v2/db/manager_v2.py"]
         db_manager_proc = subprocess.Popen(db_manager_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
         processes.append(db_manager_proc)
         log.info(f"資料庫管理者程序已啟動，PID: {db_manager_proc.pid}")
@@ -151,7 +151,7 @@ def main():
         # 3. 啟動 API 伺服器
         log.info("🔧 正在啟動 API 伺服器...")
         api_port = args.port if args.port else find_free_port()
-        api_server_cmd = [sys.executable, "src/api/api_server.py", "--port", str(api_port)]
+        api_server_cmd = [sys.executable, "src_v2/api/api_server_v2.py", "--port", str(api_port)]
         if args.mock:
             api_server_cmd.append("--mock")
 

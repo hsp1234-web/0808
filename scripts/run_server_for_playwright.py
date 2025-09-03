@@ -51,7 +51,7 @@ def main():
         server_cmd = [
             sys.executable,
             "-u",
-            "src/core/orchestrator.py",
+            "src/core/orchestrator_v2.py",
             "--port",
             "42649"
         ]

@@ -33,7 +33,7 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from db import database
+from db import database_v2 as database
 
 # --- 日誌設定 ---
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

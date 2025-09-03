@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 # Import the FastAPI app instance and configuration from the main server file
-from api.api_server import app, UPLOADS_DIR, ROOT_DIR
+from api.api_server_v2 import app, UPLOADS_DIR, ROOT_DIR
 
 # --- Test Configuration ---
 TEST_HOST = "127.0.0.1"

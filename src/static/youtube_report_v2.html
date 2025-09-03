@@ -363,13 +363,94 @@
         <!-- 功能分頁導覽 -->
         <div class="card">
             <div class="tab-container">
-                <a href="index.html" class="tab-button active">🏠 主儀表板</a>
-                <a href="transcribe.html" class="tab-button">📁 本機檔案轉錄</a>
-                <a href="downloader.html" class="tab-button">📥 媒體下載器</a>
-                <a href="youtube_report.html" class="tab-button" data-testid="youtube-report-tab">▶️ YouTube 轉報告</a>
+                <a href="index_v2.html" class="tab-button">🏠 主儀表板</a>
+                <a href="transcribe_v2.html" class="tab-button">📁 本機檔案轉錄</a>
+                <a href="downloader_v2.html" class="tab-button">📥 媒體下載器</a>
+                <a href="youtube_report_v2.html" class="tab-button active" data-testid="youtube-report-tab">▶️ YouTube 轉報告</a>
             </div>
         </div>
 
+        <!-- 分頁內容 -->
+
+<!-- YouTube 轉報告分頁 (全新升級版) -->
+        <div id="youtube-report-tab" class="tab-content active">
+            <div class="card">
+                <!-- 區域 1: API 金鑰管理 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                    <h2>🔑 Google API 金鑰管理</h2>
+                    <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                    <input type="password" id="api-key-input" data-testid="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <button id="save-api-key-btn" data-testid="save-api-key-button">儲存金鑰</button>
+                    <button id="clear-api-key-btn" style="background-color: #6c757d;">清除金鑰</button>
+                </div>
+                <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+
+                <!-- 區域 2: YouTube 影片處理 -->
+                <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
+                <fieldset id="youtube-controls-fieldset">
+                    <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
+                        <!-- JS 動態新增的列將會插入到這裡 -->
+                        <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                            <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+                        </div>
+                    </div>
+                    <button id="add-youtube-row-btn" data-testid="add-youtube-row-button" style="margin-top: 12px;">+ 新增一列</button>
+                </fieldset>
+            </div>
+
+            <!-- 區域 3: 參數控制區 -->
+            <div class="card" style="margin-top: 24px;">
+                <h2>⚙️ 參數控制區</h2>
+                <fieldset id="youtube-params-fieldset" disabled>
+                    <div class="grid-2-col">
+                        <!-- 左側：任務選項 -->
+                        <div>
+                            <label><strong>任務選項</strong></label>
+                            <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
+                                <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                <label><input type="checkbox" name="yt-task" value="translate"> 使用原文 (基於逐字稿)</label>
+                                <label><input type="checkbox" name="yt-task" value="translate_zh"> 翻譯成繁體中文 (基於逐字稿)</label>
+                            </div>
+                        </div>
+                        <!-- 右側：模型與格式 -->
+                        <div class="flex-col">
+                            <div>
+                                <label for="gemini-model-select"><strong>AI 模型</strong></label>
+                                <select id="gemini-model-select" data-testid="gemini-model-select">
+                                    <option>等待從伺服器載入模型列表...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="yt-output-format-select"><strong>輸出格式</strong></label>
+                                <select id="yt-output-format-select">
+                                    <option value="html">HTML 報告</option>
+                                    <option value="txt">純文字 (.txt)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <!-- 區域 4: 操作按鈕 -->
+            <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <button id="download-audio-only-btn">🎧 僅下載音訊</button>
+                <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
+            </div>
+
+            <!-- JULES'S NEW FEATURE: YouTube Report File Browser -->
+            <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
+                <h2>📊 YouTube 報告瀏覽區</h2>
+                <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
+                    <p id="no-youtube-report-msg">尚無已完成的報告</p>
+                </div>
+            </div>
+        </div>
 
         <!-- 處理中任務 -->
         <div class="card">
