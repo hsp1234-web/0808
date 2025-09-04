@@ -2,7 +2,6 @@
 import { test, expect } from '@playwright/test';
 
 // --- 測試設定 ---
-const SERVER_URL = process.env.SERVER_URL || 'http://127.0.0.1:42649/'; // 使用 run_for_playwright.py 的埠號
 const TEST_TIMEOUT = 60000; // 60 秒
 
 /**
@@ -13,7 +12,8 @@ const TEST_TIMEOUT = 60000; // 60 秒
  */
 const expectLatestLogToContain = async (page, expectedMessage) => {
     await expect(async () => {
-        const response = await page.request.get(`${SERVER_URL}api/debug/latest_frontend_action_log`);
+        // JULES'S FIX (v2): Use relative path for API request.
+        const response = await page.request.get('/api/debug/latest_frontend_action_log');
         expect(response.ok(), `API 請求失敗: ${response.status()}`).toBeTruthy();
 
         const json = await response.json();
@@ -46,7 +46,8 @@ test.describe('前端操作日誌 E2E 測試 (資料庫模式)', () => {
     });
 
     // 導覽至頁面並等待 WebSocket 連線
-    await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+    // JULES'S FIX (v2): Use relative path to respect baseURL from config.
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 15000 });
 
     // JULES'S FIX: Add a dummy action to flush any lingering logs from previous tests.

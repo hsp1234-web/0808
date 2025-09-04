@@ -1,9 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-// 設定測試的基礎 URL
-const baseURL = 'http://localhost:8001';
-
 // 全域變數，用於在測試之間傳遞狀態
 let downloadedTaskId = null;
 let renamedFilename = '';
@@ -13,7 +10,8 @@ test.describe.configure({ mode: 'serial' });
 test.describe('綜合性端對端修復驗證', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto(baseURL);
+    // JULES'S FIX: Use relative path to respect the baseURL from playwright.config.v2.js
+    await page.goto('/');
     // 等待頁面完全載入
     await page.waitForSelector('#app');
   });

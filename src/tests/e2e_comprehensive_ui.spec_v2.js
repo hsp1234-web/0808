@@ -13,7 +13,6 @@ import path from 'path';
  */
 
 // --- 測試設定 ---
-const SERVER_URL = 'http://127.0.0.1:42649/'; // 來自 `run_server_for_playwright.py` 的埠號
 const TEST_TIMEOUT = 120000; // 為這個複雜的測試設定更長的超時時間 (120 秒)
 
 // --- E2E 測試套件 ---
@@ -25,9 +24,11 @@ test.describe('綜合性 UI 功能測試: mp3.html', () => {
   test.beforeEach(async ({ page }) => {
     // JULES'S FINAL FIX (2025-09-02): 在每次測試前呼叫後端 API 來清除所有任務。
     // 這是解決測試間狀態污染的關鍵，確保每個測試都在乾淨的環境中開始。
-    await page.request.post(`${SERVER_URL}api/debug/clear_tasks`);
+    // JULES'S FIX (v2): Use relative path for API request.
+    await page.request.post('/api/debug/clear_tasks');
 
-    await page.goto(SERVER_URL, { waitUntil: 'domcontentloaded' });
+    // JULES'S FIX (v2): Use relative path to respect baseURL from config.
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     // 等待 WebSocket 連線成功，這是頁面就緒的關鍵指標
     await expect(page.locator('#status-text')).toContainText('已連線', { timeout: 20000 });
   });

@@ -6,6 +6,15 @@ export default defineConfig({
   timeout: 180000,
 
   testDir: './src/tests', // 指向 v2 測試目錄
+
+  // JULES'S FIX (2025-09-03): Explicitly define all test file patterns to be included.
+  // The default pattern only looks for *.spec.js, but our v2 tests are named *.spec_v2.js.
+  testMatch: [
+      '**/*.spec.js',
+      '**/*.spec_v2.js',
+      '**/*.spec_v2.cjs'
+  ],
+
   fullyParallel: false,
   workers: 1,
 

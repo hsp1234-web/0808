@@ -1,90 +1,96 @@
-# AI 代理開發準則 (v2.1 - 2025-09-03)
+# Agent Instructions
 
-本文件概述了開發與測試此專案的具體要求和限制。所有在此儲存庫中工作的 AI 代理都必須遵守這些準則。
+This document provides instructions for AI agents working on this codebase.
 
-## 1. 核心開發原則
+## V2 Architecture Refactor
 
-### 1.1. 語言與溝通 (Language and Communication)
+We are currently in the process of a major refactor, moving from a monolithic single-page application (SPA) to a multi-page application (MPA) architecture. This new architecture is referred to as "v2".
 
-**❗❗❗ 極度重要 (CRITICAL) ❗❗❗**
+### Key Changes:
 
-**全程必須使用「繁體中文」進行溝通。**
+-   **Backend**: The backend is being refactored into a service-oriented architecture.
+    -   `api_server_v2.py`: The main entry point for the backend API.
+    -   `orchestrator_v2.py`: Manages the lifecycle of tasks.
+    -   `worker_v2.py`: Processes individual tasks.
+-   **Frontend**: The frontend is being split into multiple, independent HTML pages.
+    -   `index_v2.html`: The main landing page.
+    -   `downloader_v2.html`: Page for downloading files.
+    -   `transcribe_v2.html`: Page for transcribing audio.
+    -   `youtube_report_v2.html`: Page for displaying YouTube reports.
+-   **Testing**: E2E tests for the v2 architecture are located in `src/tests/` and are suffixed with `_v2.js` or `_v2.cjs`. The Playwright config is `playwright.config.v2.js`.
 
-這包括但不限於：
-*   **使用者訊息**：所有與使用者的互動和回覆。
-*   **程式碼註解**：所有新撰寫或修改的程式碼註解。
-*   **提交訊息**：Git 的提交標題和內文。
-*   **技術文件**：所有 `.md` 檔案的更新。
-*   **日誌與輸出**：在不影響程式運作的前提下的所有輸出訊息。
+### Development Workflow:
 
-此要求是專案的最高優先級之一，請務必遵守。
+1.  **Run the backend in `mock` mode for frontend development and testing.** This simplifies the setup by not requiring real API keys or background workers.
+    ```bash
+    python src/core/orchestrator_v2.py mock
+    ```
+2.  **Run Playwright tests for the v2 architecture.**
+    ```bash
+    # Set the API_MODE for the test runner process itself
+    API_MODE=mock npx playwright test --config=playwright.config.v2.js
+    ```
 
-### 1.2. 日誌記錄 (`Log.md`) SOP
+### Communication Protocol:
 
-為了保持專案歷史的可追溯性，**每次提交 (Submit) 前，都必須更新 `Log.md` 檔案**。
+-   **Language**: Please use Traditional Chinese for all user-facing communication, including commit messages, PR descriptions, and in-app text. Code comments can be in English for clarity for a wider audience, but Traditional Chinese is preferred if it doesn't compromise clarity.
 
-**標準作業流程**:
-1.  **生成標準時間戳記**:
-    *   由於 `time.py` 腳本目前不存在，請手動產生一個標準格式的台北時區時間戳記 (例如 `2025-09-03T18:00:00+08:00`)。
-2.  **撰寫日誌條目**:
-    *   在 `Log.md` 的最頂部新增一則日誌。
-    *   日誌標題應包含一個唯一的、遞增的編號 (例如 `## 953號 - ...`) 和剛剛生成的時間戳記。
-    *   內容應清晰地總結本次變更的**動機**、**核心變更**、**測試**與**成果**。
+-   **File Naming**:
+    -   All new files related to the v2 architecture **must** have a `_v2` suffix in their filename (e.g., `my_feature_v2.py`, `styles_v2.css`).
+    -   Test files must follow the pattern `*.spec_v2.js` or `*.spec_v2.cjs`.
+
+-   **CSS Styling**:
+    -   **Decision**: Per a recent architectural decision, all CSS for the v2 MPA pages **must be inlined** into the `<style>` tag of each respective HTML file.
+    -   **Rationale**: This is to ensure each page is a self-contained component, simplifying deployment and eliminating dependencies on external CSS files, which was a source of bugs in the previous SPA architecture. Avoid creating separate `.css` files for v2 pages.
+
+-   **Documentation**:
+    -   Keep `plan_v2.md` updated with the latest progress.
+    -   Document any significant changes or decisions in `Log.md`.
 
 ---
 
-## 2. v2 MPA 架構與開發
+## Recommended Development Practices (JULES, 2025-09-03)
 
-本專案的核心是 **v2 MPA (多頁應用) 架構**。所有相關程式碼都位於 `src` 目錄下，並以 `_v2` 為後綴 (例如 `api_server_v2.py`)。所有新的開發工作都應直接在 `src` 目錄下進行。
+To improve stability and development speed, the following tools and practices are recommended for future work on this project.
 
-### 2.1. 前端 (MPA)
-*   **五個獨立頁面**: `index_v2.html`, `transcribe_v2.html`, `downloader_v2.html`, `youtube_report_v2.html`, `prompts_v2.html`。
-*   **CSS 內嵌**: 根據使用者指示，所有 CSS 樣式都必須直接內嵌在各自的 HTML 檔案中，以確保頁面間的完全隔離。**禁止使用外部 CSS 檔案**。
-*   **無資源共享**: 頁面之間不應共享任何腳本或樣式資源。
+### 1. E2E Test Debugging with Playwright Trace Viewer
 
-### 2.2. 後端
-*   後端服務由 `src/core/orchestrator_v2.py` 協調啟動。
-*   在測試環境中，系統會運行一個簡化版的 `mock` 模式，只啟動 API 伺服器。
+When an E2E test fails, especially due to timeouts or unexpected UI states, the first step should be to analyze its trace file.
+
+-   **How to Generate a Trace**: Run the test command with the `--trace on` flag.
+    ```bash
+    API_MODE=mock npx playwright test your_test_file.spec.js --config=playwright.config.v2.js --trace on
+    ```
+-   **How to View a Trace**: After the test fails, the output will provide a command to view the trace file. It opens a GUI that allows for "time travel" debugging, showing the DOM, console, and network requests at every step of the test.
+    ```bash
+    npx playwright show-trace <path-to-trace.zip>
+    ```
+
+### 2. Isolated Component Development with Storybook
+
+For developing or debugging individual UI components (like a task item, a button, or a modal), using an E2E test is very inefficient. Storybook is the industry-standard tool for building UI components in isolation.
+
+-   **Benefit**: It allows you to render a component with specific inputs ("props") without running the backend or the rest of the application. This makes debugging rendering logic much faster.
+-   **Recommendation**: Consider setting up Storybook for this project to create a library of all reusable v2 components.
+
+### 3. Frontend-Only Mocking with Mock Service Worker (MSW)
+
+While the backend has a `mock` mode, frontend development can be further decoupled by using a frontend-level API mocking library.
+
+-   **Benefit**: MSW intercepts outgoing `fetch` requests at the network level within the browser. This allows frontend developers to define API responses directly in the frontend code, completely removing the dependency on a running backend server during UI development.
+
+### 4. Unit Testing for Business Logic
+
+For complex Javascript logic (e.g., functions that process WebSocket data, manage application state), E2E tests are not the right tool.
+
+-   **Recommendation**: Introduce a Javascript unit testing framework like **Vitest** or **Jest**. This allows you to test individual functions in milliseconds, ensuring the core business logic is correct before testing it as part of the larger application.
 
 ---
 
-## 3. 測試與驗證
+### Final Checks:
 
-### 3.1. 核心理念
-為了確保穩定性與開發效率，我們採用**由內而外**的測試策略：先確保小範圍的**單元測試**通過，再進行大範圍的**端對端 (E2E) 測試**。
-
-### 3.2. Python 單元測試 (Pytest)
-在進行任何 E2E 測試前，應先確認相關元件的單元測試是否通過。這是診斷後端問題最快的方式。
-
-*   **執行指令**:
-    ```bash
-    # 確保在正確的環境下執行
-    # 設定 PYTHONPATH 以便找到 src 中的模組
-    PYTHONPATH=./src API_MODE=mock python -m pytest [path/to/test_file.py]
-    ```
-*   **環境須知**:
-    *   所有測試都應在 `pyenv` 的 `3.12.11` 版本下運行。
-    *   執行時必須設定 `API_MODE=mock` 環境變數。
-    *   若出現 `ModuleNotFoundError`，請優先檢查 `PYTHONPATH` 是否已正確設定為 `src`。
-
-### 3.3. 端對端測試 (Playwright)
-這是驗證整個應用程式是否正常運作的最終關卡。
-
-*   **v2 測試執行指令**:
-    ```bash
-    npx playwright test --config playwright.config.v2.js
-    ```
-    *   **注意**：不要使用 `bun test:v2`，該指令已過時。
-*   **指定單一測試檔案**:
-    ```bash
-    npx playwright test [path/to/spec_file.js] --config playwright.config.v2.js
-    ```
-*   **測試伺服器**: 此指令會自動透過 `scripts/run_server_for_playwright_v2.py` 啟動一個簡化版的 `mock` 伺服器。所有後端伺服器問題都應優先在此環境下偵錯。
-
----
-
-## 4. 程式碼風格與格式化
-*   在提交前，請務必執行以下指令來格式化和檢查程式碼：
-    ```bash
-    bunx @biomejs/biome check --apply .
-    ```
+Before submitting your work, please ensure the following:
+1. All v2 E2E tests pass (`API_MODE=mock npx playwright test --config=playwright.config.v2.js`).
+2. All code is formatted according to the project's standards (e.g., using a linter/formatter if available).
+3. `plan_v2.md` and `Log.md` are up-to-date.
+4. The final commit message and PR description are in Traditional Chinese.
