@@ -16,8 +16,8 @@
 
 一套全新之測試典範遂被共同設計出來，其精髓可概括如下：
 
-*   **以「人工智慧視覺巡檢」取代盲目等待**：該程序利用 Playwright 工具快速擷取所有核心介面之視覺快照，並將其與主控台日誌數據相結合，提交予多模態人工智慧模型（如 Gemini）進行批次視覺分析，旨在於數十秒之時間尺度內，完成對整體應用程式之健康狀態掃描。
-*   **以「人工智慧根因分析」賦能深度除錯**：當偵測到異常狀態時，系統將自動啟用 Playwright 之 trace 功能，用以收集包含影片紀錄、網路請求、文件物件模型快照在內之多維度數據。人工智慧將對此等「數位事證」進行聚合分析，以提出精準且具可操作性之修復建議。
+- **以「人工智慧視覺巡檢」取代盲目等待**：該程序利用 Playwright 工具快速擷取所有核心介面之視覺快照，並將其與主控台日誌數據相結合，提交予多模態人工智慧模型（如 Gemini）進行批次視覺分析，旨在於數十秒之時間尺度內，完成對整體應用程式之健康狀態掃描。
+- **以「人工智慧根因分析」賦能深度除錯**：當偵測到異常狀態時，系統將自動啟用 Playwright 之 trace 功能，用以收集包含影片紀錄、網路請求、文件物件模型快照在內之多維度數據。人工智慧將對此等「數位事證」進行聚合分析，以提出精準且具可操作性之修復建議。
 
 ## 第五章：戰術執行細節：工具鏈與視覺分析工作流
 
@@ -27,30 +27,30 @@
 
 我們的策略依賴於一個整合的工具生態系，每個工具各司其職，共同解決特定的痛點。
 
-| 痛點 | 主要工具選擇 | 核心功能與理由 | 備選/輔助工具 |
-| :--- | :--- | :--- | :--- |
-| 如何自動化瀏覽器操作與數據收集？ | **Playwright** (執行器) | 這是我們整個流程的基石。它負責模擬使用者行為、執行 `page.screenshot()` 進行截圖、透過 `page.on()` 監聽主控台/網路日誌，並在深度除錯時使用 `trace` 功能產生包含所有細節的追蹤檔案。 | **Cypress**: 提供優秀的開發者體驗和視覺化測試介面，但在跨網域和多頁面測試上，Playwright 靈活性更高。 |
-| 如何進行精準的視覺比對？ | **多模態 AI (Gemini)** (語意分析) | 我們的核心策略。它不僅僅是像素比對，而是能理解「這個頁面看起來是否正常？」這種語意層級的問題，能發現佈局崩潰等邏輯性視覺錯誤。 | **Percy.io / Applitools**: 這些是專業的「視覺化迴歸測試」工具，擅長進行像素級的精準比對 (Pixel-perfect diffing)。它們可以作為 AI 視覺斷言的補充，用於捕捉細微的、非災難性的 UI 變更（例如按鈕移動了 2 像素）。 |
-| 如何聚合與關聯所有日誌？ | **集中式日誌平台** (數據中樞) | 為了讓 AI 進行有效的根因分析，所有數據（前端主控台日誌、後端應用程式日誌、Playwright 測試結果）都應被發送到一個統一的地方。 | **Sentry.io**: 非常適合捕捉前端錯誤，並能與後端日誌關聯。<br>**Datadog**: 提供更全面的可觀測性平台，整合了日誌、指標和 APM。<br>**ELK Stack (自建)**: 提供最大的靈活性，但維護成本較高。 |
-| 如何讓測試快速執行？ | **Bun** (加速器) | Bun 作為一個極速的 JavaScript 執行環境和測試執行器 (`bun test`)，能從根本上縮短測試的啟動和執行時間，尤其在 CI/CD 環境中效果顯著。 | **Node.js + pnpm**: pnpm 在依賴安裝速度和磁碟空間管理上，相較於 npm/yarn 也有顯著優勢。 |
+| 痛點                             | 主要工具選擇                      | 核心功能與理由                                                                                                                                                                     | 備選/輔助工具                                                                                                                                                                                                  |
+| :------------------------------- | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 如何自動化瀏覽器操作與數據收集？ | **Playwright** (執行器)           | 這是我們整個流程的基石。它負責模擬使用者行為、執行 `page.screenshot()` 進行截圖、透過 `page.on()` 監聽主控台/網路日誌，並在深度除錯時使用 `trace` 功能產生包含所有細節的追蹤檔案。 | **Cypress**: 提供優秀的開發者體驗和視覺化測試介面，但在跨網域和多頁面測試上，Playwright 靈活性更高。                                                                                                           |
+| 如何進行精準的視覺比對？         | **多模態 AI (Gemini)** (語意分析) | 我們的核心策略。它不僅僅是像素比對，而是能理解「這個頁面看起來是否正常？」這種語意層級的問題，能發現佈局崩潰等邏輯性視覺錯誤。                                                     | **Percy.io / Applitools**: 這些是專業的「視覺化迴歸測試」工具，擅長進行像素級的精準比對 (Pixel-perfect diffing)。它們可以作為 AI 視覺斷言的補充，用於捕捉細微的、非災難性的 UI 變更（例如按鈕移動了 2 像素）。 |
+| 如何聚合與關聯所有日誌？         | **集中式日誌平台** (數據中樞)     | 為了讓 AI 進行有效的根因分析，所有數據（前端主控台日誌、後端應用程式日誌、Playwright 測試結果）都應被發送到一個統一的地方。                                                        | **Sentry.io**: 非常適合捕捉前端錯誤，並能與後端日誌關聯。<br>**Datadog**: 提供更全面的可觀測性平台，整合了日誌、指標和 APM。<br>**ELK Stack (自建)**: 提供最大的靈活性，但維護成本較高。                       |
+| 如何讓測試快速執行？             | **Bun** (加速器)                  | Bun 作為一個極速的 JavaScript 執行環境和測試執行器 (`bun test`)，能從根本上縮短測試的啟動和執行時間，尤其在 CI/CD 環境中效果顯著。                                                 | **Node.js + pnpm**: pnpm 在依賴安裝速度和磁碟空間管理上，相較於 npm/yarn 也有顯著優勢。                                                                                                                        |
 
 ### 5.2 AI 視覺分析工作流程設計
 
 我們的核心流程旨在模擬人類開發者的直覺：先快速巡檢，再深度除錯。
 
 1.  **數據收集層 (Data Collection Layer):**
-    *   **廣度優先 (Patrol):** 測試腳本執行「AI 視覺巡檢」，快速遍歷所有預定義的核心頁面。在每個頁面，它會同時收集三種數據：① 頁面截圖、② 瀏覽器主控台日誌、③ 失敗的網路請求日誌。
-    *   **深度優先 (Drill-down):** 當任何測試失敗時，自動觸發 Playwright 的 `trace` 功能，產生一個包含影片、DOM 快照、網路活動等所有細節的單一追蹤檔案。
+    - **廣度優先 (Patrol):** 測試腳本執行「AI 視覺巡檢」，快速遍歷所有預定義的核心頁面。在每個頁面，它會同時收集三種數據：① 頁面截圖、② 瀏覽器主控台日誌、③ 失敗的網路請求日誌。
+    - **深度優先 (Drill-down):** 當任何測試失敗時，自動觸發 Playwright 的 `trace` 功能，產生一個包含影片、DOM 快照、網路活動等所有細節的單一追蹤檔案。
 
 2.  **數據分析層 (Analysis Layer):**
-    *   所有收集到的數據（無論是巡檢的批量數據，還是單一的追蹤檔案）都會被傳送給一個中央的「AI 分析服務」。
-    *   這個服務會根據情境，向多模態 AI 模型提出不同層次的問題。
-        *   對於巡檢數據，問題是：「請檢查這批截圖，並結合它們各自的日誌，找出哪些頁面存在視覺異常或功能錯誤。」
-        *   對於追蹤檔案，問題是：「這是一個失敗的測試追蹤。請分析所有數據，找出導致測試失敗的根本原因，並提出修復建議。」
+    - 所有收集到的數據（無論是巡檢的批量數據，還是單一的追蹤檔案）都會被傳送給一個中央的「AI 分析服務」。
+    - 這個服務會根據情境，向多模態 AI 模型提出不同層次的問題。
+      - 對於巡檢數據，問題是：「請檢查這批截圖，並結合它們各自的日誌，找出哪些頁面存在視覺異常或功能錯誤。」
+      - 對於追蹤檔案，問題是：「這是一個失敗的測試追蹤。請分析所有數據，找出導致測試失敗的根本原因，並提出修復建議。」
 
 3.  **報告與行動層 (Reporting & Action Layer):**
-    *   AI 的分析結果會被格式化為一份清晰的報告。
-    *   報告會被發送到開發團隊的通訊頻道（如 Slack），或自動在專案管理工具（如 Jira）中建立一個新的 issue，其中包含了失敗的截圖、AI 的分析結論以及建議的修復方向。
+    - AI 的分析結果會被格式化為一份清晰的報告。
+    - 報告會被發送到開發團隊的通訊頻道（如 Slack），或自動在專案管理工具（如 Jira）中建立一個新的 issue，其中包含了失敗的截圖、AI 的分析結論以及建議的修復方向。
 
 ### 5.3 流程圖草圖 (Workflow Flowchart)
 
@@ -135,31 +135,31 @@
 過程並非一帆風順，遭遇了一系列環環相扣的環境與設定問題：
 
 1.  **挑戰一：Python 依賴缺失**
-    *   **現象**：首次嘗試啟動伺服器 (`python -m circus.circusd ...`) 時，系統立即報錯 `ModuleNotFoundError: No module named 'circus'`。
-    *   **分析**：這是典型的 Python 環境問題，執行的環境中並未安裝必要的依賴套件。
-    *   **解決方案**：透過執行 `pip install -r requirements.txt`，將專案所需的所有 Python 套件安裝至當前環境。
+    - **現象**：首次嘗試啟動伺服器 (`python -m circus.circusd ...`) 時，系統立即報錯 `ModuleNotFoundError: No module named 'circus'`。
+    - **分析**：這是典型的 Python 環境問題，執行的環境中並未安裝必要的依賴套件。
+    - **解決方案**：透過執行 `pip install -r requirements.txt`，將專案所需的所有 Python 套件安裝至當前環境。
 
 2.  **挑戰二：設定檔遺失**
-    *   **現象**：解決了依賴問題後，伺服器依然啟動失敗，錯誤訊息轉變為 `OSError: the configuration file 'config/circus.ini' does not exist`。
-    *   **分析**：程式碼庫中僅提供了一個範本檔案 `config/circus.ini.template`，而程式預期讀取的是 `config/circus.ini`。
-    *   **解決方案**：執行 `cp config/circus.ini.template config/circus.ini`，從範本複製一份正式的設定檔。
+    - **現象**：解決了依賴問題後，伺服器依然啟動失敗，錯誤訊息轉變為 `OSError: the configuration file 'config/circus.ini' does not exist`。
+    - **分析**：程式碼庫中僅提供了一個範本檔案 `config/circus.ini.template`，而程式預期讀取的是 `config/circus.ini`。
+    - **解決方案**：執行 `cp config/circus.ini.template config/circus.ini`，從範本複製一份正式的設定檔。
 
 3.  **挑戰三：設定檔預留位置未被替換**
-    *   **現象**：伺服器日誌中出現了新的錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
-    *   **分析**：`circus.ini` 設定檔中使用了一個預留位置 `%%PYTHON_EXEC%%`，它需要被替換為當前環境中 Python 直譯器的確切路徑。
-    *   **解決方案**：透過 `which python` 找到 Python 路徑，並使用 `sed` 指令將其寫入設定檔，例如：`sed -i "s|%%PYTHON_EXEC%%|/path/to/python|g" config/circus.ini`。
+    - **現象**：伺服器日誌中出現了新的錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
+    - **分析**：`circus.ini` 設定檔中使用了一個預留位置 `%%PYTHON_EXEC%%`，它需要被替換為當前環境中 Python 直譯器的確切路徑。
+    - **解決方案**：透過 `which python` 找到 Python 路徑，並使用 `sed` 指令將其寫入設定檔，例如：`sed -i "s|%%PYTHON_EXEC%%|/path/to/python|g" config/circus.ini`。
 
 4.  **挑戰四：Node.js 依賴缺失**
-    *   **現象**：在伺服器問題看似解決後，執行 Playwright 測試 (`npx playwright test ...`) 時，出現了前端錯誤 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test'`。
-    *   **分析**：與 Python 類似，Node.js 的環境也需要安裝其專案依賴。
-    *   **解決方案**：執行 `npm install`，安裝 `package.json` 中定義的所有開發與執行依賴。
+    - **現象**：在伺服器問題看似解決後，執行 Playwright 測試 (`npx playwright test ...`) 時，出現了前端錯誤 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test'`。
+    - **分析**：與 Python 類似，Node.js 的環境也需要安裝其專案依賴。
+    - **解決方案**：執行 `npm install`，安裝 `package.json` 中定義的所有開發與執行依賴。
 
 5.  **挑戰五：頑固的連接埠衝突**
-    *   **現象**：最令人困惑的問題隨之而來。即使所有設定都已正確，測試仍然頻繁失敗，錯誤為 `net::ERR_CONNECTION_REFUSED`，同時伺服器日誌顯示 `Address already in use`。這表示即使先前的程序已終止，仍有殭屍程序佔用著連接埠。
-    *   **分析**：手動管理伺服器啟動與關閉的過程非常不穩定，尤其是在自動化腳本中。
-    *   **最終解決方案**：
-        1.  **授權給 Playwright**：修改 `playwright.config.js`，加入 `webServer` 設定。這讓 Playwright 自身負責在測試前啟動伺服器、檢查其健康狀態，並在測試結束後關閉它，從根本上解決了手動管理的穩定性問題。
-        2.  **確保狀態純淨**：為了解決殭屍程序問題，最終採用了「在執行測試的同一個指令中，先強制清理再啟動」的策略：`pkill -9 -f circus; npx playwright test ...`。這確保了每次執行都是在一個絕對乾淨的狀態下開始。
+    - **現象**：最令人困惑的問題隨之而來。即使所有設定都已正確，測試仍然頻繁失敗，錯誤為 `net::ERR_CONNECTION_REFUSED`，同時伺服器日誌顯示 `Address already in use`。這表示即使先前的程序已終止，仍有殭屍程序佔用著連接埠。
+    - **分析**：手動管理伺服器啟動與關閉的過程非常不穩定，尤其是在自動化腳本中。
+    - **最終解決方案**：
+      1.  **授權給 Playwright**：修改 `playwright.config.js`，加入 `webServer` 設定。這讓 Playwright 自身負責在測試前啟動伺服器、檢查其健康狀態，並在測試結束後關閉它，從根本上解決了手動管理的穩定性問題。
+      2.  **確保狀態純淨**：為了解決殭屍程序問題，最終採用了「在執行測試的同一個指令中，先強制清理再啟動」的策略：`pkill -9 -f circus; npx playwright test ...`。這確保了每次執行都是在一個絕對乾淨的狀態下開始。
 
 ### 結論：從混亂到穩定
 
@@ -176,6 +176,7 @@
 ### 初始計畫：一個獨立的 Node.js 腳本
 
 我們的構想是建立一個名為 `snapshot.js` 的獨立腳本，它將：
+
 1.  以子程序 (child process) 的形式啟動 Python 後端伺服器。
 2.  監聽伺服器的日誌輸出，直到看見代表「就緒」的訊息。
 3.  啟動 Playwright，導航至首頁並擷取快照。
@@ -187,42 +188,43 @@
 以下是我們在實現此目標過程中，如俄羅斯套娃般層層揭開的問題：
 
 1.  **挑戰一：Python 依賴問題 (psutil)**
-    *   **現象**：`snapshot.js` 首次執行時，Python 子程序立即失敗，報錯 `ModuleNotFoundError: No module named 'psutil'`。
-    *   **分析**：雖然啟動伺服器的 Python 腳本 `run_server_for_playwright.py` 內部有安裝依賴的函數，但它在執行該函數之前，就需要 `import psutil`。這是一個「雞生蛋，蛋生雞」的問題。
-    *   **解決方案**：修改 `package.json` 中的 `snapshot` 指令，在執行 Node.js 腳本 *之前*，先強制執行 `python3 -m pip install -r requirements.txt`，確保 Python 環境預先準備就緒。
+    - **現象**：`snapshot.js` 首次執行時，Python 子程序立即失敗，報錯 `ModuleNotFoundError: No module named 'psutil'`。
+    - **分析**：雖然啟動伺服器的 Python 腳本 `run_server_for_playwright.py` 內部有安裝依賴的函數，但它在執行該函數之前，就需要 `import psutil`。這是一個「雞生蛋，蛋生雞」的問題。
+    - **解決方案**：修改 `package.json` 中的 `snapshot` 指令，在執行 Node.js 腳本 _之前_，先強制執行 `python3 -m pip install -r requirements.txt`，確保 Python 環境預先準備就緒。
 
 2.  **挑戰二：日誌目錄遺失**
-    *   **現象**：解決依賴問題後，`circus` 服務管理器啟動失敗。檢查 `circus.log` 發現錯誤 `FileNotFoundError: [Errno 2] No such file or directory: '/app/logs/api_server.log'`。
-    *   **分析**：`circus.ini` 設定檔要求將日誌寫入 `/app/logs` 目錄，但該目錄並不存在。
-    *   **解決方案**：再次修改 `package.json` 的 `snapshot` 指令，在所有操作的最前面加入 `mkdir -p logs`，確保日誌目錄永遠存在。
+    - **現象**：解決依賴問題後，`circus` 服務管理器啟動失敗。檢查 `circus.log` 發現錯誤 `FileNotFoundError: [Errno 2] No such file or directory: '/app/logs/api_server.log'`。
+    - **分析**：`circus.ini` 設定檔要求將日誌寫入 `/app/logs` 目錄，但該目錄並不存在。
+    - **解決方案**：再次修改 `package.json` 的 `snapshot` 指令，在所有操作的最前面加入 `mkdir -p logs`，確保日誌目錄永遠存在。
 
 3.  **挑戰三：`circus.ini` 範本變數未替換**
-    *   **現象**：`circus` 依然無法啟動其管理的服務。`circus.log` 顯示錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
-    *   **分析**：`run_server_for_playwright.py` 腳本只是簡單地複製了 `circus.ini.template`，並未將 `%%PYTHON_EXEC%%` 這個預留位置替換為實際的 Python 直譯器路徑。
-    *   **解決方案**：修改 `run_server_for_playwright.py`，將簡單的檔案複製操作，改為讀取範本內容、執行字串替換 (`.replace("%%PYTHON_EXEC%%", sys.executable)`)、然後再寫入新的 `circus.ini` 檔案。
+    - **現象**：`circus` 依然無法啟動其管理的服務。`circus.log` 顯示錯誤 `[Errno 2] No such file or directory: '%%PYTHON_EXEC%%'`。
+    - **分析**：`run_server_for_playwright.py` 腳本只是簡單地複製了 `circus.ini.template`，並未將 `%%PYTHON_EXEC%%` 這個預留位置替換為實際的 Python 直譯器路徑。
+    - **解決方案**：修改 `run_server_for_playwright.py`，將簡單的檔案複製操作，改為讀取範本內容、執行字串替換 (`.replace("%%PYTHON_EXEC%%", sys.executable)`)、然後再寫入新的 `circus.ini` 檔案。
 
 4.  **挑戰四：頑固的 `PYTHONPATH` 問題**
-    *   **現象**：`circus` 終於能嘗試啟動服務了，但服務立即失敗。檢查 `logs/api_server.err` 發現 `ModuleNotFoundError: No module named 'db'`。
-    *   **分析**：即使 `run_server_for_playwright.py` 腳本設定了正確的 `sys.path`，這個設定並不會被 `circus` 產生的子程序繼承。`api_server.py` 在執行時，無法找到位於 `src` 目錄下的其他模組。
-    *   **第一次嘗試 (失敗)**：在 `circus.ini.template` 中為 watcher 加入 `env.PYTHONPATH = /app`。結果無效，錯誤依舊。
-    *   **第二次嘗試 (失敗)**：意識到路徑應為 `/app/src`，修正後再次嘗試。結果依然無效，顯示 `circus` 的 `env` 設定在當前環境下可能並未如預期般運作。
-    *   **最終解決方案**：放棄 `PYTHONPATH`，改用更穩健的 Python 模組化執行方式。修改 `circus.ini.template`，將 `working_dir` 改為 `/app/src`，並將指令從 `python src/api/api_server.py` 改為 `python -m api.api_server`。這利用了 Python 的 `-m` 旗標會自動將當前目錄加入到搜尋路徑的特性，從根本上解決了模組導入問題。
+    - **現象**：`circus` 終於能嘗試啟動服務了，但服務立即失敗。檢查 `logs/api_server.err` 發現 `ModuleNotFoundError: No module named 'db'`。
+    - **分析**：即使 `run_server_for_playwright.py` 腳本設定了正確的 `sys.path`，這個設定並不會被 `circus` 產生的子程序繼承。`api_server.py` 在執行時，無法找到位於 `src` 目錄下的其他模組。
+    - **第一次嘗試 (失敗)**：在 `circus.ini.template` 中為 watcher 加入 `env.PYTHONPATH = /app`。結果無效，錯誤依舊。
+    - **第二次嘗試 (失敗)**：意識到路徑應為 `/app/src`，修正後再次嘗試。結果依然無效，顯示 `circus` 的 `env` 設定在當前環境下可能並未如預期般運作。
+    - **最終解決方案**：放棄 `PYTHONPATH`，改用更穩健的 Python 模組化執行方式。修改 `circus.ini.template`，將 `working_dir` 改為 `/app/src`，並將指令從 `python src/api/api_server.py` 改為 `python -m api.api_server`。這利用了 Python 的 `-m` 旗標會自動將當前目錄加入到搜尋路徑的特性，從根本上解決了模組導入問題。
 
 5.  **挑戰五：Playwright 首次啟動的「沉默」**
-    *   **現象**：伺服器終於成功就緒！`snapshot.js` 也偵測到了就緒訊息。但隨後腳本便卡住，直到被看門狗計時器終止。
-    *   **分析**：這是最隱蔽的一個問題。`await chromium.launch()` 在首次執行時，如果對應的瀏覽器執行檔不存在，它會**在背景靜默下載**，這個過程可能長達數十秒且**不會有任何日誌輸出**。我們的看門狗因此被「欺騙」，誤以為程序已無回應。
-    *   **解決方案**：在 `package.json` 的 `snapshot` 指令中，再次加入一個步驟：`npx playwright install chromium`。在執行主腳本前，先確保瀏覽器依賴已明確安裝。
+    - **現象**：伺服器終於成功就緒！`snapshot.js` 也偵測到了就緒訊息。但隨後腳本便卡住，直到被看門狗計時器終止。
+    - **分析**：這是最隱蔽的一個問題。`await chromium.launch()` 在首次執行時，如果對應的瀏覽器執行檔不存在，它會**在背景靜默下載**，這個過程可能長達數十秒且**不會有任何日誌輸出**。我們的看門狗因此被「欺騙」，誤以為程序已無回應。
+    - **解決方案**：在 `package.json` 的 `snapshot` 指令中，再次加入一個步驟：`npx playwright install chromium`。在執行主腳本前，先確保瀏覽器依賴已明確安裝。
 
 6.  **挑戰六：最後一公里的細節錯誤**
-    *   **現象**：在解決了 Playwright 瀏覽器下載問題後，腳本依然失敗，但這次我們得到了更清晰的錯誤訊息。
-    *   **子問題 A：錯誤的「就緒」信號檢測**：腳本無法從日誌中判斷伺服器已就緒。經查，Python 腳本輸出的是中文日誌 `伺服器已在埠...`，而 `snapshot.js` 中檢查的是英文 `Server is ready`。
-        *   **解決方案**：將檢查條件改為一個語言無關的獨特標記 `✅✅✅`。
-    *   **子問題 B：錯誤的 Playwright 選擇器**：在修復了信號檢測後，Playwright 報錯 `TimeoutError: waiting for locator('#tabs') to be visible`。
-        *   **解決方案**：檢查目標頁面 `mp3.html`，發現其中並無 `#tabs` 元素。將選擇器改為頁面中肯定存在且穩定的 `h1` 標籤。
+    - **現象**：在解決了 Playwright 瀏覽器下載問題後，腳本依然失敗，但這次我們得到了更清晰的錯誤訊息。
+    - **子問題 A：錯誤的「就緒」信號檢測**：腳本無法從日誌中判斷伺服器已就緒。經查，Python 腳本輸出的是中文日誌 `伺服器已在埠...`，而 `snapshot.js` 中檢查的是英文 `Server is ready`。
+      - **解決方案**：將檢查條件改為一個語言無關的獨特標記 `✅✅✅`。
+    - **子問題 B：錯誤的 Playwright 選擇器**：在修復了信號檢測後，Playwright 報錯 `TimeoutError: waiting for locator('#tabs') to be visible`。
+      - **解決方案**：檢查目標頁面 `mp3.html`，發現其中並無 `#tabs` 元素。將選擇器改為頁面中肯定存在且穩定的 `h1` 標籤。
 
 ### 最終成果
 
 在經歷了上述所有挑戰後，`bun run snapshot` 指令終於能夠穩定、可靠地完成其任務。這個過程雖然漫長，但它產生了兩個寶貴的成果：
+
 1.  一個功能強大且包含完整環境設定的輕量級快照腳本。
 2.  一系列對專案底層環境的加固與修復，大幅提升了未來所有自動化任務的穩定性。
 
@@ -236,29 +238,30 @@
 
 ### 初始目標與核心衝突
 
-*   **初始目標**：AI 助理被要求在完成前端修改後，擷取一張螢幕快照，並透過其內建的視覺分析模型（`read_image_file` 工具所觸發）來確認 UI 的正確性，例如按鈕是否存在、版面是否正常等。
-*   **核心衝突**：AI 助理發現，儘管 `run_in_bash_session` 中的 `snapshot` 腳本可以成功產生圖片檔案（例如 `homepage_snapshot_light.png`），但 `read_image_file` 工具卻始終無法找到該檔案，回報 `FileNotFoundError`。
+- **初始目標**：AI 助理被要求在完成前端修改後，擷取一張螢幕快照，並透過其內建的視覺分析模型（`read_image_file` 工具所觸發）來確認 UI 的正確性，例如按鈕是否存在、版面是否正常等。
+- **核心衝突**：AI 助理發現，儘管 `run_in_bash_session` 中的 `snapshot` 腳本可以成功產生圖片檔案（例如 `homepage_snapshot_light.png`），但 `read_image_file` 工具卻始終無法找到該檔案，回報 `FileNotFoundError`。
 
 ### 探索與假設驗證的歷程
 
 為了克服此一衝突，AI 助理進行了一系列由淺入深的探索：
 
 1.  **假設一：暫存檔案的同步延遲或權限問題。**
-    *   **驗證**：透過 `ls -l`、`file` 等指令確認，檔案確實存在、權限正確且內容有效。此假設被推翻。
+    - **驗證**：透過 `ls -l`、`file` 等指令確認，檔案確實存在、權限正確且內容有效。此假設被推翻。
 
 2.  **假設二：`read_image_file` 工具依賴於 Git 版本庫的狀態。**
-    *   **驗證**：AI 助理嘗試將新產生的圖片檔案透過 `git add -f` 和 `git commit` 強制加入到版本庫中。然而，即使在提交成功後，`read_image_file` 依然無法找到該檔案。此假設被推翻。
+    - **驗證**：AI 助理嘗試將新產生的圖片檔案透過 `git add -f` 和 `git commit` 強制加入到版本庫中。然而，即使在提交成功後，`read_image_file` 依然無法找到該檔案。此假設被推翻。
 
 3.  **假設三：`frontend_verification_instructions` 中描述的特殊工作流程可以解決問題。**
-    *   **驗證**：AI 助理遵循了官方文件，在一個指定的臨時目錄 (`jules-scratch`) 中產生快照。結果，`read_image_file` 仍然無法讀取該臨時目錄中的檔案。此假設被推翻。
+    - **驗證**：AI 助理遵循了官方文件，在一個指定的臨時目錄 (`jules-scratch`) 中產生快照。結果，`read_image_file` 仍然無法讀取該臨時目錄中的檔案。此假設被推翻。
 
 ### 最終結論：一個無法跨越的沙盒
 
 綜合上述所有失敗的嘗試，最終的結論是：
 
 AI 助理的工具箱運作在兩個**完全隔離**的檔案系統之上：
-*   **一個可寫的「執行」環境**：`run_in_bash_session` 在此運作。所有檔案的產生、修改、安裝套件等操作都在這裡發生。
-*   **一個唯讀的「讀取」環境**：`read_file`、`read_image_file` 等工具在此運作。這個環境是基於**任務開始那一刻**的儲存庫狀態所建立的一個不可變快照。它無法看到任何在後續執行中所發生的檔案系統變化。
+
+- **一個可寫的「執行」環境**：`run_in_bash_session` 在此運作。所有檔案的產生、修改、安裝套件等操作都在這裡發生。
+- **一個唯讀的「讀取」環境**：`read_file`、`read_image_file` 等工具在此運作。這個環境是基於**任務開始那一刻**的儲存庫狀態所建立的一個不可變快照。它無法看到任何在後續執行中所發生的檔案系統變化。
 
 ### 確立的最終策略
 

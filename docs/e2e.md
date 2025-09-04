@@ -63,6 +63,7 @@ npx playwright test tests/e2e-full-ui-validation.spec.js
 ### 步驟 3: 清理
 
 測試完成後，關閉後端服務：
+
 ```bash
 python -m circus.circusctl quit
 ```
@@ -73,14 +74,14 @@ python -m circus.circusctl quit
 
 由於新的 `snapshot` 腳本處理了大部分舊的環境問題，現在的疑難排解更為簡單：
 
-*   **`bun run snapshot` 失敗**:
-    *   這是最根本的問題。請仔細閱讀該指令輸出的錯誤日誌。
-    *   **不要**嘗試手動執行 `npm install` 或 `pip install`。`snapshot` 腳本的失敗通常指向更深層的設定問題。
-    *   請依序檢查 `AGENTS.md` 中提到的「重要文件檢查清單」，特別是 `circus.log` 和 `api_server.err`。
+- **`bun run snapshot` 失敗**:
+  - 這是最根本的問題。請仔細閱讀該指令輸出的錯誤日誌。
+  - **不要**嘗試手動執行 `npm install` 或 `pip install`。`snapshot` 腳本的失敗通常指向更深層的設定問題。
+  - 請依序檢查 `AGENTS.md` 中提到的「重要文件檢查清單」，特別是 `circus.log` 和 `api_server.err`。
 
-*   **`npx playwright test` 失敗，但 `snapshot` 成功**:
-    *   這表示您的基礎環境是好的，但問題出在 E2E 測試腳本 (`*.spec.js`) 的邏輯本身。
-    *   使用 Playwright 的 UI 模式來進行互動式除錯，這非常有效：
-        ```bash
-        npx playwright test --ui
-        ```
+- **`npx playwright test` 失敗，但 `snapshot` 成功**:
+  - 這表示您的基礎環境是好的，但問題出在 E2E 測試腳本 (`*.spec.js`) 的邏輯本身。
+  - 使用 Playwright 的 UI 模式來進行互動式除錯，這非常有效：
+    ```bash
+    npx playwright test --ui
+    ```

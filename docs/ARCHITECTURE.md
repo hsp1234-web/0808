@@ -97,6 +97,7 @@
 這是最核心、最穩定的執行路徑，由我們的「黃金標準」啟動器驅動。
 
 **[開發者/CI 系統]** `->` **`python scripts/local_run.py`**
+
 1.  **[local_run.py]** 清理並建立 `.venv` 虛擬環境。
 2.  **[local_run.py]** 安裝 `requirements/` 中的所有依賴。
 3.  **[local_run.py]** 執行 `pip install -e .`，將 `src/phoenix_core` 安裝為可編輯套件。
@@ -111,11 +112,12 @@
 這條路徑為使用者提供了互動式的儀表板，其後端由一個穩定的、隔離的服務支撐。
 
 **[Colab 使用者]** `->` **點擊執行 `run/colab_runner.py`**
+
 1.  **[colab_runner.py]** 顯示 HTML 儀表板前端。
 2.  **[colab_runner.py]** 在背景啟動 FastAPI 伺服器 (`src.phoenix_core.main:app`)。
 3.  **[儀表板前端]**
-    *   透過 JavaScript，每秒向後端 API 發送請求 (或直接讀取資料庫)。
-    *   接收後端回傳的 JSON 數據，並更新儀表板上的狀態。
+    - 透過 JavaScript，每秒向後端 API 發送請求 (或直接讀取資料庫)。
+    - 接收後端回傳的 JSON 數據，並更新儀表板上的狀態。
 4.  **[Colab 使用者]** `->` **中斷 `colab_runner.py` 的執行**
 5.  **[colab_runner.py]** 捕捉中斷信號，終止背景服務進程。
 6.  **[Colab 使用者]** `->` **點擊執行 `run/report.py`**
