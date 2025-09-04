@@ -40,10 +40,14 @@ def main():
         log.info("--- [WebServer] 正在啟動 orchestrator.py ---")
 
         env = os.environ.copy()
-        # JULES'S FINAL FIX (2025-09-02): 強制設定 API_MODE 為 mock
-        # 這是為了解決環境變數在複雜的程序鏈中可能遺失的問題。
-        # 確保為 Playwright 啟動的伺服器始終處於模擬模式。
-        env['API_MODE'] = 'mock'
+        # JULES'S REFACTOR (2025-09-04): 允許外部環境變數覆寫 API_MODE
+        # 如果環境變數中未設定 API_MODE，則預設為 'mock'。
+        # 這提供了在真實模式下執行 E2E 測試的靈活性。
+        if 'API_MODE' not in env:
+            log.info("--- [WebServer] 未指定 API_MODE，預設為 'mock' 模式。 ---")
+            env['API_MODE'] = 'mock'
+        else:
+            log.info(f"--- [WebServer] 偵測到 API_MODE='{env['API_MODE']}'，將在此模式下啟動。 ---")
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         src_path = os.path.join(project_root, 'src')
         env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"

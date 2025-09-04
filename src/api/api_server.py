@@ -7,6 +7,7 @@ import subprocess
 import sys
 import os
 import time
+import asyncio
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -217,9 +218,9 @@ async def serve_youtube(request: Request):
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
-def check_model_exists(model_size: str) -> bool:
+async def check_model_exists(model_size: str) -> bool:
     """
-    檢查指定的 Whisper 模型是否已經被下載到本地快取。
+    檢查指定的 Whisper 模型是否已經被下載到本地快取。(非同步版本)
     """
     # JULES'S FIX: 增加一個環境變數來強制使用模擬轉錄器，以支援混合模式測試
     force_mock = os.environ.get("FORCE_MOCK_TRANSCRIBER") == "true"
@@ -230,13 +231,24 @@ def check_model_exists(model_size: str) -> bool:
     check_command = [sys.executable, str(tool_script_path), "--command=check", f"--model_size={model_size}"]
     try:
         # 在模擬模式下，mock_transcriber.py 會永遠回傳 "exists"
-        result = subprocess.run(check_command, capture_output=True, text=True, check=True)
-        output = result.stdout.strip().lower()
-        log.info(f"模型 '{model_size}' 檢查結果: {output}")
-        # 必須完全匹配 "exists"，避免 "not_exists" 被錯誤判斷為 True
-        return output == "exists"
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        log.error(f"檢查模型 '{model_size}' 時發生錯誤: {e}")
+        # JULES'S REFACTOR (2025-09-04): 改為非同步子程序呼叫
+        process = await asyncio.create_subprocess_exec(
+            *check_command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0:
+            output = stdout.decode('utf-8').strip().lower()
+            log.info(f"模型 '{model_size}' 檢查結果: {output}")
+            # 必須完全匹配 "exists"，避免 "not_exists" 被錯誤判斷為 True
+            return output == "exists"
+        else:
+            log.error(f"檢查模型 '{model_size}' 時發生錯誤: {stderr.decode('utf-8').strip()}")
+            return False
+    except FileNotFoundError as e:
+        log.error(f"檢查模型 '{model_size}' 時發生錯誤 (指令不存在): {e}")
         return False
 
 @app.post("/api/transcribe", status_code=202)
@@ -376,19 +388,24 @@ async def get_system_stats():
     gpu_usage = None
     gpu_detected = False
     try:
-        # 執行 nvidia-smi 命令
-        result = subprocess.run(
-            ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, check=True
+        # JULES'S REFACTOR & FIX (2025-09-04): 改為非同步子程序呼叫，並修正縮排與邏輯錯誤
+        process = await asyncio.create_subprocess_exec(
+            'nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        # 解析輸出
-        gpu_usage = float(result.stdout.strip())
-        gpu_detected = True
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        # nvidia-smi 不存在或執行失敗
-        log.debug(f"無法獲取 GPU 資訊: {e}")
-        gpu_usage = None
-        gpu_detected = False
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0:
+            # 解析輸出
+            gpu_usage = float(stdout.decode('utf-8').strip())
+            gpu_detected = True
+        else:
+            # nvidia-smi 不存在或執行失敗
+            log.debug(f"無法獲取 GPU 資訊: {stderr.decode('utf-8').strip()}")
+    except FileNotFoundError:
+        # 這個異常會在 'nvidia-smi' 命令本身不存在時觸發
+        log.debug(f"無法獲取 GPU 資訊 (指令 'nvidia-smi' 不存在)")
 
     return {
         "cpu_usage": cpu_usage,
@@ -655,18 +672,31 @@ async def validate_api_key(request: Request):
         minimal_env = {
             "PATH": os.environ.get("PATH", ""),
             "GOOGLE_API_KEY": api_key,
+            # JULES'S FIX (2025-09-04): 根據交接報告，此處是造成 API 金鑰驗證失敗的直接原因。
+            # 必須將專案的 src 目錄加入 PYTHONPATH，子程序 gemini_processor.py 才能正確匯入其依賴的本地模組。
+            "PYTHONPATH": str(SRC_DIR),
             # 在某些系統上，特別是 Windows，需要 SYSTEMROOT。為保險起見加入。
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")
         }
 
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=minimal_env, check=False)
+        # JULES'S REFACTOR (2025-09-04): 將阻塞的 subprocess.run 改為非同步的 asyncio.create_subprocess_exec
+        # 這是為了解決 `subprocess.run` 會阻塞整個 FastAPI 事件迴圈的問題，此問題會導致嚴重的效能瓶頸和超時錯誤。
+        # 新的方法會以非同步的方式執行子程序，讓伺服器在等待子程序完成時仍能處理其他請求。
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=minimal_env
+        )
+        stdout, stderr = await process.communicate()
 
-        if result.returncode == 0:
+        if process.returncode == 0:
             log.info(f"API 金鑰驗證成功。")
             return {"valid": True}
         else:
-            log.warning(f"API 金鑰驗證失敗。Stderr: {result.stderr.strip()}")
-            error_message = result.stderr.strip()
+            # 將 stderr 從 bytes 解碼為 utf-8 字串
+            error_message = stderr.decode('utf-8').strip()
+            log.warning(f"API 金鑰驗證失敗。Stderr: {error_message}")
             detail = error_message if error_message else "金鑰驗證失敗，請檢查主控台日誌以了解詳情。"
             return JSONResponse(status_code=400, content={"valid": False, "detail": detail})
 
@@ -710,20 +740,29 @@ async def get_youtube_models(payload: ApiKeyPayload):
         env = os.environ.copy()
         env["GOOGLE_API_KEY"] = payload.api_key
 
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8', env=env)
-        models = json.loads(result.stdout)
-        return {"models": models}
-    except subprocess.CalledProcessError as e:
-        stderr_log = e.stderr.strip()
-        log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {stderr_log}")
-        # 將更詳細的錯誤訊息傳回給前端
-        if "API Key not found" in stderr_log:
-            detail_message = "API 金鑰遺失。請確認後端已正確接收金鑰。"
-        elif "API key not valid" in stderr_log:
-            detail_message = "API 金鑰無效。請檢查您的金鑰。"
+        # JULES'S REFACTOR (2025-09-04): 改為非同步子程序呼叫
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0:
+            models = json.loads(stdout.decode('utf-8'))
+            return {"models": models}
         else:
-            detail_message = "無法使用提供的 API 金鑰獲取模型列表，請檢查金鑰權限或網路連線。"
-        raise HTTPException(status_code=401, detail=detail_message)
+            stderr_log = stderr.decode('utf-8').strip()
+            log.error(f"獲取 Gemini 模型列表失敗，可能是因為 API 金鑰無效。Stderr: {stderr_log}")
+            # 將更詳細的錯誤訊息傳回給前端
+            if "API Key not found" in stderr_log:
+                detail_message = "API 金鑰遺失。請確認後端已正確接收金鑰。"
+            elif "API key not valid" in stderr_log:
+                detail_message = "API 金鑰無效。請檢查您的金鑰。"
+            else:
+                detail_message = "無法使用提供的 API 金鑰獲取模型列表，請檢查金鑰權限或網路連線。"
+            raise HTTPException(status_code=401, detail=detail_message)
     except Exception as e:
         log.error(f"獲取 Gemini 模型列表時發生錯誤: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
