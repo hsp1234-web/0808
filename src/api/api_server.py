@@ -652,8 +652,14 @@ async def validate_api_key(request: Request):
         # JULES'S FIX V3: 建立一個最小化的乾淨環境來執行驗證。
         # 這是為了防止 Google 的函式庫自動從沙箱環境中繼承任何「應用程式預設憑證」，
         # 從而確保驗證過程只使用使用者提供的 API 金鑰。
+        # JULES'S FIX: The subprocess needs the PYTHONPATH to find local modules.
+        # This was identified as the root cause for the key validation failure.
+        src_path = str(Path(__file__).resolve().parent.parent)
+        python_path = f"{src_path}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"
+
         minimal_env = {
             "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": python_path,
             "GOOGLE_API_KEY": api_key,
             # 在某些系統上，特別是 Windows，需要 SYSTEMROOT。為保險起見加入。
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")
