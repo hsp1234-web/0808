@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音訊轉錄儀</title>
+    <!-- 移除了所有外部 CDN 依賴，使用內聯樣式 -->
+    <style>
+        /* --- 變數與基本設定 --- */
+        :root {
+            --bg-color: #F8F9FA;
+            --text-color: #202124;
+            --card-bg-color: rgba(255, 255, 255, 0.85);
+            --card-border-color: #e0e0e0;
+            --button-bg-color: #007bff;
+            --button-hover-bg-color: #0056b3;
+            --disabled-bg-color: #ccc;
+            --progress-bar-bg: #e9ecef;
+            --success-color: #28a745;
+            --status-green: #28a745;
+            --status-yellow: #ffc107;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            font-size: 100%;
+            line-height: 1.5;
+        }
+        .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; gap: 24px; }
+
+        /* --- 卡片與佈局 --- */
+        .card {
+            border: 1px solid var(--card-border-color);
+            border-radius: 12px;
+            padding: 24px;
+            background-color: var(--card-bg-color);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .grid-2-col {
+            display: grid;
+            grid-template-columns: 1fr; /* Default to 1 column */
+            gap: 24px;
+        }
+        @media (min-width: 768px) { /* 2 columns on medium screens and up */
+            .grid-2-col {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        .flex-col { display: flex; flex-direction: column; gap: 16px; }
+        h1 { font-size: 1.8em; font-weight: 700; }
+        h2 { font-size: 1.3em; font-weight: 600; margin-bottom: 12px; }
+
+        /* --- 分頁樣式 --- */
+        .tab-container {
+            display: flex;
+            gap: 8px;
+            padding: 0;
+        }
+        .tab-button {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background-color: #e9ecef;
+            color: var(--text-color);
+            opacity: 0.8;
+            font-size: 1em;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .tab-button:hover {
+            opacity: 1;
+        }
+        .tab-button.active {
+            background-color: var(--button-bg-color);
+            color: white;
+            opacity: 1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tab-content {
+            display: none; /* 預設隱藏 */
+        }
+        .tab-content.active {
+            display: block; /* 顯示作用中的分頁 */
+        }
+
+        @media (max-width: 767px) {
+            body { padding: 10px; }
+            .card { padding: 16px; }
+            h1 { font-size: 1.5em; }
+            h2 { font-size: 1.2em; }
+        }
+
+        /* --- 表單與按鈕 --- */
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: var(--button-bg-color);
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover:not(:disabled) { background-color: var(--button-hover-bg-color); transform: translateY(-1px); }
+        button:disabled { background-color: var(--disabled-bg-color); cursor: not-allowed; transform: none; }
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+        .file-drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .file-drop-zone:hover { background-color: #f0f8ff; border-color: var(--button-bg-color); }
+        .hidden { display: none; }
+
+        /* --- 進度條 --- */
+        .progress-container {
+            width: 100%;
+            background-color: var(--progress-bar-bg);
+            border-radius: 8px;
+            margin-top: 16px;
+            overflow: hidden;
+            position: relative;
+            height: 28px;
+            display: flex;
+            align-items: center;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: var(--button-bg-color);
+            transition: width 0.2s ease-in-out;
+        }
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: var(--text-color);
+            font-weight: 600;
+            line-height: 28px;
+        }
+
+        /* --- 儀表板 --- */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+        .stat-item { font-size: 0.9em; }
+        .status-light { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .status-green { background-color: var(--status-green); box-shadow: 0 0 6px var(--status-green); }
+        .status-yellow { background-color: var(--status-yellow); box-shadow: 0 0 6px var(--status-yellow); }
+
+        /* --- 任務列表 --- */
+        .task-list { min-height: 60px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .task-item {
+            padding: 12px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+            gap: 10px; /* Add gap for wrapped items */
+        }
+        .task-filename {
+            font-weight: 600;
+            /* JULES'S FIX for long filenames */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 350px; /* Adjust as needed */
+        }
+        .task-status {
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #666;
+            transition: color 0.3s ease; /* Smooth color transition */
+        }
+        .task-status.status-downloading { color: #007bff; } /* Blue */
+        .task-status.status-processing { color: #fd7e14; } /* Orange */
+        .task-status.status-completed { color: #28a745; } /* Green */
+        .task-status.status-failed { color: #dc3545; } /* Red */
+
+        /* --- 任務列表中的按鈕 --- */
+        .task-list .task-actions a {
+            text-decoration: none;
+            padding: 5px 12px;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            display: inline-block;
+            border: none;
+            font-weight: 500;
+            text-align: center;
+        }
+        .task-list .task-actions a:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+        .task-list .btn-preview {
+             background-color: var(--button-bg-color); /* Blue */
+        }
+        .task-list .btn-download {
+             background-color: var(--success-color); /* Green */
+        }
+        .task-list .task-actions a.btn-rename {
+            background-color: var(--status-yellow);
+            color: var(--text-color);
+        }
+
+        /* --- 即時輸出 --- */
+        .transcript-output {
+            min-height: 100px;
+            background-color: #e9ecef;
+            padding: 16px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            color: #495057;
+        }
+        .transcript-output p {
+            margin: 0 0 0.5em 0; /* 為每個段落增加一些底邊距，增加可讀性 */
+            line-height: 1.6; /* 增加行高 */
+        }
+        .log-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 20px;
+            align-items: center;
+        }
+
+        /* --- Modal 彈窗樣式 --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .modal-close-button {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            color: #888;
+            line-height: 1;
+            padding: 0;
+        }
+        .modal-close-button:hover {
+            color: #333;
+            background-color: transparent;
+            transform: none;
+        }
+        .modal-body {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            border-top: 1px solid #eee;
+            padding-top: 16px;
+        }
+        .modal-footer button, .modal-footer .button-like {
+            background-color: #6c757d;
+        }
+        .modal-footer a.button-like {
+             background-color: var(--success-color);
+        }
+        .button-like {
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: var(--button-bg-color);
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        .button-like:hover {
+            background-color: var(--button-hover-bg-color);
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <!-- 標題與控制項 -->
+        <header class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <h1>音訊轉錄儀</h1>
+            <div>
+                <span>字體:</span>
+                <button id="zoom-out-btn" style="padding: 5px 10px;">-</button>
+                <span id="font-size-display" style="display: inline-block; width: 50px; text-align: center; font-weight: bold;">100%</span>
+                <button id="zoom-in-btn" style="padding: 5px 10px;">+</button>
+            </div>
+        </header>
+
+        <!-- JULES'S NEW STATUS MESSAGE AREA -->
+        <div id="status-message-area" class="card" style="display: none; padding: 12px; margin-bottom: 16px; border-width: 2px;">
+            <div id="status-message-text" style="margin: 0; font-weight: 500; text-align: center; white-space: pre-wrap; word-wrap: break-word;"></div>
+        </div>
+
+        <!-- 全域儀表板 -->
+        <div class="card">
+            <h2>📊 全域儀表板</h2>
+            <div class="dashboard-grid">
+                <div class="stat-item">
+                    <span id="status-light" class="status-light status-green"></span>
+                    <strong>狀態:</strong> <span id="status-text">準備就緒</span>
+                </div>
+                <div class="stat-item"><strong>模型:</strong> <span id="model-display">medium</span></div>
+                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">未偵測到</span></div>
+            </div>
+            <div class="dashboard-grid" style="margin-top: 16px;">
+                 <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
+                 <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
+                 <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+            </div>
+        </div>
+
+        <!-- 功能分頁導覽 (MPA 版本) -->
+        <div class="card">
+            <div class="tab-container">
+                <a href="/" class="tab-button active" data-testid="tab-local-file">📁 本機檔案轉錄</a>
+                <a href="/downloader" class="tab-button" data-testid="tab-downloader">📥 媒體下載器</a>
+                <a href="/youtube" class="tab-button" data-testid="tab-youtube">▶️ YouTube 轉報告</a>
+            </div>
+        </div>
+
+        <!-- 分頁內容 -->
+        <div id="local-file-tab" class="tab-content active">
+            <div class="grid-2-col">
+                <div class="card flex-col">
+                    <h2>⚙️ 步驟 1: 選項 (Whisper 模型)</h2>
+                    <div>
+                        <label for="model-select">模型大小</label>
+                        <select id="model-select">
+                            <option value="tiny" selected>Tiny (最快)</option>
+                            <option value="base">Base</option>
+                            <option value="small">Small</option>
+                            <option value="medium">Medium (建議)</option>
+                            <option value="large-v2">Large-v2 (準確)</option>
+                            <option value="large-v3">Large-v3 (最準確)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="language-select">轉錄語言</label>
+                        <select id="language-select">
+                            <option value="zh">繁體中文</option>
+                            <option value="en">英文</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="beam-size-input" style="display: block; margin-bottom: 4px;">光束大小 (Beam Size)</label>
+                        <input type="number" id="beam-size-input" value="1" min="1" max="10" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                        <small style="font-size: 0.8em; color: #666;">建議值為 5。較大的值可能更準確但較慢。</small>
+                    </div>
+                    <button id="confirm-settings-btn">✓ 確認設定</button>
+                    <!-- 模型下載進度條 -->
+                    <div id="model-progress-container" class="progress-container hidden" style="margin-top: 10px;">
+                        <div id="model-progress-bar" class="progress-bar"></div>
+                        <span id="model-progress-text" class="progress-text"></span>
+                    </div>
+                </div>
+                <div class="card flex-col">
+                    <h2>📤 步驟 2: 上傳檔案</h2>
+                    <label for="file-input" class="file-drop-zone">
+                        點擊此處選擇檔案
+                    </label>
+                    <input id="file-input" type="file" multiple class="hidden">
+                    <div id="file-list"></div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 24px;">
+                <button id="start-processing-btn" disabled>✨ 請先選擇檔案</button>
+                <!-- 上傳進度條 -->
+                <div id="upload-progress-container" class="progress-container hidden">
+                    <div id="upload-progress-bar" class="progress-bar"></div>
+                    <span id="upload-progress-text" class="progress-text"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 其他分頁的內容已被移除，以專注於本機檔案轉錄功能 -->
+
+        <!-- 處理中任務 -->
+        <div class="card">
+            <h2>🔄 處理中任務</h2>
+            <div id="ongoing-tasks" class="task-list" style="margin-top: 16px;">
+                <p id="no-ongoing-task-msg">暫無執行中任務</p>
+            </div>
+        </div>
+
+        <!-- 已完成任務 -->
+        <div class="card">
+            <h2>✅ 已完成任務</h2>
+            <div id="completed-tasks" class="task-list" style="margin-top: 16px;">
+                <p id="no-completed-task-msg">尚無完成的任務</p>
+            </div>
+        </div>
+
+        <!-- 即時轉錄輸出 -->
+        <div id="transcript-container" class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <h2>📝 即時轉錄輸出</h2>
+                <div class="toggle-switch-container" style="display: flex; align-items: center; gap: 8px;">
+                    <label for="timestamp-toggle" style="font-weight: 500; font-size: 0.9em; cursor: pointer;">顯示時間戳記</label>
+                    <input type="checkbox" id="timestamp-toggle" checked>
+                </div>
+            </div>
+            <div id="transcript-output" class="transcript-output" style="margin-top: 16px;">等待任務開始...</div>
+        </div>
+
+
+        <!-- 檔案預覽區 -->
+        <div id="preview-area" class="card hidden">
+            <h2>📄 檔案預覽</h2>
+            <button id="close-preview-btn" style="position: absolute; top: 15px; right: 15px; padding: 5px 10px; background-color: #6c757d;">關閉</button>
+            <div id="preview-content-wrapper" style="margin-top: 20px;">
+                <pre id="preview-content-text" class="transcript-output" style="min-height: 200px; max-height: 70vh; overflow-y: auto;"></pre>
+                <iframe id="preview-content-html" style="width: 100%; height: 70vh; border: 1px solid #ccc; border-radius: 8px;" class="hidden"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- JULES: 新增的預覽 Modal -->
+    <div id="preview-modal" class="modal-overlay" style="display: none;" data-testid="report-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">報告預覽</h2>
+                <button id="modal-close-btn" class="modal-close-button">&times;</button>
+            </div>
+            <div class="modal-body" data-testid="report-content-html">
+                <!-- Content will be dynamically generated by JS -->
+            </div>
+            <div class="modal-footer">
+                <a id="modal-download-btn" href="#" download class="button-like" data-testid="report-download-button">下載檔案</a>
+                <button id="modal-copy-link-btn" data-testid="report-preview-button">複製連結</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JULES'S NEW FEATURE: Details Modal -->
+    <div id="details-modal" class="modal-overlay" style="display: none;" data-testid="task-detail-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="details-modal-title">任務詳細資訊</h2>
+                <button id="details-modal-close-btn" data-testid="task-detail-close-button" class="modal-close-button">&times;</button>
+            </div>
+            <div id="details-modal-body" class="modal-body" data-testid="task-detail-content">
+                <!-- Details will be populated by JS -->
+            </div>
+            <div class="modal-footer">
+                 <button id="details-modal-ok-btn">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Make functions globally available for testing
+        let handleTranscriptionUpdate;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- 全域狀態訊息處理 ---
+            const statusMessageArea = document.getElementById('status-message-area');
+            const statusMessageText = document.getElementById('status-message-text');
+
+            const translateErrorMessage = (message) => {
+                if (typeof message !== 'string') {
+                    return '發生未知錯誤。';
+                }
+                if (message.includes('500 An internal error has occurred')) {
+                    return `發生 500 An internal error has occurred 錯誤，通常表示 Google Gemini 伺服器端發生了問題。\n\n可能的原因：\n- 伺服器暫時性故障：這是最常見的原因。伺服器可能正在進行維護、流量過大或某個服務暫時性失效。\n- 不穩定的網路連線：雖然這個錯誤主要來自伺服器，但你和伺服器之間的網路連線不穩定，偶爾也可能導致請求失敗並返回這個錯誤。\n- 請求資料格式問題：雖然這個錯誤碼通常和伺服器有關，但在極少數情況下，如果你的請求資料格式有嚴重問題，也可能導致伺服器無法解析並回傳此錯誤。`;
+                }
+                return message;
+            };
+
+            const showStatusMessage = (message, isError = false, duration = 5000) => {
+                if (!statusMessageArea || !statusMessageText) return;
+                const displayMessage = isError ? translateErrorMessage(message) : message;
+                statusMessageText.textContent = displayMessage;
+                statusMessageArea.style.display = 'block';
+                if (isError) {
+                    statusMessageArea.style.backgroundColor = '#f8d7da';
+                    statusMessageArea.style.borderColor = '#f5c6cb';
+                    statusMessageText.style.color = '#721c24';
+                } else {
+                    statusMessageArea.style.backgroundColor = '#d4edda';
+                    statusMessageArea.style.borderColor = '#c3e6cb';
+                    statusMessageText.style.color = '#155724';
+                }
+                if (duration > 0) {
+                    setTimeout(() => {
+                        if (statusMessageText.textContent === displayMessage) {
+                            statusMessageArea.style.display = 'none';
+                        }
+                    }, duration);
+                }
+            };
+
+            // --- DOM 元素宣告 (本機檔案轉錄專用) ---
+            const fileInput = document.getElementById('file-input');
+            const fileDropZone = document.querySelector('.file-drop-zone');
+            const fileListDisplay = document.getElementById('file-list');
+            const startBtn = document.getElementById('start-processing-btn');
+            const confirmBtn = document.getElementById('confirm-settings-btn');
+            const modelSelect = document.getElementById('model-select');
+            const languageSelect = document.getElementById('language-select');
+            const beamSizeInput = document.getElementById('beam-size-input');
+            const ongoingTasksContainer = document.getElementById('ongoing-tasks');
+            const completedTasksContainer = document.getElementById('completed-tasks');
+            const noOngoingTaskMsg = document.getElementById('no-ongoing-task-msg');
+            const noCompletedTaskMsg = document.getElementById('no-completed-task-msg');
+            const transcriptOutput = document.getElementById('transcript-output');
+            const modelDisplay = document.getElementById('model-display');
+            const statusText = document.getElementById('status-text');
+            const statusLight = document.getElementById('status-light');
+            const modelProgressContainer = document.getElementById('model-progress-container');
+            const modelProgressBar = document.getElementById('model-progress-bar');
+            const modelProgressText = document.getElementById('model-progress-text');
+            const previewArea = document.getElementById('preview-area');
+            const closePreviewBtn = document.getElementById('close-preview-btn');
+            const zoomInBtn = document.getElementById('zoom-in-btn');
+            const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const fontSizeDisplay = document.getElementById('font-size-display');
+            const timestampToggle = document.getElementById('timestamp-toggle');
+
+            // --- 預覽 Modal 彈窗元素 ---
+            const previewModal = document.getElementById('preview-modal');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const modalDownloadBtn = document.getElementById('modal-download-btn');
+            const modalCopyLinkBtn = document.getElementById('modal-copy-link-btn');
+
+            // --- 詳細資訊 Modal 元素 ---
+            const detailsModal = document.getElementById('details-modal');
+            const detailsModalCloseBtn = document.getElementById('details-modal-close-btn');
+            const detailsModalOkBtn = document.getElementById('details-modal-ok-btn');
+
+            // --- 全域狀態變數 ---
+            let uploadedFiles = [];
+            let socket;
+            const taskElements = new Map();
+            const taskStartTimes = {}; // For timers
+            const modelStatus = {};
+            let currentFontSize = 100;
+            let isInitialized = false;
+            let pollingIntervalId = null;
+            let heartbeatIntervalId = null;
+            let pongTimeoutId = null;
+
+            // --- 狀態同步 ---
+            let appState = {
+                whisperModel: 'tiny',
+                whisperLanguage: 'zh',
+                whisperBeamSize: 1,
+                fontSize: 100
+            };
+
+            const fetchWithRetry = async (url, options = {}, retries = 3, delay = 1000, backoff = 2) => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(url, options);
+                        if (!response.ok) throw new Error(`伺服器錯誤: ${response.status}`);
+                        return response.json();
+                    } catch (error) {
+                        console.warn(`第 ${i + 1} 次請求 ${url} 失敗: ${error.message}. 將在 ${delay}ms 後重試...`);
+                        if (i < retries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= backoff;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+            };
+
+            const applyStateToUI = () => {
+                if (modelSelect.querySelector(`option[value="${appState.whisperModel}"]`)) modelSelect.value = appState.whisperModel;
+                modelDisplay.textContent = modelSelect.value;
+                if (languageSelect.querySelector(`option[value="${appState.whisperLanguage}"]`)) languageSelect.value = appState.whisperLanguage;
+                beamSizeInput.value = appState.whisperBeamSize;
+                currentFontSize = appState.fontSize || 100;
+                updateFontSize();
+            };
+
+            const updateTaskLists = (tasks) => {
+                if (!Array.isArray(tasks)) return;
+
+                const taskIdsFromResponse = new Set(tasks.map(t => t.task_id));
+
+                taskElements.forEach((element, taskId) => {
+                    if (!taskIdsFromResponse.has(taskId)) {
+                        element.remove();
+                        taskElements.delete(taskId);
+                    }
+                });
+
+                tasks.forEach(dispatchStatusUpdate);
+
+                noOngoingTaskMsg.style.display = ongoingTasksContainer.childElementCount > 0 ? 'none' : 'block';
+                noCompletedTaskMsg.style.display = completedTasksContainer.childElementCount > 0 ? 'none' : 'block';
+            };
+
+            const initialLoad = async () => {
+                logAction('initial-load-start');
+                try {
+                    const [savedState, savedTasks] = await Promise.all([
+                        fetchWithRetry('/api/app_state'),
+                        fetchWithRetry('/api/tasks')
+                    ]);
+
+                    if (savedState && typeof savedState === 'object' && Object.keys(savedState).length > 0) {
+                        Object.assign(appState, savedState);
+                        logAction('load-app-state-success');
+                    } else {
+                        logAction('load-app-state-default');
+                    }
+                    applyStateToUI();
+
+                    updateTaskLists(savedTasks.filter(t => t.type === 'transcribe'));
+                    logAction('load-task-history-success', `loaded ${savedTasks.length} tasks`);
+
+                } catch (error) {
+                    console.error('❌ 初始化載入失敗:', error);
+                    showStatusMessage('無法從伺服器載入初始資料，請稍後重新整理。', true, 10000);
+                    applyStateToUI();
+                }
+            };
+
+            const fetchTaskHistory = async () => {
+                try {
+                    const tasks = await fetchWithRetry('/api/tasks', {}, 2, 500);
+                    updateTaskLists(tasks.filter(t => t.type === 'transcribe'));
+                } catch (error) {
+                    console.warn("輪詢任務歷史失敗:", error.message);
+                }
+            };
+
+            // --- 預覽 Modal 彈窗邏輯 ---
+            const openPreviewModal = async (previewUrl, filename, fileType, taskId) => {
+                logAction('open-preview-modal', taskId);
+                const modalBody = document.querySelector('#preview-modal .modal-body');
+
+                modalBody.innerHTML = '';
+                modalTitle.textContent = `預覽: ${filename}`;
+
+                if (fileType.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = previewUrl;
+                    video.controls = true;
+                    video.autoplay = true;
+                    video.style.width = '100%';
+                    video.style.maxHeight = '75vh';
+                    video.onerror = () => { modalBody.innerHTML = `<p style="text-align: center; color: red;">影片預覽載入失敗。</p>`; };
+                    modalBody.appendChild(video);
+                } else if (fileType.startsWith('audio/')) {
+                    const audio = document.createElement('audio');
+                    audio.src = previewUrl;
+                    audio.controls = true;
+                    audio.autoplay = true;
+                    audio.style.width = '100%';
+                    audio.onerror = () => { modalBody.innerHTML = `<p style="text-align: center; color: red;">音訊預覽載入失敗。</p>`; };
+                    modalBody.appendChild(audio);
+                } else if (fileType === 'text/html') {
+                    const iframe = document.createElement('iframe');
+                    iframe.id = 'report-iframe';
+                    iframe.src = previewUrl;
+                    iframe.style.cssText = 'width: 100%; height: 75vh; border: none;';
+                    modalBody.appendChild(iframe);
+                } else if (fileType === 'text/plain') {
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'white-space: pre-wrap; word-wrap: break-word; font-family: monospace; padding: 10px;';
+                    pre.textContent = '正在載入預覽...';
+                    modalBody.appendChild(pre);
+                    try {
+                        const response = await fetch(previewUrl);
+                        if (!response.ok) throw new Error(`伺服器錯誤: ${response.statusText}`);
+                        pre.textContent = await response.text();
+                    } catch (error) {
+                        pre.textContent = `預覽載入失敗: ${error.message}`;
+                        pre.style.color = 'red';
+                    }
+                } else {
+                    modalBody.innerHTML = `<p style="text-align: center; margin-top: 20px;">此檔案類型 (${fileType}) 無法直接預覽。<br><br><a href="${previewUrl}" target="_blank" rel="noopener noreferrer">點此在新分頁中打開</a></p>`;
+                }
+
+                modalDownloadBtn.href = `/api/download/${taskId}`;
+                modalDownloadBtn.download = filename;
+
+                modalCopyLinkBtn.onclick = () => {
+                    const publicUrl = new URL(previewUrl, window.location.origin).href;
+                    navigator.clipboard.writeText(publicUrl).then(() => {
+                        showStatusMessage('報告連結已複製！', false, 3000);
+                    }).catch(err => {
+                        showStatusMessage('複製連結失敗: ' + err, true);
+                    });
+                };
+
+                previewModal.style.display = 'flex';
+            };
+
+            const closePreviewModal = () => {
+                previewModal.style.display = 'none';
+                document.querySelector('#preview-modal .modal-body').innerHTML = '';
+            };
+
+            modalCloseBtn.addEventListener('click', closePreviewModal);
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) closePreviewModal();
+            });
+
+            // --- 核心應用邏輯 ---
+            const logAction = (action, value = null) => {
+                const message = value !== null ? `${action}: ${value}` : action;
+                fetch('/api/log/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: message })
+                }).catch(err => console.error('logAction failed:', err));
+            };
+
+            const setupWebSocket = () => {
+                if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+                socket = new WebSocket(wsUrl);
+
+                const heartbeat = () => {
+                    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+                    pongTimeoutId = setTimeout(() => {
+                        console.warn("WebSocket pong 超時，正在終止連線...");
+                        socket.close();
+                    }, 5000);
+                    socket.send(JSON.stringify({type: 'ping'}));
+                };
+
+                socket.onopen = () => {
+                    console.log('WebSocket 連線成功');
+                    statusText.textContent = '已連線';
+                    statusLight.className = 'status-light status-green';
+                    if (pollingIntervalId) {
+                        clearInterval(pollingIntervalId);
+                        pollingIntervalId = null;
+                    }
+                    if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+                    heartbeatIntervalId = setInterval(heartbeat, 15000);
+                    if (!isInitialized) isInitialized = true;
+                };
+
+                socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
+
+                socket.onclose = () => {
+                    console.log('WebSocket 連線已關閉');
+                    statusText.textContent = '已離線 (正在嘗試重連...)';
+                    statusLight.className = 'status-light status-yellow';
+                    if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+                    if (pongTimeoutId) clearTimeout(pongTimeoutId);
+                    if (!pollingIntervalId) {
+                        fetchTaskHistory();
+                        pollingIntervalId = setInterval(fetchTaskHistory, 10000);
+                    }
+                    setTimeout(setupWebSocket, 5000);
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket 發生錯誤:', error);
+                    socket.close();
+                };
+            };
+
+            const handleWebSocketMessage = (message) => {
+                console.log(`[WebSocket Received]: ${JSON.stringify(message)}`);
+                const { type, payload } = message;
+
+                if (type === 'pong') {
+                    clearTimeout(pongTimeoutId);
+                    return;
+                }
+
+                if (type === 'NEW_TASK_CREATED' || type === 'TRANSCRIPTION_STATUS' || type === 'TRANSCRIPTION_UPDATE') {
+                    dispatchStatusUpdate(payload);
+                } else if (type === 'DOWNLOAD_STATUS') { // For model downloads
+                    handleDownloadStatus(payload);
+                }
+            };
+
+            const handleDownloadStatus = (payload) => {
+                if (!modelStatus[payload.model]) modelStatus[payload.model] = {};
+                modelStatus[payload.model].status = payload.status;
+                modelProgressContainer.classList.remove('hidden');
+                if (payload.status === 'downloading') {
+                    const percent = payload.percent || 0;
+                    modelProgressBar.style.width = `${percent}%`;
+                    modelProgressText.textContent = `下載中 (${payload.description || '...'})`;
+                    confirmBtn.disabled = true;
+                } else if (payload.status === 'completed') {
+                    modelProgressBar.style.width = '100%';
+                    modelProgressText.textContent = '下載完成';
+                    confirmBtn.disabled = false;
+                } else if (payload.status === 'failed') {
+                    modelProgressBar.style.width = '100%';
+                    modelProgressBar.style.backgroundColor = '#dc3545';
+                    modelProgressText.textContent = `下載失敗: ${payload.error}`;
+                    confirmBtn.disabled = false;
+                }
+            };
+
+            const getIconForFile = (outputPath) => {
+                if (!outputPath || typeof outputPath !== 'string') return '📁';
+                if (outputPath.endsWith('.mp4')) return '🎥';
+                if (['.mp3', '.m4a', '.wav', '.flac', '.ogg'].some(ext => outputPath.endsWith(ext))) return '🎵';
+                if (outputPath.endsWith('.html')) return '📄';
+                if (outputPath.endsWith('.txt')) return '📝';
+                return '📁';
+            };
+
+            const updateTaskStatusClass = (statusSpan, statusMessage) => {
+                if (!statusSpan || typeof statusMessage !== 'string') return;
+                statusSpan.classList.remove('status-downloading', 'status-processing');
+                const lowerCaseMessage = statusMessage.toLowerCase();
+                if (lowerCaseMessage.includes('downloading') || lowerCaseMessage.includes('下載中')) {
+                    statusSpan.classList.add('status-downloading');
+                } else if (['processing', '處理中', 'analyzing', '分析中', 'transcribing', '轉錄中', 'generating', '生成中'].some(term => lowerCaseMessage.includes(term))) {
+                    statusSpan.classList.add('status-processing');
+                }
+            };
+
+            handleTranscriptionUpdate = (type, payload) => {
+                if (!payload || !payload.task_id) return;
+                let taskElement = taskElements.get(payload.task_id);
+                if (!taskElement) {
+                    taskElement = createNewTaskElement(payload.filename || payload.task_id, payload.task_id, '轉錄');
+                }
+                const statusSpan = taskElement.querySelector('.task-status');
+                const statusTextLabel = statusSpan.querySelector('.status-text-label');
+                const progressContainer = taskElement.querySelector('.task-progress-container');
+                const progressBar = taskElement.querySelector('.task-progress-bar');
+
+                if (type === 'TRANSCRIPTION_UPDATE' || (type === 'TRANSCRIPTION_STATUS' && payload.progress !== undefined)) {
+                    if (progressContainer) progressContainer.style.display = 'block';
+                    if (payload.progress !== undefined && progressBar) progressBar.style.width = `${payload.progress}%`;
+                    if (statusTextLabel) {
+                        const message = `${payload.message || '轉錄中'}...`;
+                        statusTextLabel.textContent = message;
+                        updateTaskStatusClass(statusSpan, message);
+                    }
+                }
+
+                if (type === 'TRANSCRIPTION_STATUS') {
+                    if (payload.status === 'starting') {
+                        taskStartTimes[payload.task_id] = Date.now();
+                        if (statusTextLabel) statusTextLabel.textContent = '轉錄中...';
+                        taskElement.querySelector('.timer').style.display = 'inline';
+                        transcriptOutput.innerHTML = `<h3>${payload.filename}</h3>`;
+                        if (progressContainer) progressContainer.style.display = 'block';
+                    } else if (payload.status === 'completed') {
+                        delete taskStartTimes[payload.task_id];
+                        taskElement.querySelector('.timer').style.display = 'none';
+                        if (progressContainer) progressContainer.style.display = 'none';
+                        statusSpan.innerHTML = '';
+                        statusSpan.appendChild(createActionButtons(payload.task_id, payload.result));
+                        statusSpan.dataset.testid = 'task-status-badge-completed';
+                        completedTasksContainer.appendChild(taskElement);
+                        noCompletedTaskMsg.style.display = 'none';
+                        if (!taskElement.querySelector('.task-checkbox')) {
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'task-checkbox';
+                            checkbox.value = payload.task_id;
+                            checkbox.style.marginRight = '15px';
+                            taskElement.prepend(checkbox);
+                        }
+                        const outputPath = (payload.result || {}).output_path || (payload.result || {}).transcript_path || '';
+                        const icon = getIconForFile(outputPath);
+                        const filenameSpan = taskElement.querySelector('.task-filename');
+                        if (filenameSpan && !filenameSpan.querySelector('.file-icon')) {
+                             filenameSpan.insertAdjacentHTML('afterbegin', `<span class="file-icon" style="margin-right: 8px;">${icon}</span>`);
+                        }
+                    } else if (payload.status === 'failed') {
+                        delete taskStartTimes[payload.task_id];
+                        taskElement.querySelector('.timer').style.display = 'none';
+                        if (progressContainer) progressContainer.style.display = 'none';
+                        if (statusTextLabel) statusTextLabel.textContent = `❌ 失敗: ${payload.error}`;
+                    }
+                }
+
+                if (type === 'TRANSCRIPTION_UPDATE' && payload.text) {
+                    if (!transcriptOutput.querySelector(`p[data-start="${payload.start}"]`)) {
+                        const p = document.createElement('p');
+                        p.dataset.start = payload.start;
+                        p.textContent = timestampToggle.checked ? `[${payload.start.toFixed(2)}s -> ${payload.end.toFixed(2)}s] ${payload.text}` : payload.text;
+                        transcriptOutput.prepend(p);
+                        transcriptOutput.scrollTop = 0;
+                    }
+                }
+            };
+
+            const renameTask = async (taskId) => {
+                const taskElement = taskElements.get(taskId);
+                if (!taskElement) return;
+                const filenameSpan = taskElement.querySelector('.task-filename');
+                const currentName = filenameSpan.textContent.split('(')[0].trim();
+                const newName = prompt("請輸入新的檔案名稱 (不需包含副檔名):", currentName);
+                if (newName && newName.trim() && newName.trim() !== currentName) {
+                    const sanitizedName = newName.trim().replace(/[\\/?%*:|"<>\x00-\x1F]/g, '');
+                    try {
+                        const response = await fetch(`/api/rename/${taskId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ new_filename: sanitizedName })
+                        });
+                        if (!response.ok) throw new Error((await response.json()).detail || '重新命名失敗');
+                        const result = await response.json();
+                        const taskTypeSuffix = (filenameSpan.textContent.match(/\s\(.*\)$/) || [''])[0];
+                        filenameSpan.textContent = `${result.new_filename}${taskTypeSuffix}`;
+                        filenameSpan.title = result.new_filename;
+                        const downloadBtn = taskElement.querySelector('.btn-download');
+                        if (downloadBtn) downloadBtn.download = `${result.new_filename}.mp3`;
+                        showStatusMessage('檔案重新命名成功！', false);
+                    } catch (error) {
+                        console.error('重新命名失敗:', error);
+                        showStatusMessage(`錯誤: ${error.message}`, true);
+                    }
+                }
+            };
+
+            const createActionButtons = (taskId, result) => {
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'task-actions';
+                const resultData = result || {};
+                const outputPath = resultData.output_path || resultData.transcript_path || '';
+                if (!outputPath) return buttonGroup;
+
+                const title = resultData.video_title || resultData.original_filename || 'Untitled';
+                const extension = outputPath.substring(outputPath.lastIndexOf('.'));
+                const mimeTypes = { '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.flac': 'audio/flac', '.html': 'text/html', '.txt': 'text/plain' };
+                const mimeType = mimeTypes[extension] || 'application/octet-stream';
+                const isMedia = mimeType.startsWith('video/') || mimeType.startsWith('audio/');
+                const isPreviewable = isMedia || mimeType === 'text/html' || mimeType === 'text/plain';
+
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `/api/download/${taskId}`;
+                downloadBtn.className = 'btn-download';
+                downloadBtn.textContent = '下載';
+                downloadBtn.download = `${title}${extension}`;
+                downloadBtn.dataset.taskId = taskId;
+
+                if (isPreviewable) {
+                    const previewBtn = document.createElement('a');
+                    previewBtn.href = '#';
+                    previewBtn.className = 'btn-preview';
+                    previewBtn.textContent = '預覽';
+                    previewBtn.dataset.testid = 'view-report-button';
+                    previewBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        openPreviewModal(outputPath, title, mimeType, taskId);
+                    });
+                    buttonGroup.appendChild(previewBtn);
+                }
+
+                if (isMedia) {
+                    const renameBtn = document.createElement('a');
+                    renameBtn.href = '#';
+                    renameBtn.className = 'btn-rename';
+                    renameBtn.textContent = '修改名稱';
+                    renameBtn.addEventListener('click', (e) => { e.preventDefault(); renameTask(taskId); });
+                    buttonGroup.appendChild(renameBtn);
+                }
+
+                buttonGroup.appendChild(downloadBtn);
+                return buttonGroup;
+            };
+
+            const getDisplayName = (name) => {
+                if (typeof name !== 'string') return '無效名稱';
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                return uuidRegex.test(name) ? `${name.substring(0, 8)}...` : name;
+            };
+
+            const createNewTaskElement = (displayName, taskId, taskType, container = ongoingTasksContainer) => {
+                const noTaskMsg = container.querySelector('p');
+                if (noTaskMsg) noTaskMsg.style.display = 'none';
+
+                const processedDisplayName = getDisplayName(displayName);
+                const taskElement = document.createElement('div');
+                taskElement.className = 'task-item';
+                taskElement.innerHTML = `
+                    <div style="flex-grow: 1; overflow: hidden; margin-right: 10px; min-width: 0;">
+                        <span class="task-filename" title="${displayName}" style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${processedDisplayName} (${taskType})</span>
+                        <div class="task-progress-container" style="background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 5px; display: none;">
+                            <div class="task-progress-bar" style="width: 0%; height: 100%; background-color: var(--button-bg-color); border-radius: 4px; transition: width 0.2s;"></div>
+                        </div>
+                    </div>
+                    <span class="task-status" style="flex-shrink: 0; text-align: right; min-width: 100px;">
+                        <span class="status-text-label">已建立</span> <span class="timer" data-task-id="${taskId}"></span>
+                    </span>`;
+                taskElement.querySelector('.task-filename').setAttribute('title', displayName);
+                container.appendChild(taskElement);
+                taskElements.set(taskId, taskElement);
+                return taskElement;
+            };
+
+            const updateFileDisplay = () => {
+                fileListDisplay.innerHTML = uploadedFiles.length === 0 ? '<p style="color: #666; text-align: center;">尚未選擇任何檔案</p>' : '';
+                uploadedFiles.forEach((file, index) => {
+                    const fileElement = document.createElement('div');
+                    fileElement.className = 'task-item';
+                    fileElement.innerHTML = `<span class="task-filename" title="${file.name}">${file.name}</span><button data-index="${index}" class="remove-file-btn" style="background-color: #dc3545; padding: 3px 8px; font-size: 0.8em;">移除</button>`;
+                    fileListDisplay.appendChild(fileElement);
+                });
+                document.querySelectorAll('.remove-file-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const indexToRemove = parseInt(e.target.dataset.index, 10);
+                        uploadedFiles.splice(indexToRemove, 1);
+                        updateFileDisplay();
+                    });
+                });
+                startBtn.disabled = uploadedFiles.length === 0;
+                startBtn.textContent = uploadedFiles.length > 0 ? `✨ 開始處理 ${uploadedFiles.length} 個檔案` : '✨ 請先選擇檔案';
+            };
+
+            fileInput.addEventListener('change', () => {
+                const newFiles = Array.from(fileInput.files);
+                newFiles.forEach(newFile => {
+                    if (!uploadedFiles.some(existingFile => existingFile.name === newFile.name)) {
+                        uploadedFiles.push(newFile);
+                    }
+                });
+                updateFileDisplay();
+                fileInput.value = '';
+            });
+
+            fileDropZone.addEventListener('dragover', (e) => { e.preventDefault(); fileDropZone.style.backgroundColor = '#f0f8ff'; fileDropZone.style.borderColor = 'var(--button-bg-color)'; });
+            fileDropZone.addEventListener('dragleave', (e) => { e.preventDefault(); fileDropZone.style.backgroundColor = 'transparent'; fileDropZone.style.borderColor = '#ccc'; });
+            fileDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileDropZone.style.backgroundColor = 'transparent';
+                fileDropZone.style.borderColor = '#ccc';
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                if (droppedFiles.length > 0) {
+                    const newFiles = droppedFiles.filter(df => !uploadedFiles.some(ef => ef.name === df.name));
+                    uploadedFiles.push(...newFiles);
+                    updateFileDisplay();
+                }
+            });
+
+            confirmBtn.addEventListener('click', () => {
+                modelDisplay.textContent = modelSelect.value;
+                confirmBtn.disabled = true;
+                modelProgressContainer.classList.remove('hidden');
+                modelProgressBar.style.width = '0%';
+                modelProgressBar.style.backgroundColor = 'var(--button-bg-color)';
+                modelProgressText.textContent = `正在請求 ${modelSelect.value} 模型...`;
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'DOWNLOAD_MODEL', payload: { model: modelSelect.value } }));
+                } else {
+                    showStatusMessage('WebSocket 未連線，無法下載模型。', true);
+                    modelProgressText.textContent = '連線失敗';
+                    confirmBtn.disabled = false;
+                }
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (uploadedFiles.length === 0) return;
+                startBtn.disabled = true;
+                startBtn.textContent = '正在建立任務...';
+                for (const file of uploadedFiles) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('model_size', modelSelect.value);
+                    formData.append('language', languageSelect.value);
+                    formData.append('beam_size', beamSizeInput.value);
+                    try {
+                        const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
+                        if (!response.ok) throw new Error((await response.json()).detail || '上傳失敗');
+                        const result = await response.json();
+                        const tasks = Array.isArray(result.tasks) ? result.tasks : [result];
+                         tasks.forEach(task => {
+                            if (socket && task.type === 'transcribe') {
+                                socket.send(JSON.stringify({ type: 'START_TRANSCRIPTION', payload: { task_id: task.task_id } }));
+                            }
+                        });
+                    } catch (error) {
+                        showStatusMessage(`處理檔案 ${file.name} 時發生錯誤: ${error.message}`, true);
+                    }
+                }
+                uploadedFiles = [];
+                updateFileDisplay();
+            });
+
+            closePreviewBtn.addEventListener('click', () => previewArea.classList.add('hidden'));
+
+            const dispatchStatusUpdate = (task) => {
+                if (!task || !task.task_id) return;
+                if (task.type !== 'transcribe') {
+                    console.log(`[index.html] Ignoring task of type ${task.type}`);
+                    return;
+                }
+                const payload = { ...(task.payload || {}), ...(task.result || {}), task_id: task.task_id, status: task.status, task_type: task.type, filename: (task.payload || {}).original_filename };
+                handleTranscriptionUpdate('TRANSCRIPTION_STATUS', payload);
+                const taskElement = taskElements.get(payload.task_id);
+                if (!taskElement) return;
+                const isCompleted = payload.status === 'completed' || payload.status === 'failed';
+                const correctContainer = isCompleted ? completedTasksContainer : ongoingTasksContainer;
+                if (taskElement.parentElement !== correctContainer) {
+                    correctContainer.appendChild(taskElement);
+                }
+            };
+
+            const checkSystemReadiness = async () => {
+                const startButton = document.getElementById('start-processing-btn');
+                if (startButton) {
+                    startButton.disabled = true;
+                    startButton.title = '正在等待後端依賴安裝完成...';
+                }
+                showStatusMessage('⏳ 正在等待後端服務完全就緒...', false, 0);
+                for (let i = 0; i < 30; i++) {
+                    try {
+                        const response = await fetch('/api/system/readiness');
+                        if (response.ok && (await response.json()).ready) {
+                            if (startButton) {
+                                startButton.disabled = uploadedFiles.length === 0;
+                                startButton.title = '';
+                            }
+                            showStatusMessage('✅ 系統已就緒，所有功能可用！', false, 5000);
+                            return;
+                        }
+                    } catch (error) {
+                        console.warn(`[${i+1}/30] 系統就緒檢查失敗:`, error.message);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                showStatusMessage('❌ 後端服務就緒檢查超時，部分功能可能無法使用。', true, 0);
+            };
+
+            initialLoad();
+            setupWebSocket();
+            updateFileDisplay();
+            checkSystemReadiness();
+
+            const updateSystemStats = async () => {
+                try {
+                    const response = await fetch('/api/system_stats');
+                    if (!response.ok) return;
+                    const stats = await response.json();
+                    document.getElementById('cpu-label').textContent = `${stats.cpu_usage.toFixed(1)}%`;
+                    document.getElementById('ram-label').textContent = `${stats.ram_usage.toFixed(1)}%`;
+                    const gpuLabel = document.getElementById('gpu-label');
+                    const gpuDisplay = document.getElementById('gpu-display');
+                    if (stats.gpu_detected) {
+                        gpuLabel.textContent = `${stats.gpu_usage !== null ? stats.gpu_usage.toFixed(1) + '%' : 'N/A'}`;
+                        gpuDisplay.textContent = '已偵測到';
+                    } else {
+                        gpuLabel.textContent = '--%';
+                        gpuDisplay.textContent = '未偵測到';
+                    }
+                } catch (error) {
+                    console.error('Failed to update system stats:', error);
+                }
+            };
+            updateSystemStats();
+            setInterval(updateSystemStats, 2000);
+
+            const updateFontSize = () => {
+                document.body.style.fontSize = `${currentFontSize}%`;
+                fontSizeDisplay.textContent = `${currentFontSize}%`;
+            };
+            zoomInBtn.addEventListener('click', () => { if (currentFontSize < 150) { currentFontSize += 10; updateFontSize(); } });
+            zoomOutBtn.addEventListener('click', () => { if (currentFontSize > 70) { currentFontSize -= 10; updateFontSize(); } });
+
+            timestampToggle.addEventListener('change', () => logAction('toggle-timestamp', this.checked));
+            modelSelect.addEventListener('change', (e) => { modelDisplay.textContent = e.target.value; });
+            languageSelect.addEventListener('change', (e) => logAction('change-language-select', e.target.value));
+            beamSizeInput.addEventListener('change', (e) => logAction('change-beam-size', e.target.value));
+
+            setInterval(() => {
+                document.querySelectorAll('.timer').forEach(timerEl => {
+                    const taskId = timerEl.dataset.taskId;
+                    if (taskStartTimes[taskId]) {
+                        const elapsed = Math.floor((Date.now() - taskStartTimes[taskId]) / 1000);
+                        timerEl.textContent = `(經過時間: ${elapsed}s)`;
+                    }
+                });
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

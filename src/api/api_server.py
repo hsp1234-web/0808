@@ -190,12 +190,30 @@ def convert_to_media_url(absolute_path_str: str) -> str:
 # --- API 端點 ---
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_frontend(request: Request):
-    """根端點，提供前端操作介面。"""
-    html_file_path = STATIC_DIR / "mp3.html"
+async def serve_index(request: Request):
+    """根端點，提供 MPA 主頁面 (本機檔案轉錄)。"""
+    html_file_path = STATIC_DIR / "mpa" / "index.html"
     if not html_file_path.is_file():
-        log.error(f"找不到前端檔案: {html_file_path}")
-        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (mp3.html)")
+        log.error(f"找不到主頁檔案: {html_file_path}")
+        raise HTTPException(status_code=404, detail="找不到主頁介面檔案 (index.html)")
+    return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
+
+@app.get("/downloader", response_class=HTMLResponse)
+async def serve_downloader(request: Request):
+    """提供媒體下載器頁面。"""
+    html_file_path = STATIC_DIR / "mpa" / "downloader.html"
+    if not html_file_path.is_file():
+        log.error(f"找不到下載器檔案: {html_file_path}")
+        raise HTTPException(status_code=404, detail="找不到下載器介面檔案 (downloader.html)")
+    return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
+
+@app.get("/youtube", response_class=HTMLResponse)
+async def serve_youtube(request: Request):
+    """提供 YouTube 報告頁面。"""
+    html_file_path = STATIC_DIR / "mpa" / "youtube.html"
+    if not html_file_path.is_file():
+        log.error(f"找不到 YouTube 報告檔案: {html_file_path}")
+        raise HTTPException(status_code=404, detail="找不到 YouTube 報告介面檔案 (youtube.html)")
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
