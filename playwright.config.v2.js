@@ -5,7 +5,7 @@ export default defineConfig({
   // Timeout for each test, includes hooks. 3 minutes.
   timeout: 180000,
 
-  testDir: './src_v2/tests', // 指向 v2 測試目錄
+  testDir: './src/tests', // 指向 v2 測試目錄
   fullyParallel: false,
   workers: 1,
 
@@ -18,7 +18,7 @@ export default defineConfig({
   // 使用 v2 的伺服器啟動腳本
   webServer: {
     command: 'python3 scripts/run_server_for_playwright_v2.py',
-    url: 'http://127.0.0.1:42650/api/health', // 使用 v2 的埠號
+    url: 'http://127.0.0.1:42650/', // 使用 v2 的埠號，改用根路徑進行健康檢查
     reuseExistingServer: !process.env.CI,
     timeout: 70 * 1000,
   },

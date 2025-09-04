@@ -29,10 +29,8 @@ import logging
 import sqlite3
 from pathlib import Path
 
-# 讓此腳本可以存取上層目錄的 db.database 模組
-import sys
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
+# `src/db/__init__.py` 的存在使這個目錄成為一個套件，
+# 協調器設定的 PYTHONPATH 已足以讓 `from db import ...` 正常運作。
 from db import database_v2
 
 # --- 日誌設定 ---

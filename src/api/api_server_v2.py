@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, List
-from contextlib import asynccontextmanager_v2
+from contextlib import asynccontextmanager
 from urllib.parse import unquote, quote
 from pydantic import BaseModel
 import psutil
@@ -24,7 +24,7 @@ import psutil
 SRC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
-from db.client_v2 import get_client_v2
+from db.client_v2 import get_client
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -97,10 +97,29 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# --- DB 客戶端 ---
-# 在模組加載時獲取客戶端單例
-# 客戶端內部有重試機制，會等待 DB 管理者服務就緒
-db_client = get_client()
+# --- DB 客戶端 (根據模式切換) ---
+if not IS_MOCK_MODE:
+    # --- 真實模式 ---
+    # 在模組加載時獲取客戶端單例
+    # 客戶端內部有重試機制，會等待 DB 管理者服務就緒
+    log.info("API 伺服器在真實模式下運行，正在連接到 DB 管理器...")
+    db_client = get_client()
+    log.info("成功連接到 DB 管理器。")
+else:
+    # --- 模擬模式 ---
+    # 在模擬模式下，我們直接匯入資料庫模組，繞過 TCP 伺服器。
+    # 這使得測試環境更簡單、更穩定。
+    log.info("API 伺服器在模擬模式下運行，將直接存取資料庫模組。")
+    from db import database_v2 as db_client
+    # 在模擬模式下，API 伺服器自身負責初始化資料庫
+    try:
+        log.info("模擬模式：正在初始化資料庫...")
+        db_client.initialize_database()
+        log.info("模擬模式：資料庫初始化成功。")
+    except Exception as e:
+        log.critical(f"模擬模式下資料庫初始化失敗: {e}", exc_info=True)
+        # 在模擬模式下，如果資料庫無法初始化，這是一個致命錯誤
+        sys.exit(1)
 
 # --- FastAPI Lifespan Manager ---
 @asynccontextmanager
@@ -200,15 +219,26 @@ async def serve_static_html(page_name: str):
     通用端點，用於提供所有頂層的靜態 HTML 頁面。
     例如: /transcribe_v2.html, /downloader_v2.html
     """
-    # 為了安全，只允許載入包含 "_v2" 或 "prompts_v2" 的檔案
-    if "_v2" not in page_name:
-        log.warning(f"偵測到不安全的頁面請求: {page_name}")
+    # JULES'S FIX: 智慧地處理檔名，並使用白名單進行安全驗證
+    filename_to_serve = page_name if page_name.endswith('.html') else f"{page_name}.html"
+
+    allowed_files = [
+        "index_v2.html",
+        "transcribe_v2.html",
+        "downloader_v2.html",
+        "youtube_report_v2.html",
+        "prompts_v2.html"
+    ]
+
+    if filename_to_serve not in allowed_files:
+        log.warning(f"偵測到不安全的頁面請求，或檔案未在白名單中: {filename_to_serve}")
         raise HTTPException(status_code=404, detail="找不到指定的頁面。")
 
-    html_file_path = STATIC_DIR / page_name
+    html_file_path = STATIC_DIR / filename_to_serve
     if not html_file_path.is_file():
         log.error(f"找不到請求的前端檔案: {html_file_path}")
-        raise HTTPException(status_code=404, detail=f"找不到頁面檔案: {page_name}")
+        raise HTTPException(status_code=404, detail=f"找不到頁面檔案: {filename_to_serve}")
+
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
@@ -568,7 +598,7 @@ async def rename_task_file(task_id: str, request: Request):
 
 
 # --- 提示詞管理 API ---
-PROMPTS_FILE_PATH = ROOT_DIR / "src_v2" / "prompts" / "default_prompts_v2.json"
+PROMPTS_FILE_PATH = ROOT_DIR / "src" / "prompts" / "default_prompts_v2.json"
 
 @app.get("/api/prompts")
 async def get_prompts():

@@ -1,9 +1,8 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 // 測試套件的描述
 test.describe('完整端對端驗證', () => {
-  const BASE_URL = 'http://127.0.0.1:49849'; // 使用從 orchestrator 獲取的 URL
   const YOUTUBE_URL = 'https://www.youtube.com/watch?v=YE7VzlLtp-4'; // Big Buck Bunny
 
   // 測試案例：驗證媒體下載與預覽功能
@@ -12,11 +11,10 @@ test.describe('完整端對端驗證', () => {
     test.setTimeout(120000); // 120 秒
 
     // 1. 導覽至應用程式頁面
-    await page.goto(BASE_URL);
+    await page.goto('/'); // Use the baseURL from the config
 
     // 2. 切換到「媒體下載器」分頁
-    // 我們使用 data-tab 屬性來定位按鈕，這比依賴文字更穩定
-    await page.locator('button[data-tab="downloader-tab"]').click();
+    await page.getByRole('link', { name: '📥 媒體下載器' }).click();
 
     // 驗證下載器分頁是否可見
     await expect(page.locator('#downloader-tab')).toBeVisible();

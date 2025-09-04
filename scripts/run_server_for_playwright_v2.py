@@ -44,15 +44,16 @@ def main():
 
         # 設定 v2 的 PYTHONPATH
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        src_v2_path = os.path.join(project_root, 'src_v2')
-        env['PYTHONPATH'] = f"{src_v2_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        src_path = os.path.join(project_root, 'src')
+        env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
         server_cmd = [
             sys.executable,
             "-u",
-            "src_v2/core/orchestrator_v2.py",
+            "src/core/orchestrator_v2.py",
             "--port",
-            str(V2_PORT)
+            str(V2_PORT),
+            "--mock"
         ]
 
         server_proc = subprocess.Popen(server_cmd, stdout=sys.stdout, stderr=sys.stderr, env=env)
