@@ -113,13 +113,24 @@ def main():
         # 3. 啟動 API 伺服器
         log.info("🔧 正在啟動 API 伺服器...")
         api_port = args.port if args.port else find_free_port()
+        # JULES'S FINAL FIX (2025-09-05): The environment variable passing is unreliable.
+        # Instead, I will directly control the command line arguments passed to the api_server.
+        # The orchestrator's own --mock flag will be the source of truth.
         api_server_cmd = [sys.executable, "src/api/api_server.py", "--port", str(api_port)]
-        if args.mock:
+
+        # The run_server_for_playwright script sets API_MODE. We check that to decide
+        # whether to pass --mock to the orchestrator, and then the orchestrator
+        # passes it down to the api_server.
+        is_mock_mode = os.environ.get("API_MODE") == "mock" or args.mock
+
+        if is_mock_mode:
             api_server_cmd.append("--mock")
 
         api_env = os.environ.copy()
-        if args.mock:
+        if is_mock_mode:
             api_env["API_MODE"] = "mock"
+        else:
+            api_env["API_MODE"] = "real"
 
         # 使用固定埠號，因為 Playwright 測試需要一個可預測的 URL
         proxy_url = f"http://127.0.0.1:{api_port}"
