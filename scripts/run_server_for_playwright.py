@@ -11,15 +11,19 @@ log = logging.getLogger('run_server_for_playwright')
 def main():
     # --- 依賴與環境準備 ---
     try:
-        # 安裝 psmisc 以確保 fuser 指令存在
         log.info("--- [WebServer] 正在安裝 'psmisc' (提供 fuser)... ---")
-        subprocess.run(['sudo', 'apt-get', 'update'], check=True)
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'psmisc'], check=True)
+        subprocess.run(['sudo', 'apt-get', 'update'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'psmisc'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log.info("--- [WebServer] 'psmisc' 安裝成功。 ---")
 
-        # 清理目標埠號
-        log.info("--- [WebServer] 正在清理目標埠號 42649... ---")
+        # 清理主應用程式的埠號
+        log.info("--- [WebServer] 正在清理主應用程式埠號 42649... ---")
         subprocess.run(['fuser', '-k', '42649/tcp'], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # ** FIX: 清理 DB 管理器的埠號 **
+        log.info("--- [WebServer] 正在清理資料庫管理器埠號 49999... ---")
+        subprocess.run(['fuser', '-k', '49999/tcp'], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
     except Exception as e:
         log.error(f"--- [WebServer] 環境準備階段發生錯誤: {e} ---")
         # 即使準備失敗，也繼續嘗試，讓主要邏輯來處理後續錯誤
@@ -40,14 +44,12 @@ def main():
         log.info("--- [WebServer] 正在啟動 orchestrator.py ---")
 
         env = os.environ.copy()
-        # JULES'S REFACTOR (2025-09-04): 允許外部環境變數覆寫 API_MODE
-        # 如果環境變數中未設定 API_MODE，則預設為 'mock'。
-        # 這提供了在真實模式下執行 E2E 測試的靈活性。
         if 'API_MODE' not in env:
             log.info("--- [WebServer] 未指定 API_MODE，預設為 'mock' 模式。 ---")
             env['API_MODE'] = 'mock'
         else:
             log.info(f"--- [WebServer] 偵測到 API_MODE='{env['API_MODE']}'，將在此模式下啟動。 ---")
+
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         src_path = os.path.join(project_root, 'src')
         env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
@@ -65,8 +67,6 @@ def main():
         log.info(f"--- [WebServer] Orchestrator 已啟動 (PID: {server_proc.pid}) ---")
         log.info("--- [WebServer] Playwright 將接管並等待健康檢查 URL... ---")
 
-        # 保持主腳本存活，以便背景工作可以持續執行
-        # 信號處理程序 (handle_shutdown_signal) 將會處理清理工作
         while True:
             time.sleep(1)
 

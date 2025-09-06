@@ -300,7 +300,6 @@
             <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
                 <button id="download-audio-only-btn">🎧 僅下載音訊</button>
                 <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
-                <button id="new-test-analyze-btn" style="background-color: #28a745;">🧪 新的測試分析按鈕</button>
             </div>
             <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
                 <h2>📊 YouTube 報告瀏覽區</h2>
@@ -343,296 +342,306 @@
             </div>
         </div>
     </div>
-    <script>
-        alert('SCRIPT EXECUTION STARTED');
-        const btn_test = document.getElementById('save-api-key-btn');
-        if (btn_test) {
-            alert('SUCCESS: Button found immediately.');
-        } else {
-            alert('FAILURE: Button not found immediately.');
-        }
+<script>
+    // 監聽 DOMContentLoaded 事件，確保所有 DOM 元素都已載入。
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM fully loaded. Initializing script with WebSocket logic.");
 
-        window.addEventListener('load', () => {
-            alert('Window load event fired.');
-            const btn_test_onload = document.getElementById('save-api-key-btn');
-            if (btn_test_onload) {
-                alert('SUCCESS: Button found on window.load.');
-            } else {
-                alert('FAILURE: Button not found on window.load.');
-            }
-        });
+        let socket;
+        const taskElements = new Map(); // 用於追蹤正在進行中的任務元素
 
-        const state = {
-            ui: {
-                fontSize: 100,
-                isProcessing: false,
-                statusMessage: { text: '', isError: false, visible: false },
-                activeModal: null,
-                modalContent: {}
-            },
-            system: {
-                serverStatus: 'initializing',
-                cpu: '--',
-                ram: '--',
-                gpu: '--',
-                gpuDetected: false
-            },
-            gemini: {
-                apiKey: localStorage.getItem('googleApiKey') || '',
-                apiKeyStatus: 'not_provided',
-                apiKeyMessage: '尚未提供金鑰',
-                models: [],
-                selectedModel: null,
-                isLoadingModels: false
-            },
-            youtube: {
-                inputs: [{ id: `row-${Date.now()}`, url: '', filename: '' }],
-            },
-            tasks: {
-                ongoing: [],
-                completed: []
-            }
+        // --- DOM 元素快取 ---
+        const dom = {
+            fontSizeDisplay: document.getElementById('font-size-display'),
+            statusMessageArea: document.getElementById('status-message-area'),
+            statusMessageText: document.getElementById('status-message-text'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            apiKeyStatus: document.getElementById('api-key-status'),
+            youtubeParamsFieldset: document.getElementById('youtube-params-fieldset'),
+            startYoutubeProcessingBtn: document.getElementById('start-youtube-processing-btn'),
+            geminiModelSelect: document.getElementById('gemini-model-select'),
+            youtubeLinkList: document.getElementById('youtube-link-list'),
+            saveApiKeyBtn: document.getElementById('save-api-key-btn'),
+            clearApiKeyBtn: document.getElementById('clear-api-key-btn'),
+            zoomInBtn: document.getElementById('zoom-in-btn'),
+            zoomOutBtn: document.getElementById('zoom-out-btn'),
+            addYoutubeRowBtn: document.getElementById('add-youtube-row-btn'),
+            ytTasksGroup: document.getElementById('yt-tasks-group'),
+            ytOutputFormatSelect: document.getElementById('yt-output-format-select'),
+            downloadAudioOnlyBtn: document.getElementById('download-audio-only-btn'),
+            ongoingTasksContainer: document.getElementById('ongoing-tasks'),
+            noOngoingTaskMsg: document.getElementById('no-ongoing-task-msg'),
+            youtubeFileBrowser: document.getElementById('youtube-file-browser'),
+            noYoutubeReportMsg: document.getElementById('no-youtube-report-msg'),
         };
 
-        const dom = {};
-
-        const render = () => {
-            // Render Font Size
-            document.body.style.fontSize = `${state.ui.fontSize}%`;
-            dom.fontSizeDisplay.textContent = `${state.ui.fontSize}%`;
-
-            // Render Status Message
-            const { text, isError, visible } = state.ui.statusMessage;
-            dom.statusMessageArea.style.display = visible ? 'block' : 'none';
-            if(visible) {
-                dom.statusMessageText.textContent = text;
-                dom.statusMessageArea.style.backgroundColor = isError ? '#f8d7da' : '#d4edda';
-            }
-
-            // Render API Key Status & Controls
-            const isApiKeyValid = state.gemini.apiKeyStatus === 'valid';
-            dom.youtubeParamsFieldset.disabled = !isApiKeyValid;
-            dom.startYoutubeProcessingBtn.disabled = !isApiKeyValid || state.ui.isProcessing;
-            dom.apiKeyStatus.querySelector('span').textContent = state.gemini.apiKeyMessage;
-
-            if (isApiKeyValid) {
-                dom.geminiModelSelect.innerHTML = '';
-                state.gemini.models.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.id;
-                    option.textContent = model.name;
-                    dom.geminiModelSelect.appendChild(option);
-                });
-            } else {
-                 dom.geminiModelSelect.innerHTML = '<option>等待從伺服器載入模型列表...</option>';
-            }
-
-            // Render YouTube URL inputs
-            dom.youtubeLinkList.innerHTML = '';
-            state.youtube.inputs.forEach(input => {
-                const row = document.createElement('div');
-                row.className = 'youtube-link-row';
-                row.style = 'display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px;';
-                row.innerHTML = `
-                    <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" value="${input.url}" data-id="${input.id}" style="flex: 1 1 400px;">
-                    <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" value="${input.filename}" data-id="${input.id}" style="flex: 1 1 200px;">
-                    <button class="remove-youtube-row-btn" data-id="${input.id}" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
-                `;
-                dom.youtubeLinkList.appendChild(row);
-            });
-        };
-
-        const setState = (updater) => {
-            const newState = typeof updater === 'function' ? updater(state) : updater;
-            Object.assign(state, newState);
-            render();
-        };
-
-        const actions = {
-            showStatusMessage(text, isError = false, duration = 3000) {
-                setState({ ui: { ...state.ui, statusMessage: { text, isError, visible: true } } });
+        // --- 核心功能 ---
+        const showStatusMessage = (message, isError = false, duration = 3000) => {
+            if (!dom.statusMessageArea || !dom.statusMessageText) return;
+            dom.statusMessageText.textContent = message;
+            dom.statusMessageArea.style.display = 'block';
+            dom.statusMessageArea.style.backgroundColor = isError ? '#f8d7da' : '#d4edda';
+            if (duration > 0) {
                 setTimeout(() => {
-                    setState({ ui: { ...state.ui, statusMessage: { ...state.ui.statusMessage, visible: false } } });
+                    if (dom.statusMessageText.textContent === message) {
+                         dom.statusMessageArea.style.display = 'none';
+                    }
                 }, duration);
-            },
-
-            async saveAndValidateApiKey() {
-                const apiKey = dom.apiKeyInput.value;
-                if (!apiKey) {
-                    actions.showStatusMessage('API 金鑰不能為空。', true);
-                    return;
-                }
-
-                setState({ gemini: { ...state.gemini, isLoadingModels: true, apiKey, apiKeyStatus: 'validating', apiKeyMessage: '正在驗證金鑰...' } });
-
-                try {
-                    const response = await fetch('/api/youtube/models', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ api_key: apiKey })
-                    });
-
-                    const result = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(result.detail || '驗證失敗');
-                    }
-
-                    localStorage.setItem('googleApiKey', apiKey);
-                    setState({
-                        gemini: { ...state.gemini, models: result.models, apiKeyStatus: 'valid', apiKeyMessage: '金鑰有效', isLoadingModels: false }
-                    });
-                    actions.showStatusMessage('API 金鑰驗證成功並已儲存！');
-                } catch (error) {
-                    setState({
-                        gemini: { ...state.gemini, apiKeyStatus: 'invalid', apiKeyMessage: `錯誤: ${error.message}`, isLoadingModels: false }
-                    });
-                     actions.showStatusMessage(`API 金鑰驗證失敗: ${error.message}`, true);
-                }
-            },
-
-            clearApiKey() {
-                localStorage.removeItem('googleApiKey');
-                dom.apiKeyInput.value = '';
-                setState({
-                    gemini: {
-                        ...state.gemini,
-                        apiKey: '',
-                        apiKeyStatus: 'not_provided',
-                        apiKeyMessage: '尚未提供金鑰',
-                        models: []
-                    }
-                });
-                actions.showStatusMessage('已清除儲存的 API 金鑰。');
-            },
-
-            changeFontSize(delta) {
-                const newSize = Math.max(50, Math.min(200, state.ui.fontSize + delta));
-                setState({ ui: { ...state.ui, fontSize: newSize } });
-            },
-
-            addYoutubeRow() {
-                const newInputs = [...state.youtube.inputs, { id: `row-${Date.now()}`, url: '', filename: '' }];
-                setState({ youtube: { ...state.youtube, inputs: newInputs } });
-            },
-
-            removeYoutubeRow(id) {
-                const newInputs = state.youtube.inputs.filter(input => input.id !== id);
-                setState({ youtube: { ...state.youtube, inputs: newInputs } });
-            },
-
-            updateYoutubeInput(id, field, value) {
-                const newInputs = state.youtube.inputs.map(input =>
-                    input.id === id ? { ...input, [field]: value } : input
-                );
-                setState({ youtube: { ...state.youtube, inputs: newInputs } });
-            },
-
-            async startProcessing(downloadOnly = false) {
-                if (state.ui.isProcessing) return;
-
-                const requests = state.youtube.inputs.filter(i => i.url.trim() !== '');
-                if (requests.length === 0) {
-                    actions.showStatusMessage('請至少輸入一個有效的 YouTube 網址。', true);
-                    return;
-                }
-
-                setState({ ui: { ...state.ui, isProcessing: true } });
-                actions.showStatusMessage('已開始處理任務...', false, 5000);
-
-                const payload = {
-                    requests: requests.map(({url, filename}) => ({url, filename: filename || null})),
-                    model: dom.geminiModelSelect.value,
-                    tasks: Array.from(dom.ytTasksGroup.querySelectorAll('input:checked')).map(cb => cb.value).join(','),
-                    output_format: dom.ytOutputFormatSelect.value,
-                    download_only: downloadOnly,
-                    api_key: state.gemini.apiKey
-                };
-
-                try {
-                    const response = await fetch('/api/youtube/process', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.detail || '後端處理請求失敗');
-                    }
-                    // Success is handled by WebSocket messages
-                } catch (error) {
-                    actions.showStatusMessage(`任務啟動失敗: ${error.message}`, true, 5000);
-                } finally {
-                    setState({ ui: { ...state.ui, isProcessing: false } });
-                }
             }
         };
 
-        const initialize = () => {
-            const requiredIds = [
-                'fontSizeDisplay', 'statusMessageArea', 'statusMessageText', 'statusText', 'statusLight',
-                'cpuLabel', 'ramLabel', 'gpuLabel', 'gpuDisplay', 'apiKeyInput', 'apiKeyStatus',
-                'geminiModelSelect', 'youtubeParamsFieldset', 'downloadAudioOnlyBtn', 'startYoutubeProcessingBtn',
-                'youtubeLinkList', 'ongoing-tasks', 'no-ongoing-task-msg', 'youtube-file-browser',
-                'no-youtube-report-msg', 'preview-modal', 'details-modal', 'save-api-key-btn', 'clear-api-key-btn',
-                'zoom-in-btn', 'zoom-out-btn', 'add-youtube-row-btn', 'yt-tasks-group', 'yt-output-format-select',
-                'new-test-analyze-btn'
-            ];
+        const updateApiKeyUI = (state, message, models = []) => {
+            if (!dom.apiKeyStatus || !dom.youtubeParamsFieldset || !dom.startYoutubeProcessingBtn || !dom.geminiModelSelect) return;
 
-            let allElementsFound = true;
-            requiredIds.forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) {
-                    console.error(`FATAL: DOM element not found: #${id}`);
-                    allElementsFound = false;
-                }
-                dom[id] = el;
-            });
+            const statusSpan = dom.apiKeyStatus.querySelector('span');
+            statusSpan.style.color = 'inherit';
+            statusSpan.style.fontStyle = 'normal';
 
-            if (!allElementsFound) {
-                setTimeout(initialize, 100);
+            const isValid = state === 'valid';
+            dom.youtubeParamsFieldset.disabled = !isValid;
+            dom.startYoutubeProcessingBtn.disabled = !isValid;
+
+            switch (state) {
+                case 'valid':
+                    statusSpan.textContent = message || '驗證成功';
+                    statusSpan.style.color = 'var(--status-green)';
+                    dom.geminiModelSelect.innerHTML = '';
+                    if (models.length > 0) {
+                        models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.id;
+                            option.textContent = model.name;
+                            dom.geminiModelSelect.appendChild(option);
+                        });
+                    } else {
+                        dom.geminiModelSelect.innerHTML = '<option>未找到任何可用模型</option>';
+                    }
+                    break;
+                case 'invalid':
+                    statusSpan.textContent = message || '驗證失敗';
+                    statusSpan.style.color = '#dc3545';
+                    dom.geminiModelSelect.innerHTML = '<option>載入失敗</option>';
+                    break;
+                case 'validating':
+                    statusSpan.textContent = message || '正在驗證中...';
+                    statusSpan.style.fontStyle = 'italic';
+                    dom.geminiModelSelect.innerHTML = '<option>正在載入模型列表...</option>';
+                    break;
+                case 'not_provided':
+                default:
+                    statusSpan.textContent = message || '尚未提供金鑰';
+                    statusSpan.style.fontStyle = 'italic';
+                    dom.geminiModelSelect.innerHTML = '<option>提供有效金鑰後將載入模型</option>';
+                    break;
+            }
+        };
+
+        const validateAndLoadModels = async () => {
+            const apiKey = dom.apiKeyInput.value.trim();
+            if (!apiKey) {
+                updateApiKeyUI('not_provided');
+                return;
+            }
+            localStorage.setItem('googleApiKey', apiKey);
+            updateApiKeyUI('validating');
+            try {
+                const response = await fetch('/api/youtube/models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || '驗證失敗');
+                updateApiKeyUI('valid', '金鑰有效', result.models);
+                showStatusMessage('API 金鑰驗證成功並已儲存！');
+            } catch (error) {
+                localStorage.removeItem('googleApiKey');
+                updateApiKeyUI('invalid', `錯誤: ${error.message}`);
+                showStatusMessage(`API 金鑰驗證失敗: ${error.message}`, true);
+            }
+        };
+
+        const processYoutubeRequest = async (downloadOnly = false) => {
+            const apiKey = localStorage.getItem('googleApiKey');
+            if(!apiKey) {
+                showStatusMessage('請先設定有效的 API 金鑰。', true);
                 return;
             }
 
-            // Attach all event listeners
-            dom['save-api-key-btn'].addEventListener('click', actions.saveAndValidateApiKey);
-            dom['new-test-analyze-btn'].addEventListener('click', () => actions.startProcessing(false));
-            dom['clear-api-key-btn'].addEventListener('click', actions.clearApiKey);
-            dom['zoom-in-btn'].addEventListener('click', () => actions.changeFontSize(10));
-            dom['zoom-out-btn'].addEventListener('click', () => actions.changeFontSize(-10));
-            dom['add-youtube-row-btn'].addEventListener('click', actions.addYoutubeRow);
-            dom['download-audio-only-btn'].addEventListener('click', () => actions.startProcessing(true));
-            dom['start-youtube-processing-btn'].addEventListener('click', () => actions.startProcessing(false));
+            const requests = Array.from(dom.youtubeLinkList.querySelectorAll('.youtube-link-row')).map(row => ({
+                url: row.querySelector('.youtube-url-input').value.trim(),
+                filename: row.querySelector('.youtube-filename-input').value.trim()
+            })).filter(r => r.url);
 
-            // Delegated event listeners for dynamic content
-            dom.youtubeLinkList.addEventListener('click', (e) => {
-                if (e.target.classList.contains('remove-youtube-row-btn')) {
-                    actions.removeYoutubeRow(e.target.dataset.id);
-                }
-            });
-            dom.youtubeLinkList.addEventListener('input', (e) => {
-                if (e.target.classList.contains('youtube-url-input')) {
-                    actions.updateYoutubeInput(e.target.dataset.id, 'url', e.target.value);
-                } else if (e.target.classList.contains('youtube-filename-input')) {
-                    actions.updateYoutubeInput(e.target.dataset.id, 'filename', e.target.value);
-                }
-            });
+            if (requests.length === 0) {
+                showStatusMessage('請至少輸入一個有效的 YouTube 網址。', true);
+                return;
+            }
 
-            // Initial state setup
-            dom.apiKeyInput.value = state.gemini.apiKey;
+            dom.startYoutubeProcessingBtn.disabled = true;
+            showStatusMessage('已開始處理任務...', false, 5000);
 
-            // First render
-            render();
+            const payload = {
+                requests: requests,
+                model: dom.geminiModelSelect.value,
+                tasks: Array.from(dom.ytTasksGroup.querySelectorAll('input:checked')).map(cb => cb.value).join(','),
+                output_format: dom.ytOutputFormatSelect.value,
+                download_only: downloadOnly,
+                api_key: apiKey
+            };
 
-            // Defer event listener attachment to after the first render
-            setTimeout(() => {
-                if (state.gemini.apiKey) {
-                    actions.saveAndValidateApiKey();
-                }
-            }, 0);
+            try {
+                const response = await fetch('/api/youtube/process', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error((await response.json()).detail || '後端處理請求失敗');
+
+                // 清空輸入框
+                dom.youtubeLinkList.querySelectorAll('.youtube-url-input').forEach(input => input.value = '');
+                dom.youtubeLinkList.querySelectorAll('.youtube-filename-input').forEach(input => input.value = '');
+
+            } catch (error) {
+                showStatusMessage(`任務啟動失敗: ${error.message}`, true, 5000);
+            } finally {
+                dom.startYoutubeProcessingBtn.disabled = false;
+            }
         };
 
-        window.addEventListener('load', initialize);
+        const addYoutubeReportToList = (payload) => {
+            if (!dom.youtubeFileBrowser) return;
+
+            const noReportMsg = dom.youtubeFileBrowser.querySelector('#no-youtube-report-msg');
+            if (noReportMsg) noReportMsg.style.display = 'none';
+
+            const result = payload.result || {};
+            const taskId = payload.task_id;
+
+            if (dom.youtubeFileBrowser.querySelector(`.task-item[data-task-id="${taskId}"]`)) return;
+
+            const videoTitle = result.video_title || '無標題報告';
+            const reportElement = document.createElement('div');
+            reportElement.className = 'task-item';
+            reportElement.setAttribute('data-task-id', taskId);
+            const extension = (result.output_path || '').includes('.html') ? '.html' : '.txt';
+
+            reportElement.innerHTML = `
+                <span class="task-filename">${videoTitle}</span>
+                <div class="task-actions">
+                    <a href="#" class="btn-details" data-task-id="${taskId}" data-result='${JSON.stringify(result)}'>詳細資料</a>
+                    <a href="#" class="btn-preview" data-testid="view-report-button" data-task-id="${taskId}">預覽</a>
+                    <a href="/api/download/${taskId}" class="btn-download" download="${videoTitle}${extension}">下載</a>
+                </div>`;
+
+            dom.youtubeFileBrowser.appendChild(reportElement);
+        };
+
+        const handleYoutubeStatus = (payload) => {
+            if (!payload || !payload.task_id) return;
+
+            const isFinalReport = payload.status === '已完成' && payload.task_type === 'gemini_process';
+            const trackingId = payload.depends_on || payload.task_id;
+
+            let taskElement = taskElements.get(trackingId);
+
+            if (isFinalReport) {
+                if (taskElement) {
+                    taskElement.remove();
+                    taskElements.delete(trackingId);
+                }
+                addYoutubeReportToList(payload);
+            } else {
+                if (!taskElement) {
+                    const displayName = payload.url || payload.task_id;
+                    taskElement = document.createElement('div');
+                    taskElement.className = 'task-item';
+                    taskElement.innerHTML = `<span class="task-filename">${displayName}</span><span class="task-status">${payload.message || payload.status}</span>`;
+
+                    dom.ongoingTasksContainer.querySelector('#no-ongoing-task-msg')?.remove();
+                    dom.ongoingTasksContainer.appendChild(taskElement);
+                    taskElements.set(trackingId, taskElement);
+                } else {
+                    taskElement.querySelector('.task-status').textContent = payload.message || payload.status;
+                }
+            }
+        };
+
+        const setupWebSocket = () => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/ws`);
+            socket.onmessage = (event) => {
+                console.log("WebSocket message received:", event.data);
+                const message = JSON.parse(event.data);
+                 if (message.type === 'YOUTUBE_STATUS' || (message.type === 'NEW_TASK_CREATED' && (message.payload.type.includes('youtube') || message.payload.type.includes('gemini')))) {
+                    handleYoutubeStatus(message.payload);
+                }
+            };
+            socket.onopen = () => console.log("WebSocket connection established.");
+            socket.onclose = () => console.log("WebSocket connection closed.");
+            socket.onerror = (error) => console.error("WebSocket error:", error);
+        };
+
+        const addNewYoutubeRow = () => {
+            const newRow = document.createElement('div');
+            newRow.className = 'youtube-link-row';
+            newRow.style = 'display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px;';
+            newRow.innerHTML = `
+                <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px;">
+                <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px;">
+                <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+            `;
+            dom.youtubeLinkList.appendChild(newRow);
+        };
+
+        const attachListener = (element, event, handler) => {
+            if (element) {
+                element.addEventListener(event, handler);
+            } else {
+                console.error(`Initialization failed: Element for event '${event}' not found.`);
+            }
+        };
+
+        attachListener(dom.saveApiKeyBtn, 'click', validateAndLoadModels);
+        attachListener(dom.clearApiKeyBtn, 'click', () => {
+            localStorage.removeItem('googleApiKey');
+            dom.apiKeyInput.value = '';
+            validateAndLoadModels();
+        });
+        attachListener(dom.startYoutubeProcessingBtn, 'click', () => processYoutubeRequest(false));
+        attachListener(dom.downloadAudioOnlyBtn, 'click', () => processYoutubeRequest(true));
+        attachListener(dom.zoomInBtn, 'click', () => {
+            currentFontSize = Math.min(200, currentFontSize + 10);
+            document.body.style.fontSize = `${currentFontSize}%`;
+            dom.fontSizeDisplay.textContent = `${currentFontSize}%`;
+        });
+        attachListener(dom.zoomOutBtn, 'click', () => {
+            currentFontSize = Math.max(50, currentFontSize - 10);
+            document.body.style.fontSize = `${currentFontSize}%`;
+            dom.fontSizeDisplay.textContent = `${currentFontSize}%`;
+        });
+        attachListener(dom.addYoutubeRowBtn, 'click', addNewYoutubeRow);
+
+        dom.youtubeLinkList.addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('remove-youtube-row-btn')) {
+                if (dom.youtubeLinkList.querySelectorAll('.youtube-link-row').length > 1) {
+                    e.target.closest('.youtube-link-row').remove();
+                } else {
+                    showStatusMessage('至少需要保留一列。', true, 3000);
+                }
+            }
+        });
+
+        const storedApiKey = localStorage.getItem('googleApiKey');
+        if (storedApiKey) {
+            dom.apiKeyInput.value = storedApiKey;
+            validateAndLoadModels();
+        }
+
+        addNewYoutubeRow();
+        setupWebSocket();
+        console.log("Initialization complete.");
+    });
     </script>
 </body>
 </html>
