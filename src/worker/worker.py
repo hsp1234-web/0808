@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 log = logging.getLogger('worker')
 
 # --- 常數設定 ---
-API_SERVER_URL = "http://127.0.0.1:8001" # 根據 circus.ini.template 中的設定
+API_SERVER_URL = "http://127.0.0.1:8000" # JULES'S FIX: Align with the actual port used in testing
 API_HEALTH_ENDPOINT = f"{API_SERVER_URL}/api/health"
 API_NOTIFY_ENDPOINT = f"{API_SERVER_URL}/api/internal/notify_task_update"
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -142,6 +142,11 @@ def process_youtube_task(task: dict):
             payload = json.loads(process_task_info['payload'])
             payload['input_file'] = download_result['output_path'] # 使用 URL 化的路徑
             payload['video_title'] = download_result.get('video_title', '無標題影片')
+
+            # JULES'S FINAL FIX: 更新資料庫中後續任務的 payload，這是先前遺漏的關鍵步驟
+            db_client.update_task_payload(dependent_task_id, json.dumps(payload))
+            log.info(f"已成功將下載結果注入到後續任務 {dependent_task_id} 的 payload 中。")
+
             task_id = dependent_task_id # 將當前 task_id 切換到分析任務
             log.info(f"下載完成，繼續處理 AI 分析任務: {task_id}")
 

@@ -839,14 +839,29 @@ async def process_youtube_urls(request: Request):
                 "api_key": api_key
             }
 
+            # JULES'S FIX (2025-09-05): The frontend should only be notified of the final `gemini_process` task,
+            # not the intermediate `youtube_download` task. Broadcasting both creates duplicate entries in the UI.
+            # We will create the download task silently and only broadcast the main AI task.
             if db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download'):
                 dl_task_info = {"url": url, "task_id": download_task_id, "type": "youtube_download", "payload": download_payload}
                 tasks_created.append(dl_task_info)
-                await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**dl_task_info, "status": "pending"}})
+                # --- BROADCAST REMOVED ---
+                # await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**dl_task_info, "status": "pending"}})
 
                 if db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id):
-                    proc_task_info = {"url": url, "task_id": process_task_id, "type": "gemini_process", "depends_on": download_task_id, "payload": process_payload}
+                    # We should, however, rename the task_id in the broadcast to the parent task id,
+                    # so the frontend can track the entire chain with one ID.
+                    # Let's use the final task's payload but the initial task's ID for the UI.
+                    proc_task_info = {
+                        "url": url,
+                        "task_id": download_task_id, # Use the initial task ID for UI tracking
+                        "final_task_id": process_task_id, # Keep track of the final task
+                        "type": "gemini_process", # Show it as a Gemini process
+                        "depends_on": download_task_id,
+                        "payload": process_payload
+                    }
                     tasks_created.append(proc_task_info)
+                    # Only broadcast the final, user-facing task.
                     await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**proc_task_info, "status": "pending"}})
 
                     # JULES'S FIX (2025-09-04): FINAL ATTEMPT. Synchronous mock processing.

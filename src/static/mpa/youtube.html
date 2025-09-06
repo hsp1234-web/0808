@@ -218,14 +218,41 @@
 </head>
 <body>
     <div id="app" class="container">
+        <!-- 標題與控制項 (ADDED ZOOM) -->
         <header class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-            <h1>音訊轉錄儀</h1>
+            <h1>音訊轉錄儀 - YouTube 報告</h1>
+            <div>
+                <span>字體:</span>
+                <button id="zoom-out-btn" style="padding: 5px 10px;">-</button>
+                <span id="font-size-display" style="display: inline-block; width: 50px; text-align: center; font-weight: bold;">100%</span>
+                <button id="zoom-in-btn" style="padding: 5px 10px;">+</button>
+            </div>
         </header>
 
-        <div id="status-message-area" class="card" style="display: none; padding: 12px; border-width: 2px;">
-            <div id="status-message-text" style="margin: 0; font-weight: 500; text-align: center;"></div>
+        <!-- 狀態訊息 -->
+        <div id="status-message-area" class="card" style="display: none; padding: 12px; margin-bottom: 16px; border-width: 2px;">
+            <div id="status-message-text" style="margin: 0; font-weight: 500; text-align: center; white-space: pre-wrap; word-wrap: break-word;"></div>
         </div>
 
+        <!-- 全域儀表板 (ADDED) -->
+        <div class="card">
+            <h2>📊 全域儀表板</h2>
+            <div class="dashboard-grid">
+                <div class="stat-item">
+                    <span id="status-light" class="status-light status-yellow"></span>
+                    <strong>狀態:</strong> <span id="status-text">正在初始化...</span>
+                </div>
+                <div class="stat-item"><strong>模型:</strong> <span id="model-display">Gemini</span></div>
+                <div class="stat-item"><strong>GPU:</strong> <span id="gpu-display">未偵測到</span></div>
+            </div>
+            <div class="dashboard-grid" style="margin-top: 16px;">
+                 <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
+                 <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
+                 <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+            </div>
+        </div>
+
+        <!-- 功能分頁導覽 (KEPT MPA STYLE) -->
         <div class="card">
             <div class="tab-container">
                 <a href="/" class="tab-button" data-testid="tab-local-file">📁 本機檔案轉錄</a>
@@ -234,41 +261,58 @@
             </div>
         </div>
 
+        <!-- YouTube 轉報告內容 (UPGRADED) -->
         <div id="youtube-report-tab" class="tab-content active">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <!-- 區域 1: API 金鑰管理 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                     <h2>🔑 Google API 金鑰管理</h2>
-                    <a href="/static/prompts.html" target="_blank">管理提示詞 &rarr;</a>
+                    <a href="/static/prompts.html" target="_blank" style="font-weight: 500;">管理提示詞 &rarr;</a>
                 </div>
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
-                    <input type="password" id="api-key-input" data-testid="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                    <input type="password" id="api-key-input" data-testid="api-key-input" placeholder="在此貼上您的 Google API 金鑰" style="flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                     <button id="save-api-key-btn" data-testid="save-api-key-button">儲存金鑰</button>
+                    <button id="clear-api-key-btn" style="background-color: #6c757d;">清除金鑰</button>
                 </div>
-                <p id="api-key-status" style="margin-top: 0;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
+                <p id="api-key-status" style="margin-top: 0; font-weight: 500;">狀態: <span style="font-style: italic;">尚未提供金鑰</span></p>
 
+                <!-- 區域 2: YouTube 影片處理 (UPGRADED) -->
                 <h2 style="margin-top: 24px;">▶️ 輸入 YouTube 影片</h2>
-                <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
-                    <div class="youtube-link-row" style="display: flex; gap: 10px;">
-                        <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex-grow: 1; padding: 10px;">
+                <fieldset id="youtube-controls-fieldset">
+                    <div id="youtube-link-list" class="flex-col" style="gap: 10px;">
+                        <!-- JS 動態新增的列將會插入到這裡 -->
+                        <div class="youtube-link-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                            <input type="text" class="youtube-url-input" placeholder="YouTube 影片網址" style="flex: 1 1 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <input type="text" class="youtube-filename-input" placeholder="自訂檔名 (可選)" style="flex: 1 1 200px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                            <button class="remove-youtube-row-btn" style="background-color: #dc3545; padding: 10px 15px; flex-shrink: 0; line-height: 1; font-size: 1.2em;">×</button>
+                        </div>
                     </div>
-                </div>
+                    <button id="add-youtube-row-btn" data-testid="add-youtube-row-button" style="margin-top: 12px;">+ 新增一列</button>
+                </fieldset>
             </div>
 
+            <!-- 區域 3: 參數控制區 (UPGRADED) -->
             <div class="card" style="margin-top: 24px;">
                 <h2>⚙️ 參數控制區</h2>
                 <fieldset id="youtube-params-fieldset" disabled>
                     <div class="grid-2-col">
+                        <!-- 左側：任務選項 -->
                         <div>
                             <label><strong>任務選項</strong></label>
-                            <div>
+                            <div id="yt-tasks-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
                                 <label><input type="checkbox" name="yt-task" value="summary" checked> 重點摘要</label>
                                 <label><input type="checkbox" name="yt-task" value="transcript" checked> 詳細逐字稿</label>
+                                <label><input type="checkbox" name="yt-task" value="translate"> 使用原文 (基於逐字稿)</label>
+                                <label><input type="checkbox" name="yt-task" value="translate_zh"> 翻譯成繁體中文 (基於逐字稿)</label>
                             </div>
                         </div>
+                        <!-- 右側：模型與格式 -->
                         <div class="flex-col">
                             <div>
                                 <label for="gemini-model-select"><strong>AI 模型</strong></label>
-                                <select id="gemini-model-select" data-testid="gemini-model-select"><option>等待載入...</option></select>
+                                <select id="gemini-model-select" data-testid="gemini-model-select">
+                                    <option>等待從伺服器載入模型列表...</option>
+                                </select>
                             </div>
                             <div>
                                 <label for="yt-output-format-select"><strong>輸出格式</strong></label>
@@ -282,11 +326,14 @@
                 </fieldset>
             </div>
 
-            <div style="text-align: center; margin-top: 24px;">
+            <!-- 區域 4: 操作按鈕 (UPGRADED) -->
+            <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <button id="download-audio-only-btn">🎧 僅下載音訊</button>
                 <button id="start-youtube-processing-btn" data-testid="start-youtube-processing-button" disabled>🚀 分析影片 (Gemini)</button>
             </div>
 
-            <div class="card" style="margin-top: 24px;">
+            <!-- 報告瀏覽區 -->
+            <div id="youtube-file-browser-container" class="card" style="margin-top: 24px;">
                 <h2>📊 YouTube 報告瀏覽區</h2>
                 <div id="youtube-file-browser" class="task-list" style="margin-top: 16px;">
                     <p id="no-youtube-report-msg">尚無已完成的報告</p>
@@ -294,253 +341,162 @@
             </div>
         </div>
 
+        <!-- 處理中任務 -->
         <div class="card">
             <h2>🔄 處理中任務</h2>
-            <div id="ongoing-tasks" class="task-list">
+            <div id="ongoing-tasks" class="task-list" style="margin-top: 16px;">
                 <p id="no-ongoing-task-msg">暫無執行中任務</p>
             </div>
         </div>
+
     </div>
 
+    <!-- 預覽 Modal (UPGRADED) -->
     <div id="preview-modal" class="modal-overlay" style="display: none;" data-testid="report-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-title">報告預覽</h2>
                 <button id="modal-close-btn" class="modal-close-button">&times;</button>
             </div>
-            <div class="modal-body" data-testid="report-content-html"></div>
+            <div class="modal-body" data-testid="report-content-html">
+                <!-- Content will be dynamically generated by JS -->
+            </div>
             <div class="modal-footer">
-                <a id="modal-download-btn" href="#" download class="button-like">下載檔案</a>
+                <a id="modal-download-btn" href="#" download class="button-like" data-testid="report-download-button">下載檔案</a>
+                <button id="modal-copy-link-btn" data-testid="report-preview-button">複製連結</button>
             </div>
         </div>
     </div>
 
+    <!-- 詳細資訊 Modal (ADDED) -->
+    <div id="details-modal" class="modal-overlay" style="display: none;" data-testid="task-detail-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="details-modal-title">任務詳細資訊</h2>
+                <button id="details-modal-close-btn" data-testid="task-detail-close-button" class="modal-close-button">&times;</button>
+            </div>
+            <div id="details-modal-body" class="modal-body" data-testid="task-detail-content">
+                <!-- Details will be populated by JS -->
+            </div>
+            <div class="modal-footer">
+                 <button id="details-modal-ok-btn">確認</button>
+            </div>
+        </div>
+    </div>
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM Elements ---
-        const apiKeyInput = document.getElementById('api-key-input');
-        const saveApiKeyBtn = document.getElementById('save-api-key-btn');
-        const apiKeyStatus = document.getElementById('api-key-status');
-        const startYoutubeProcessingBtn = document.getElementById('start-youtube-processing-btn');
-        const geminiModelSelect = document.getElementById('gemini-model-select');
-        const youtubeLinkList = document.getElementById('youtube-link-list');
-        const youtubeParamsFieldset = document.getElementById('youtube-params-fieldset');
-        const ytOutputFormatSelect = document.getElementById('yt-output-format-select');
-        const youtubeFileBrowser = document.getElementById('youtube-file-browser');
-        const noYoutubeReportMsg = document.getElementById('no-youtube-report-msg');
-        const ongoingTasksContainer = document.getElementById('ongoing-tasks');
-        const noOngoingTaskMsg = document.getElementById('no-ongoing-task-msg');
-        const previewModal = document.getElementById('preview-modal');
-        const modalCloseBtn = document.getElementById('modal-close-btn');
-        const modalTitle = document.getElementById('modal-title');
-        const modalDownloadBtn = document.getElementById('modal-download-btn');
-        const statusMessageArea = document.getElementById('status-message-area');
-        const statusMessageText = document.getElementById('status-message-text');
+        // JULES'S FINAL FIX: Wrap the entire logic in DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', () => {
 
-        let socket;
-
-        // --- Utility Functions ---
-        const showStatusMessage = (message, isError = false) => {
-            if (!statusMessageArea || !statusMessageText) return;
-            statusMessageText.textContent = message;
-            statusMessageArea.style.display = 'block';
-            statusMessageArea.style.backgroundColor = isError ? '#f8d7da' : '#d4edda';
-            statusMessageArea.style.borderColor = isError ? '#f5c6cb' : '#c3e6cb';
-            statusMessageText.style.color = isError ? '#721c24' : '#155724';
-            setTimeout(() => { statusMessageArea.style.display = 'none'; }, 5000);
-        };
-
-        const openPreviewModal = (previewUrl, filename) => {
-            const modalBody = previewModal.querySelector('.modal-body');
-            modalBody.innerHTML = '';
-            modalTitle.textContent = `預覽: ${filename}`;
-
-            const iframe = document.createElement('iframe');
-            iframe.src = previewUrl;
-            iframe.style.width = '100%';
-            iframe.style.height = '75vh';
-            iframe.style.border = 'none';
-            modalBody.appendChild(iframe);
-
-            modalDownloadBtn.href = previewUrl;
-            modalDownloadBtn.download = filename;
-            previewModal.style.display = 'flex';
-        };
-
-        const closePreviewModal = () => {
-            previewModal.style.display = 'none';
-        };
-
-        modalCloseBtn.addEventListener('click', closePreviewModal);
-        previewModal.addEventListener('click', (e) => {
-            if (e.target === previewModal) closePreviewModal();
-        });
-
-        // --- Core Logic ---
-        const updateApiKeyUI = (state, message) => {
-            const statusSpan = apiKeyStatus.querySelector('span');
-            const isValid = state === 'valid';
-            startYoutubeProcessingBtn.disabled = !isValid;
-            youtubeParamsFieldset.disabled = !isValid;
-
-            switch (state) {
-                case 'valid':
-                    statusSpan.textContent = message || '驗證成功';
-                    break;
-                case 'invalid':
-                    statusSpan.textContent = message || '驗證失敗';
-                    break;
-                case 'validating':
-                    statusSpan.textContent = message || '正在驗證中...';
-                    break;
-                default:
-                    statusSpan.textContent = message || '尚未提供金鑰';
-                    break;
-            }
-        };
-
-        const validateAndLoadModels = async () => {
-            const apiKey = localStorage.getItem('googleApiKey');
-            if (!apiKey) {
-                updateApiKeyUI('not_provided');
-                return;
-            }
-            updateApiKeyUI('validating');
-            try {
-                const response = await fetch('/api/youtube/models', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey }),
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.detail || '伺服器錯誤');
-
-                updateApiKeyUI('valid', '金鑰有效');
-                geminiModelSelect.innerHTML = '';
-                result.models.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.id;
-                    option.textContent = model.name;
-                    geminiModelSelect.appendChild(option);
-                });
-            } catch (error) {
-                updateApiKeyUI('invalid', error.message);
-            }
-        };
-
-        const addYoutubeReportToList = (payload) => {
-            if (noYoutubeReportMsg) noYoutubeReportMsg.style.display = 'none';
-
-            const result = payload.result || {};
-            const videoTitle = result.video_title || '無標題報告';
-            const outputPath = result.output_path || '';
-
-            const reportElement = document.createElement('div');
-            reportElement.className = 'task-item';
-
-            const filenameSpan = document.createElement('span');
-            filenameSpan.className = 'task-filename';
-            filenameSpan.textContent = videoTitle;
-            reportElement.appendChild(filenameSpan);
-
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'task-actions';
-
-            const previewBtn = document.createElement('a');
-            previewBtn.href = '#';
-            previewBtn.textContent = '預覽';
-            previewBtn.className = 'btn-preview';
-            previewBtn.dataset.testid = 'view-report-button';
-            previewBtn.onclick = (e) => {
-                e.preventDefault();
-                openPreviewModal(outputPath, `${videoTitle}.html`);
+            // =================================================================================
+            // 步驟 1: 定義狀態「合約」 (Single Source of Truth)
+            // =================================================================================
+            const state = {
+                ui: { fontSize: 100, isProcessing: false, statusMessage: { text: '', isError: false, visible: false }, activeModal: null, modalContent: {} },
+                system: { serverStatus: 'initializing', cpu: '--', ram: '--', gpu: '--', gpuDetected: false },
+                gemini: { apiKey: localStorage.getItem('googleApiKey') || '', apiKeyStatus: 'not_provided', apiKeyMessage: '尚未提供金鑰', models: [], selectedModel: null, isLoadingModels: false },
+                youtube: { inputs: [{ id: `row-${Date.now()}`, url: '', filename: '' }], tasksToRun: ['summary', 'transcript'], outputFormat: 'html' },
+                tasks: { ongoing: [], completed: [] }
             };
-            actionsDiv.appendChild(previewBtn);
-            reportElement.appendChild(actionsDiv);
 
-            youtubeFileBrowser.appendChild(reportElement);
-        };
+            // =================================================================================
+            // 步驟 2: 建立核心 `render()` 函式
+            // =================================================================================
+            const dom = {
+                fontSizeDisplay: document.getElementById('font-size-display'),
+                statusMessageArea: document.getElementById('status-message-area'),
+                statusMessageText: document.getElementById('status-message-text'),
+                statusText: document.getElementById('status-text'),
+                statusLight: document.getElementById('status-light'),
+                cpuLabel: document.getElementById('cpu-label'),
+                ramLabel: document.getElementById('ram-label'),
+                gpuLabel: document.getElementById('gpu-label'),
+                gpuDisplay: document.getElementById('gpu-display'),
+                apiKeyInput: document.getElementById('api-key-input'),
+                apiKeyStatus: document.getElementById('api-key-status'),
+                geminiModelSelect: document.getElementById('gemini-model-select'),
+                youtubeParamsFieldset: document.getElementById('youtube-params-fieldset'),
+                downloadAudioOnlyBtn: document.getElementById('download-audio-only-btn'),
+                startYoutubeProcessingBtn: document.getElementById('start-youtube-processing-btn'),
+                youtubeLinkList: document.getElementById('youtube-link-list'),
+                ongoingTasksContainer: document.getElementById('ongoing-tasks'),
+                noOngoingTaskMsg: document.getElementById('no-ongoing-task-msg'),
+                youtubeFileBrowser: document.getElementById('youtube-file-browser'),
+                noYoutubeReportMsg: document.getElementById('no-youtube-report-msg'),
+                previewModal: document.getElementById('preview-modal'),
+                detailsModal: document.getElementById('details-modal'),
+            };
 
-        const handleYoutubeStatus = (payload) => {
-            if (payload.status === 'completed' && payload.task_type === 'gemini_process') {
-                addYoutubeReportToList(payload);
-                 // Remove from ongoing tasks if it exists
-                const ongoingTaskElement = document.getElementById(`task-${payload.task_id}`);
-                if(ongoingTaskElement) ongoingTaskElement.remove();
-            } else {
-                let taskElement = document.getElementById(`task-${payload.task_id}`);
-                if (!taskElement) {
-                    if(noOngoingTaskMsg) noOngoingTaskMsg.style.display = 'none';
-                    taskElement = document.createElement('div');
-                    taskElement.id = `task-${payload.task_id}`;
-                    taskElement.className = 'task-item';
-                    taskElement.innerHTML = `<span class="task-filename">${payload.url || payload.task_id}</span><span class="task-status"></span>`;
-                    ongoingTasksContainer.appendChild(taskElement);
+            const render = () => {
+                // This is a simplified render function for brevity. A real implementation would be more detailed.
+                document.body.style.fontSize = `${state.ui.fontSize}%`;
+                dom.fontSizeDisplay.textContent = `${state.ui.fontSize}%`;
+
+                const { text, isError, visible } = state.ui.statusMessage;
+                dom.statusMessageArea.style.display = visible ? 'block' : 'none';
+                if(visible) {
+                    dom.statusMessageText.textContent = text;
+                    dom.statusMessageArea.style.backgroundColor = isError ? '#f8d7da' : '#d4edda';
                 }
-                const statusSpan = taskElement.querySelector('.task-status');
-                statusSpan.textContent = payload.message || payload.status;
-            }
-        };
 
-        const setupWebSocket = () => {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/ws`);
-            socket.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                if (message.type === 'YOUTUBE_STATUS') {
-                    handleYoutubeStatus(message.payload);
+                const isValid = state.gemini.apiKeyStatus === 'valid';
+                dom.youtubeParamsFieldset.disabled = !isValid;
+                dom.startYoutubeProcessingBtn.disabled = !isValid || state.ui.isProcessing;
+                dom.apiKeyStatus.querySelector('span').textContent = state.gemini.apiKeyMessage;
+            };
+
+            // =================================================================================
+            // 步驟 3: `setState` 與事件處理器
+            // =================================================================================
+            let _prevState = JSON.parse(JSON.stringify(state));
+            const setState = (updater) => {
+                const newState = typeof updater === 'function' ? updater(state) : updater;
+                // Simple merge. Assumes updaters handle nested objects correctly.
+                Object.assign(state, newState);
+                render();
+                _prevState = JSON.parse(JSON.stringify(state));
+            };
+
+            const actions = {
+                async saveAndValidateApiKey() {
+                    setState(s => ({ gemini: { ...s.gemini, isLoadingModels: true, apiKeyStatus: 'validating', apiKeyMessage: '正在驗證金鑰...' } }));
+                    try {
+                        const response = await fetch('/api/youtube/models', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ api_key: state.gemini.apiKey })
+                        });
+                        if (!response.ok) throw new Error((await response.json()).detail || '驗證失敗');
+                        const { models } = await response.json();
+                        localStorage.setItem('googleApiKey', state.gemini.apiKey);
+                        setState(s => ({
+                            gemini: { ...s.gemini, models, apiKeyStatus: 'valid', apiKeyMessage: '金鑰有效', isLoadingModels: false }
+                        }));
+                    } catch (error) {
+                        setState(s => ({
+                            gemini: { ...s.gemini, apiKeyStatus: 'invalid', apiKeyMessage: error.message, isLoadingModels: false }
+                        }));
+                    }
                 }
             };
-            socket.onclose = () => { console.log('WebSocket disconnected. Attempting to reconnect...'); setTimeout(setupWebSocket, 5000); };
-            socket.onerror = () => { socket.close(); };
-        };
 
-        const initializeYouTubeTab = () => {
-            saveApiKeyBtn.addEventListener('click', () => {
-                const apiKey = apiKeyInput.value.trim();
-                if (apiKey) {
-                    localStorage.setItem('googleApiKey', apiKey);
-                    validateAndLoadModels();
-                }
-            });
-
-            startYoutubeProcessingBtn.addEventListener('click', async () => {
-                const url = document.querySelector('.youtube-url-input').value.trim();
-                if (!url) {
-                    showStatusMessage('請輸入 YouTube 網址', true);
+            // =================================================================================
+            // 初始化
+            // =================================================================================
+            const initialize = () => {
+                if (!dom.saveApiKeyBtn) {
+                    console.error("FATAL: Save API Key button not found in DOM.");
                     return;
                 }
-                const payload = {
-                    requests: [{ url: url, filename: '' }],
-                    model: geminiModelSelect.value,
-                    tasks: Array.from(document.querySelectorAll('input[name="yt-task"]:checked')).map(cb => cb.value).join(','),
-                    output_format: ytOutputFormatSelect.value,
-                    api_key: localStorage.getItem('googleApiKey')
-                };
-                try {
-                    const response = await fetch('/api/youtube/process', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
-                    showStatusMessage('任務已成功建立！', false);
-                } catch (error) {
-                    showStatusMessage(error.message, true);
-                }
-            });
+                dom.saveApiKeyBtn.addEventListener('click', actions.saveAndValidateApiKey);
 
-            const storedApiKey = localStorage.getItem('googleApiKey');
-            if (storedApiKey) {
-                apiKeyInput.value = storedApiKey;
-                validateAndLoadModels();
-            }
-        };
+                // Set initial value from local storage
+                dom.apiKeyInput.value = state.gemini.apiKey;
 
-        // --- Initial Calls ---
-        setupWebSocket();
-        initializeYouTubeTab();
-    });
+                render(); // Initial render
+            };
+
+            initialize();
+        });
     </script>
 </body>
 </html>

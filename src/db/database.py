@@ -122,6 +122,25 @@ def initialize_database():
         if conn:
             conn.close()
 
+def update_task_payload(task_id: str, payload: str):
+    """
+    更新一個現有任務的 payload。
+    這對於在任務鏈中傳遞資料至關重要。
+    """
+    sql = "UPDATE tasks SET payload = ? WHERE task_id = ?"
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        with conn:
+            conn.execute(sql, (payload, task_id))
+        log.info(f"✅ 任務 {task_id} 的 payload 已更新。")
+    except sqlite3.Error as e:
+        log.error(f"❌ 更新任務 {task_id} payload 時出錯: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+
 
 # --- JULES'S NEW FEATURE: App State 核心功能 ---
 

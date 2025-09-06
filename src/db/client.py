@@ -118,6 +118,12 @@ class DBClient:
             "result": result
         })
 
+    def update_task_payload(self, task_id: str, payload: str):
+        return self._send_request("update_task_payload", {
+            "task_id": task_id,
+            "payload": payload
+        })
+
     def get_task_status(self, task_id: str) -> dict | None:
         return self._send_request("get_task_status", {"task_id": task_id})
 

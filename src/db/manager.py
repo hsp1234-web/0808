@@ -41,8 +41,8 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 log = logging.getLogger('DBManagerServer')
 
 # --- 伺服器設定 ---
-# JULES: 將 PORT 設為 0，讓作業系統動態選擇可用埠號
-HOST, PORT = "127.0.0.1", 0
+# JULES: 將 PORT 設為 0，讓作業系統動態選擇可用埠號 (JULES'S FIX: Hardcode to 49999 for stability)
+HOST, PORT = "127.0.0.1", 49999
 
 # --- 指令分派 ---
 # 建立一個函式名稱與指令 action 的對應字典
@@ -53,6 +53,7 @@ ACTION_MAP = {
     "fetch_and_lock_task": database.fetch_and_lock_task,
     "update_task_progress": database.update_task_progress,
     "update_task_status": database.update_task_status,
+    "update_task_payload": database.update_task_payload, # JULES'S FINAL FIX
     "get_task_status": database.get_task_status,
     "are_tasks_active": database.are_tasks_active,
     "get_all_tasks": database.get_all_tasks,
