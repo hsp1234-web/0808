@@ -80,6 +80,9 @@
             opacity: 1;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        .tab-container a.tab-button {
+            text-decoration: none;
+        }
         .tab-content {
             display: none; /* 預設隱藏 */
         }
@@ -552,6 +555,29 @@
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
+            let currentFontSize = 100;
+
+            // --- 字體縮放功能 ---
+            const updateFontSize = () => {
+                document.body.style.fontSize = `${currentFontSize}%`;
+                fontSizeDisplay.textContent = `${currentFontSize}%`;
+            };
+
+            zoomInBtn.addEventListener('click', () => {
+                logAction('click-zoom-in');
+                if (currentFontSize < 150) { // 設定最大縮放
+                    currentFontSize += 10;
+                    updateFontSize();
+                }
+            });
+
+            zoomOutBtn.addEventListener('click', () => {
+                logAction('click-zoom-out');
+                 if (currentFontSize > 70) { // 設定最小縮放
+                    currentFontSize -= 10;
+                    updateFontSize();
+                }
+            });
 
             // --- 預覽 Modal 彈窗元素 ---
             const previewModal = document.getElementById('preview-modal');
