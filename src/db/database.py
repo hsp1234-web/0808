@@ -111,7 +111,36 @@ def initialize_database():
             """)
             # --- END ---
 
-        log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state` 資料表已存在。")
+            # --- 文件處理模組的資料表 (由 Jules 於 2025-09-08 新增) ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_url TEXT,
+                    file_hash TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+                    raw_text TEXT,
+                    ai_summary TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_doc_hash ON documents (file_hash)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_doc_status ON documents (status)")
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS extracted_assets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    asset_type TEXT NOT NULL, -- 'image' or 'text_block' etc.
+                    asset_path TEXT,
+                    ai_description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (document_id) REFERENCES documents (id)
+                )
+            """)
+            # --- 文件處理模組結束 ---
+
+        log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state`, `documents`, `extracted_assets` 資料表已存在。")
     except sqlite3.Error as e:
         log.error(f"初始化資料庫時發生錯誤: {e}")
     finally:
@@ -494,6 +523,92 @@ def get_all_app_states() -> dict[str, str]:
         if conn:
             conn.close()
 
+
+# --- 文件處理模組函式 (由 Jules 於 2025-09-08 新增) ---
+
+def check_document_exists_by_hash(file_hash: str) -> bool:
+    """透過檔案雜湊值檢查文件是否已存在於資料庫中。"""
+    sql = "SELECT 1 FROM documents WHERE file_hash = ? LIMIT 1"
+    conn = get_db_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (file_hash,))
+        return cursor.fetchone() is not None
+    except sqlite3.Error as e:
+        log.error(f"❌ 檢查文件雜湊值 {file_hash} 時發生錯誤: {e}", exc_info=True)
+        return False
+    finally:
+        if conn: conn.close()
+
+def add_document(source_url: str, file_hash: str) -> int | None:
+    """新增一筆新的文件紀錄，並回傳其資料庫 ID。"""
+    if check_document_exists_by_hash(file_hash):
+        log.warning(f"⚠️ 文件 {file_hash} 已存在，跳過新增。")
+        return get_document_id_by_hash(file_hash)
+
+    sql = "INSERT INTO documents (source_url, file_hash) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return None
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (source_url, file_hash))
+            doc_id = cursor.lastrowid
+        log.info(f"✅ 已新增文件紀錄，URL: {source_url}, HASH: {file_hash}, DB_ID: {doc_id}")
+        return doc_id
+    except sqlite3.IntegrityError:
+        log.warning(f"⚠️ 嘗試新增一個已存在的檔案雜湊值: {file_hash}")
+        return None
+    except sqlite3.Error as e:
+        log.error(f"❌ 新增文件 {file_hash} 時發生錯誤: {e}", exc_info=True)
+        return None
+    finally:
+        if conn: conn.close()
+
+def get_document_id_by_hash(file_hash: str) -> int | None:
+    """根據檔案雜湊值獲取文件的資料庫 ID。"""
+    sql = "SELECT id FROM documents WHERE file_hash = ?"
+    conn = get_db_connection()
+    if not conn: return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (file_hash,))
+        row = cursor.fetchone()
+        return row['id'] if row else None
+    except sqlite3.Error as e:
+        log.error(f"❌ 獲取文件 ID (雜湊值: {file_hash}) 時發生錯誤: {e}", exc_info=True)
+        return None
+    finally:
+        if conn: conn.close()
+
+def update_document_text_and_status(file_hash: str, status: str, raw_text: str = None, ai_summary: str = None):
+    """更新一份文件的狀態、原始文字和 AI 摘要。"""
+    sql = "UPDATE documents SET status = ?, raw_text = ?, ai_summary = ? WHERE file_hash = ?"
+    conn = get_db_connection()
+    if not conn: return
+    try:
+        with conn:
+            conn.execute(sql, (status, raw_text, ai_summary, file_hash))
+        log.info(f"✅ 文件 {file_hash} 狀態已更新為: {status}")
+    except sqlite3.Error as e:
+        log.error(f"❌ 更新文件 {file_hash} 時發生錯誤: {e}", exc_info=True)
+    finally:
+        if conn: conn.close()
+
+def add_extracted_asset(document_id: int, asset_type: str, asset_path: str, ai_description: str = None):
+    """為一份文件新增一筆已提取的資產（例如圖片）紀錄。"""
+    sql = "INSERT INTO extracted_assets (document_id, asset_type, asset_path, ai_description) VALUES (?, ?, ?, ?)"
+    conn = get_db_connection()
+    if not conn: return
+    try:
+        with conn:
+            conn.execute(sql, (document_id, asset_type, asset_path, ai_description))
+        log.info(f"✅ 已為文件 ID {document_id} 新增資產: {asset_path}")
+    except sqlite3.Error as e:
+        log.error(f"❌ 為文件 ID {document_id} 新增資產時發生錯誤: {e}", exc_info=True)
+    finally:
+        if conn: conn.close()
 
 if __name__ == "__main__":
     # 直接執行此檔案時，會進行初始化
