@@ -345,7 +345,7 @@
 <script>
     // 監聽 DOMContentLoaded 事件，確保所有 DOM 元素都已載入。
     document.addEventListener('DOMContentLoaded', () => {
-        console.log("DOM fully loaded. Initializing script with WebSocket logic.");
+        console.log("[JULES DEBUG] DOMContentLoaded event fired. Initializing script...");
 
         let socket;
         const taskElements = new Map(); // 用於追蹤正在進行中的任務元素
@@ -540,7 +540,7 @@
         const handleYoutubeStatus = (payload) => {
             if (!payload || !payload.task_id) return;
 
-            const isFinalReport = payload.status === '已完成' && payload.task_type === 'gemini_process';
+            const isFinalReport = payload.status === 'completed' && payload.type === 'gemini_process';
             const trackingId = payload.depends_on || payload.task_id;
 
             let taskElement = taskElements.get(trackingId);
@@ -571,9 +571,10 @@
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/ws`);
             socket.onmessage = (event) => {
-                console.log("WebSocket message received:", event.data);
+                console.log("[JULES DEBUG] WebSocket message received:", event.data);
                 const message = JSON.parse(event.data);
                  if (message.type === 'YOUTUBE_STATUS' || (message.type === 'NEW_TASK_CREATED' && (message.payload.type.includes('youtube') || message.payload.type.includes('gemini')))) {
+                    console.log("[JULES DEBUG] Handling YOUTUBE_STATUS message with payload:", JSON.stringify(message.payload));
                     handleYoutubeStatus(message.payload);
                 }
             };
@@ -611,11 +612,13 @@
         attachListener(dom.startYoutubeProcessingBtn, 'click', () => processYoutubeRequest(false));
         attachListener(dom.downloadAudioOnlyBtn, 'click', () => processYoutubeRequest(true));
         attachListener(dom.zoomInBtn, 'click', () => {
+            console.log("[JULES DEBUG] Zoom In button clicked.");
             currentFontSize = Math.min(200, currentFontSize + 10);
             document.body.style.fontSize = `${currentFontSize}%`;
             dom.fontSizeDisplay.textContent = `${currentFontSize}%`;
         });
         attachListener(dom.zoomOutBtn, 'click', () => {
+            console.log("[JULES DEBUG] Zoom Out button clicked.");
             currentFontSize = Math.max(50, currentFontSize - 10);
             document.body.style.fontSize = `${currentFontSize}%`;
             dom.fontSizeDisplay.textContent = `${currentFontSize}%`;

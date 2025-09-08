@@ -137,22 +137,34 @@ def process_youtube_task(task: dict):
             if not dependent_task_id:
                 raise ValueError(f"找不到依賴於 {task_id} 的後續任務")
 
-            # 將後續任務的 payload 注入到下一個處理階段
+            # 從資料庫獲取後續任務的完整資訊
             process_task_info = db_client.get_task_status(dependent_task_id)
-            payload = json.loads(process_task_info['payload'])
-            payload['input_file'] = download_result['output_path'] # 使用 URL 化的路徑
-            payload['video_title'] = download_result.get('video_title', '無標題影片')
+            if not process_task_info:
+                raise ValueError(f"無法從資料庫獲取後續任務 {dependent_task_id} 的詳細資訊")
 
-            # JULES'S FINAL FIX: 更新資料庫中後續任務的 payload，這是先前遺漏的關鍵步驟
-            db_client.update_task_payload(dependent_task_id, json.dumps(payload))
+            # 更新其 payload
+            new_payload = json.loads(process_task_info['payload'])
+            new_payload['input_file'] = download_result['output_path'] # 使用 URL 化的路徑
+            new_payload['video_title'] = download_result.get('video_title', '無標題影片')
+
+            # 更新資料庫中後續任務的 payload
+            db_client.update_task_payload(dependent_task_id, json.dumps(new_payload))
             log.info(f"已成功將下載結果注入到後續任務 {dependent_task_id} 的 payload 中。")
 
-            task_id = dependent_task_id # 將當前 task_id 切換到分析任務
-            log.info(f"下載完成，繼續處理 AI 分析任務: {task_id}")
+            # [JULES'S CRITICAL FIX - 2025-09-08]
+            # 這是導致 AI 處理鏈中斷的根本原因。
+            # 我們必須用剛從資料庫獲取的、包含已更新 payload 的 `gemini_process` 任務，
+            # 來完全替換掉函式範圍內的 `task` 和 `payload` 變數。
+            # 這樣，接下來的 "AI 分析階段" 才能在正確的任務內容上操作。
+            task = process_task_info
+            task_id = dependent_task_id
+            payload = new_payload # 使用已更新的 payload
+            log.info(f"下載完成，已將執行緒切換至 AI 分析任務: {task_id}")
 
 
         # --- AI 分析階段 ---
-        if task['type'] == 'gemini_process':
+        # 經過上面的修正，這裡的 `task` 現在已經是正確的 gemini_process 任務了
+        if task.get('type') == 'gemini_process':
             model = payload['model']
             tasks_to_run = payload.get('tasks', 'summary,transcript')
             output_format = payload.get('output_format', 'html')
@@ -229,8 +241,18 @@ def main_loop():
                 log.info(f"領取到新任務: {task['task_id']}, 類型: {task['type']}")
                 if task['type'] == 'transcribe':
                     process_transcription_task(task)
-                elif task['type'] in ['youtube_download', 'gemini_process', 'youtube_download_only']:
+                # JULES'S FIX (2025-09-08): 根據分析報告，Worker 程序不應該直接處理 'gemini_process' 任務。
+                # 'gemini_process' 任務的處理邏輯應該只由 'youtube_download' 任務在完成後鏈式觸發。
+                # 從主迴圈的處理列表中移除 'gemini_process'，可以防止因 payload 尚未準備好而導致的 KeyError 崩潰。
+                elif task['type'] in ['youtube_download', 'youtube_download_only']:
                     process_youtube_task(task)
+                elif task['type'] == 'gemini_process':
+                    # 如果因為某些原因仍然取得了 gemini_process 任務，記錄日誌並將其狀態重設為 pending，
+                    # 等待其依賴的下載任務完成後再由鏈式調用處理。
+                    log.warning(f"Worker 主迴圈不應直接處理 gemini_process 任務 (ID: {task['task_id']})。可能是其依賴的下載任務尚未完成。將解鎖任務以便後續重試。")
+                    db_client.unlock_task(task['task_id'])
+                    # 短暫休眠，避免立即再次取得同一個任務
+                    time.sleep(5)
                 else:
                     log.warning(f"未知的任務類型: {task['type']}，任務 {task['task_id']} 將被忽略。")
                     db_client.update_task_status(task['task_id'], 'failed', json.dumps({'error': f"未知的任務類型: {task['type']}"}))

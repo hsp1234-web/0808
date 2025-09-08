@@ -104,6 +104,13 @@ class DBClient:
     def fetch_and_lock_task(self) -> dict | None:
         return self._send_request("fetch_and_lock_task")
 
+    def unlock_task(self, task_id: str) -> bool:
+        """
+        [JULES'S FIX - 2025-09-08]
+        解鎖一個先前被鎖定的任務，使其可以被其他 Worker 重新領取。
+        """
+        return self._send_request("unlock_task", {"task_id": task_id})
+
     def update_task_progress(self, task_id: str, progress: int, partial_result: str):
         return self._send_request("update_task_progress", {
             "task_id": task_id,

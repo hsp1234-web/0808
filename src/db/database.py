@@ -214,6 +214,32 @@ def add_task(task_id: str, payload: str, task_type: str = 'transcribe', depends_
         if conn:
             conn.close()
 
+def unlock_task(task_id: str) -> bool:
+    """
+    解鎖一個先前被鎖定的任務，通常是因為 Worker 異常終止。
+    只會將 'processing' 狀態的任務改回 'pending'。
+    """
+    sql = "UPDATE tasks SET status = 'pending' WHERE task_id = ? AND status = 'processing'"
+    conn = get_db_connection()
+    if not conn: return False
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (task_id,))
+            # rowcount 會回傳被影響的行數。如果為 1，表示解鎖成功。
+            if cursor.rowcount > 0:
+                log.info(f"🔄️ 任務 {task_id} 已被解鎖並重設為 'pending'。")
+                return True
+            else:
+                log.warning(f"⚠️ 嘗試解鎖任務 {task_id}，但其狀態不是 'processing' 或任務不存在。")
+                return False
+    except sqlite3.Error as e:
+        log.error(f"❌ 解鎖任務 {task_id} 時出錯: {e}", exc_info=True)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def fetch_and_lock_task() -> dict | None:
     """
     以原子操作獲取一個待處理的任務，並將其狀態更新為 'processing'。

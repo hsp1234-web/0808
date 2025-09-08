@@ -51,6 +51,7 @@ ACTION_MAP = {
     "initialize_database": database.initialize_database,
     "add_task": database.add_task,
     "fetch_and_lock_task": database.fetch_and_lock_task,
+    "unlock_task": database.unlock_task,
     "update_task_progress": database.update_task_progress,
     "update_task_status": database.update_task_status,
     "update_task_payload": database.update_task_payload, # JULES'S FINAL FIX
