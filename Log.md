@@ -1,3 +1,25 @@
+## 932號 - 2025-09-08T19:54:52.820923+08:00
+
+### fix(env): 解決頑固的快取與環境問題並通過端對端測試
+
+- **動機**: 接手一個因頑固的快取問題而必定失敗的後端服務。交接報告指出，對 `gemini_poc.py` 的修改永不生效。本次任務的目標是徹底診斷並解決這個底層的環境問題，使新的 FastAPI 後端能夠通過完整的端對端測試。
+
+- **核心變更與除錯過程**:
+    1.  **驗證檔案內容**: 首先，確認了 `src/poc_tasks/gemini_poc.py` 中的模型名稱確實是更新後、正確的 `'models/gemini-1.5-flash-latest'`，排除了程式碼本身的問題。
+    2.  **清除 Python 快取**: 執行了 `find . -name "*.pyc" -delete` 和 `find . -type d -name "__pycache__" -delete` 命令，清除了所有可能的位元組碼快取。
+    3.  **發現伺服器啟動失敗**: 在嘗試手動啟動 `uvicorn` 伺服器後，從日誌 (`server_poc.log`) 中發現了第一個關鍵問題：`ModuleNotFoundError: No module named 'pytz'`。這是因為 `src/poc_tasks/db_poc.py` 引入了 `pytz`，但它從未被安裝。
+    4.  **安裝缺失的依賴**: 透過 `uv pip install --system pytz` 安裝了缺失的套件。
+    5.  **發現測試設定衝突**: 即使在安裝依賴後，測試依然失敗，且日誌顯示測試框架 (Playwright) 似乎在啟動自己的、舊的伺服器 (`orchestrator.py`)，與我手動啟動的新伺服器 (`main.py`) 產生衝突。
+    6.  **釐清設定檔問題**: 經調查，發現 `npx playwright test` 預設讀取了 `playwright.config.js`，其中包含了啟動舊伺服器的 `webServer` 設定。而為新系統準備的 `playwright.poc.config.js` (已移除 `webServer`) 並未被使用。
+    7.  **修正測試指令**: 最終的解決方案是，在執行測試時，使用 `--config` 旗標明確指定使用 POC 的設定檔：`npx playwright test ... --config playwright.poc.config.js`。
+
+- **測試與驗證**:
+    - 在安裝了 `pytz` 依賴後，手動啟動 `python3 -m uvicorn src.main:app`。
+    - 使用了修正後的、包含 `--config` 旗標的 Playwright 指令執行了 `src/tests/e2e_poc_system.spec.js`。
+    - **測試成功通過**。日誌顯示，請求成功發送到手動啟動的伺服器，完整的任務流程（下載、轉錄、分析）被正確執行，最終測試案例驗證通過。
+
+- **成果**: 成功地解決了一個由多個問題（Python 依賴缺失、位元組碼快取嫌疑、測試設定衝突）交織而成的複雜環境問題。經過修復，新的 FastAPI 後端服務現已功能完整，並能被端對端測試穩定地驗證。
+
 ## 931號 - 2025-09-08T14:33:13.504468+08:00
 
 ### feat(poc): 實作後端穩定性重構概念驗證 (POC)
