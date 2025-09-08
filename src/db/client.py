@@ -93,8 +93,24 @@ class DBClient:
     # 這些方法模仿了 db/database.py 中的函式簽名，
     # 使得從舊的直接呼叫模式遷移到新的客戶端模式變得非常簡單。
 
-    def add_task(self, task_id: str, payload: str, task_type: str = 'transcribe', depends_on: str = None) -> bool:
-        return self._send_request("add_task", {
+    def enqueue_task(self, task_id: str, payload: str, task_type: str = 'transcribe', depends_on: str = None) -> bool:
+        """
+        [架構重構] 將一個新任務放入 DB 管理者的佇列中。
+
+        這是一個非同步操作的入口。客戶端（如 API 伺服器）呼叫此函式後，
+        DB 管理者會立即將任務放入記憶體佇列並返回成功，而不會等待資料庫寫入。
+        這大大提高了 API 的回應速度和系統的吞吐量。
+
+        Args:
+            task_id: 任務的唯一識別碼。
+            payload: 包含任務具體資訊的 JSON 字串。
+            task_type: 任務的類型 (例如 'transcribe', 'youtube_download')。
+            depends_on: 此任務所依賴的前一個任務的 ID。
+
+        Returns:
+            如果請求成功發送，則返回 True。
+        """
+        return self._send_request("enqueue_task", {
             "task_id": task_id,
             "payload": payload,
             "task_type": task_type,

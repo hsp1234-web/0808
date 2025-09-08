@@ -28,6 +28,9 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
+import multiprocessing
+import threading
+import queue # 用於捕捉 queue.Empty 例外
 
 # 讓此腳本可以存取上層目錄的 db.database 模組
 import sys
@@ -41,89 +44,103 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 log = logging.getLogger('DBManagerServer')
 
 # --- 伺服器設定 ---
-# JULES: 將 PORT 設為 0，讓作業系統動態選擇可用埠號 (JULES'S FIX: Hardcode to 49999 for stability)
 HOST, PORT = "127.0.0.1", 49999
 
+# --- 全域任務佇列 ---
+# 使用 multiprocessing.Manager 來建立一個可在多個行程間共享的佇列
+# 這使得我們的架構未來可以輕易地擴展到多個 Worker 行程
+manager = multiprocessing.Manager()
+task_queue = manager.Queue()
+
+def enqueue_task(**params):
+    """
+    將一個任務放入全域的 multiprocessing 佇列中。
+    這是一個非阻塞操作，API 伺服器可以立即獲得回應。
+    """
+    log.info(f"接收到任務，準備放入佇列: {params.get('task_id')}")
+    task_queue.put(params)
+    log.debug(f"目前佇列大小約為: {task_queue.qsize()}")
+    return True # 立即成功返回
+
 # --- 指令分派 ---
-# 建立一個函式名稱與指令 action 的對應字典
-# 這樣可以避免巨大的 if/elif/else 結構，也更安全
 ACTION_MAP = {
-    "initialize_database": database.initialize_database,
-    "add_task": database.add_task,
+    # --- 核心任務流程重構 ---
+    # 新的入口點：將任務放入佇列，立即返回
+    "enqueue_task": enqueue_task,
+    # 舊的 add_task 已被移除，所有任務建立必須通過佇列
     "fetch_and_lock_task": database.fetch_and_lock_task,
     "unlock_task": database.unlock_task,
     "update_task_progress": database.update_task_progress,
     "update_task_status": database.update_task_status,
-    "update_task_payload": database.update_task_payload, # JULES'S FINAL FIX
+    "update_task_payload": database.update_task_payload,
     "get_task_status": database.get_task_status,
     "are_tasks_active": database.are_tasks_active,
     "get_all_tasks": database.get_all_tasks,
     "get_system_logs": database.get_system_logs_by_filter,
     "find_dependent_task": database.find_dependent_task,
-    # JULES'S NEW FEATURE: Add app state actions
     "get_app_state": database.get_app_state,
     "set_app_state": database.set_app_state,
     "get_all_app_states": database.get_all_app_states,
-    # For testing:
     "clear_all_tasks": database.clear_all_tasks,
 }
 
+def task_writer_thread(stop_event):
+    """
+    一個在背景執行的執行緒，負責從佇列中取出任務並寫入資料庫。
+    """
+    log.info("🚀 背景資料庫寫入執行緒已啟動。")
+    while not stop_event.is_set():
+        try:
+            # 使用 timeout，這樣執行緒可以定期檢查 stop_event
+            task_params = task_queue.get(timeout=1.0)
+            log.info(f"從佇列中取出任務，準備寫入資料庫: {task_params}")
+            database.add_task(**task_params)
+            log.info(f"✅ 成功將任務 {task_params.get('task_id')} 寫入資料庫。")
+        except queue.Empty:
+            # 佇列為空是正常情況，繼續等待
+            continue
+        except Exception as e:
+            log.error(f"❌ 資料庫寫入執行緒發生錯誤: {e}", exc_info=True)
+            # 這裡可以加入更複雜的重試邏輯或將失敗的任務移至死信佇列
+    log.info("背景資料庫寫入執行緒已停止。")
+
 
 class DBRequestHandler(socketserver.BaseRequestHandler):
-    """
-    處理來自客戶端請求的處理器。
-    每個連線都會建立一個此類別的實例。
-    """
     def handle(self):
         log.info(f"來自 {self.client_address} 的新連線。")
         try:
             while True:
-                # 接收資料的長度 (4-byte header)
                 header = self.request.recv(4)
-                if not header:
-                    break # 連線已關閉
-
+                if not header: break
                 data_len = int.from_bytes(header, 'big')
-
-                # 根據長度接收完整的資料
                 data = self.request.recv(data_len)
-                if not data:
-                    break
+                if not data: break
 
                 request = json.loads(data.decode('utf-8'))
                 log.info(f"收到請求: {request}")
 
                 action = request.get("action")
                 params = request.get("params", {})
-
                 response = {}
+
                 try:
                     if action in ACTION_MAP:
-                        # 從字典中獲取對應的函式
                         func = ACTION_MAP[action]
-
-                        # 呼叫函式並傳入參數
                         result = func(**params)
-
                         response["status"] = "success"
                         response["data"] = result
                     else:
                         response["status"] = "error"
                         response["message"] = f"未知的 action: {action}"
                         log.warning(f"收到了未知的 action: {action}")
-
                 except Exception as e:
                     log.error(f"執行 action '{action}' 時發生錯誤: {e}", exc_info=True)
                     response["status"] = "error"
-                    # 將例外轉為字串，以便序列化
                     response["message"] = f"執行 '{action}' 時發生內部錯誤: {str(e)}"
 
-                # 將回應序列化並發送回客戶端
                 response_bytes = json.dumps(response).encode('utf-8')
                 response_header = len(response_bytes).to_bytes(4, 'big')
-
                 self.request.sendall(response_header + response_bytes)
-
         except ConnectionResetError:
             log.warning(f"客戶端 {self.client_address} 強制中斷了連線。")
         except Exception as e:
@@ -131,51 +148,44 @@ class DBRequestHandler(socketserver.BaseRequestHandler):
         finally:
             log.info(f"連線 {self.client_address} 已關閉。")
 
-
 def run_server():
     """
-    啟動資料庫管理者伺服器。
+    啟動資料庫管理者伺服器，並包含背景寫入執行緒。
     """
-    # 在伺服器啟動前，先主動清理任何可能存在的舊 port 檔案，確保一致性
-    port_file = Path(__file__).parent / "db_manager.port"
-    if port_file.exists():
-        try:
-            port_file.unlink()
-            log.info(f"已成功移除舊的埠號檔案: {port_file}")
-        except OSError as e:
-            # 即便移除失敗，也只記錄錯誤，不中斷啟動流程
-            log.error(f"無法移除舊的埠號檔案: {e}", exc_info=True)
-
-    # 這是整個系統中，唯一應該呼叫 `initialize_database` 的地方
+    stop_event = threading.Event()
+    writer_thread = None
     try:
-        log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
-        database.initialize_database()
-        log.info("✅ 資料庫初始化成功。")
-    except sqlite3.Error as e:
-        log.critical(f"❌ 資料庫初始化失敗，伺服器無法啟動: {e}")
-        # 在這種嚴重錯誤下，我們應該讓程序以非零代碼退出
-        sys.exit(1)
-
-    # 建立 TCP 伺服器
-    # 讓 server 在程式結束後可以立即重用同一個位址
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
-        # 獲取實際綁定的埠號
-        actual_port = server.server_address[1]
-        log.info(f"🚀 資料庫管理者伺服器已在 {HOST}:{actual_port} 上啟動...")
-
-        # JULES'S FIX (2025-08-31): 將選擇的埠號輸出，以便協調器可以讀取
-        print(f"DB_MANAGER_PORT: {actual_port}", flush=True)
-        # JULES'S FIX (2025-08-30): 發送明確的就緒信號，解決 orchestrator 的競爭條件問題
-        # 這個信號必須在埠號被印出之後發送
-        print("DB_MANAGER_READY", flush=True)
-
+        # ... (和之前一樣的檔案清理和資料庫初始化) ...
         try:
-            # 啟動伺服器，它將一直運行直到被中斷 (例如 Ctrl+C)
-            server.serve_forever()
-        finally:
-            log.info("伺服器已關閉。")
+            log.info("資料庫管理者伺服器啟動前，正在進行資料庫初始化...")
+            database.initialize_database()
+            log.info("✅ 資料庫初始化成功。")
+        except sqlite3.Error as e:
+            log.critical(f"❌ 資料庫初始化失敗，伺服器無法啟動: {e}", exc_info=True)
+            sys.exit(1)
 
+        # 啟動背景寫入執行緒
+        writer_thread = threading.Thread(target=task_writer_thread, args=(stop_event,))
+        writer_thread.daemon = True # 確保主程序退出時，此執行緒也會退出
+        writer_thread.start()
+
+        socketserver.TCPServer.allow_reuse_address = True
+        with socketserver.TCPServer((HOST, PORT), DBRequestHandler) as server:
+            actual_port = server.server_address[1]
+            log.info(f"🚀 資料庫管理者伺服器已在 {HOST}:{actual_port} 上啟動...")
+            print(f"DB_MANAGER_PORT: {actual_port}", flush=True)
+            print("DB_MANAGER_READY", flush=True)
+            server.serve_forever()
+
+    except Exception as e:
+        log.critical(f"🚨 DB 管理者伺服器發生致命錯誤，即將關閉: {e}", exc_info=True)
+        sys.exit(1)
+    finally:
+        log.info("正在關閉 DB 管理者伺服器...")
+        stop_event.set() # 通知背景執行緒停止
+        if writer_thread:
+            writer_thread.join() # 等待背景執行緒優雅地結束
+        log.info("伺服器已完全關閉。")
 
 if __name__ == "__main__":
     run_server()

@@ -330,22 +330,41 @@ async def create_transcription_task(
         "beam_size": beam_size
     }
 
-    if db_client.add_task(task_id, json.dumps(transcription_payload), task_type='transcribe'):
-        log.info(f"✅ 已成功為檔案 '{file.filename}' 建立轉錄任務: {task_id}")
-        # 廣播一個新任務已建立的訊息，讓前端可以即時更新 UI
-        await manager.broadcast_json({
-            "type": "NEW_TASK_CREATED",
-            "payload": {
-                "task_id": task_id,
-                "status": "pending",
-                "type": "transcribe",
-                "payload": transcription_payload
-            }
-        })
-        return {"task_id": task_id, "type": "transcribe"}
-    else:
-        log.error(f"❌ 無法為檔案 '{file.filename}' 建立轉錄任務。")
-        raise HTTPException(status_code=500, detail="無法在資料庫中建立任務。")
+    try:
+        # --- 穩定性強化 ---
+        # 將資料庫操作包在 try...except 區塊中，以捕捉連線錯誤。
+        success = db_client.enqueue_task(task_id, json.dumps(transcription_payload), task_type='transcribe')
+        if success:
+            log.info(f"✅ 已成功為檔案 '{file.filename}' 建立轉錄任務: {task_id}")
+            # 廣播一個新任務已建立的訊息，讓前端可以即時更新 UI
+            await manager.broadcast_json({
+                "type": "NEW_TASK_CREATED",
+                "payload": {
+                    "task_id": task_id,
+                    "status": "pending",
+                    "type": "transcribe",
+                    "payload": transcription_payload
+                }
+            })
+            return JSONResponse(
+                status_code=202,
+                content={"task_id": task_id, "type": "transcribe"}
+            )
+        else:
+            # 這種情況表示 DB manager 正常連線，但回傳了 false
+            log.error(f"❌ DB Manager 拒絕建立轉錄任務，檔案: '{file.filename}'。")
+            raise HTTPException(status_code=500, detail="資料庫管理者拒絕建立任務。")
+    except Exception as e:
+        # 捕捉 db_client 可能拋出的任何例外 (例如 ConnectionRefusedError)
+        log.critical(
+            f"🚨 無法與 DB Manager 通訊以建立轉錄任務。請檢查 DB Manager 是否正在運行。錯誤: {e}",
+            exc_info=True
+        )
+        # 返回一個標準的 JSON 錯誤，而不是讓伺服器崩潰。
+        return JSONResponse(
+            status_code=503, # Service Unavailable
+            content={"detail": "後端資料庫服務暫時無法連線，請稍後再試。"}
+        )
 
 
 @app.get("/api/status/{task_id}")
@@ -859,50 +878,71 @@ async def _create_processing_tasks(payload: dict):
         raise HTTPException(status_code=401, detail="執行 AI 分析時必須提供 'api_key'。")
 
     tasks_created = []
-    for req_item in requests_list:
-        url = req_item.get("url")
-        filename = req_item.get("filename")
+    try:
+        for req_item in requests_list:
+            url = req_item.get("url")
+            filename = req_item.get("filename")
 
-        if not url or not url.strip():
-            continue
+            if not url or not url.strip():
+                continue
 
-        task_id = str(uuid.uuid4())
+            task_id = str(uuid.uuid4())
 
-        if download_only:
-            task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
-            if db_client.add_task(task_id, json.dumps(task_payload), task_type='youtube_download_only'):
-                task_info = {"url": url, "task_id": task_id, "type": "youtube_download_only", "payload": task_payload}
-                tasks_created.append(task_info)
-                await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**task_info, "status": "pending"}})
-        else:
-            download_task_id = task_id
-            process_task_id = str(uuid.uuid4())
+            if download_only:
+                task_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
+                success = db_client.enqueue_task(task_id, json.dumps(task_payload), task_type='youtube_download_only')
+                if success:
+                    task_info = {"url": url, "task_id": task_id, "type": "youtube_download_only", "payload": task_payload}
+                    tasks_created.append(task_info)
+                    await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**task_info, "status": "pending"}})
+                else:
+                    log.error(f"❌ DB Manager 拒絕為 URL '{url}' 建立僅下載任務。")
 
-            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": "audio"}
-            process_payload = {
-                "model": model,
-                "tasks": tasks_to_run,
-                "output_format": output_format,
-                "api_key": api_key
-            }
+            else:
+                download_task_id = task_id
+                process_task_id = str(uuid.uuid4())
 
-            if db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download'):
-                dl_task_info = {"url": url, "task_id": download_task_id, "type": "youtube_download", "payload": download_payload}
-                tasks_created.append(dl_task_info)
+                download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": "audio"}
+                process_payload = {
+                    "model": model,
+                    "tasks": tasks_to_run,
+                    "output_format": output_format,
+                    "api_key": api_key
+                }
 
-                if db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id):
-                    proc_task_info = {
-                        "url": url,
-                        "task_id": download_task_id,
-                        "final_task_id": process_task_id,
-                        "type": "gemini_process",
-                        "depends_on": download_task_id,
-                        "payload": process_payload
-                    }
-                    tasks_created.append(proc_task_info)
-                    await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**proc_task_info, "status": "pending"}})
+                dl_success = db_client.enqueue_task(download_task_id, json.dumps(download_payload), task_type='youtube_download')
+                if dl_success:
+                    dl_task_info = {"url": url, "task_id": download_task_id, "type": "youtube_download", "payload": download_payload}
+                    tasks_created.append(dl_task_info)
 
-    return JSONResponse(content={"message": f"已為 {len(requests_list)} 個 URL 建立 {len(tasks_created)} 個處理任務。", "tasks": tasks_created})
+                    proc_success = db_client.enqueue_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id)
+                    if proc_success:
+                        proc_task_info = {
+                            "url": url,
+                            "task_id": download_task_id, # 前端是根據這個 ID 來追蹤
+                            "final_task_id": process_task_id,
+                            "type": "gemini_process",
+                            "depends_on": download_task_id,
+                            "payload": process_payload
+                        }
+                        tasks_created.append(proc_task_info)
+                        await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**proc_task_info, "status": "pending"}})
+                    else:
+                        log.error(f"❌ DB Manager 拒絕為 URL '{url}' 建立 Gemini 處理任務。")
+                else:
+                    log.error(f"❌ DB Manager 拒絕為 URL '{url}' 建立下載任務。")
+
+        return JSONResponse(content={"message": f"已為 {len(requests_list)} 個 URL 建立 {len(tasks_created)} 個處理任務。", "tasks": tasks_created})
+    except Exception as e:
+        log.critical(
+            f"🚨 在建立 YouTube 任務過程中無法與 DB Manager 通訊。請檢查 DB Manager 是否正在運行。錯誤: {e}",
+            exc_info=True
+        )
+        # 返回一個標準的 JSON 錯誤，而不是讓伺服器崩潰。
+        return JSONResponse(
+            status_code=503, # Service Unavailable
+            content={"detail": "後端資料庫服務暫時無法連線，請稍後再試。"}
+        )
 
 
 @app.post("/api/download/start", status_code=202)

@@ -75,7 +75,8 @@ def main():
 
                 print("1. 驗證核心功能 (UI 預設值, Gemini 金鑰)...")
                 expect(page.locator("#model-select")).to_have_value("tiny")
-                page.locator('button[data-tab="youtube-report-tab"]').click()
+                # JULES'S FIX: The selector was wrong. It's an `a` tag with `data-testid`, not a `button` with `data-tab`.
+                page.locator('a[data-testid="tab-youtube"]').click()
                 page.locator("#api-key-input").fill(API_KEY)
                 page.locator("#save-api-key-btn").click()
                 expect(page.locator("#api-key-status")).to_contain_text("金鑰有效", timeout=30000)

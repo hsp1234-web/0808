@@ -150,7 +150,31 @@ def main():
             t.daemon = True
             t.start()
 
-        log.info("🚫 [架構性決策] Worker 程序已被永久停用，以支援 WebSocket 驅動的新架構。")
+        # 4. 啟動 Worker
+        # [架構修正] 重新啟用 Worker 程序。
+        # Worker 是執行所有背景任務 (如下載、轉錄、AI分析) 的核心元件。
+        # 先前的版本錯誤地停用了它，導致任務佇列中的任務無人處理。
+        # 現在將其重新啟用，以確保任務可以被正確地消費和執行。
+        log.info("🔧 正在啟動 Worker...")
+        worker_cmd = [sys.executable, "src/worker/worker.py"]
+        if args.mock:
+            worker_cmd.append("--mock")
+
+        worker_env = os.environ.copy()
+        if is_mock_mode:
+            worker_env["API_MODE"] = "mock"
+        else:
+            worker_env["API_MODE"] = "real"
+
+        worker_proc = subprocess.Popen(worker_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', env=worker_env)
+        processes.append(worker_proc)
+        log.info(f"Worker 程序已啟動，PID: {worker_proc.pid}")
+
+        worker_stdout_thread = threading.Thread(target=stream_reader, args=(worker_proc.stdout, 'worker'))
+        worker_stdout_thread.daemon = True
+        threads.append(worker_stdout_thread)
+        worker_stdout_thread.start()
+
         log.info("--- [協調器進入監控模式] ---")
 
         last_heartbeat_time = time.time()
