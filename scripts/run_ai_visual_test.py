@@ -66,27 +66,27 @@ class ServiceManager:
                 raise RuntimeError("無法動態修復伺服器路徑。")
 
             # 3. 定義要替換的路由邏輯
-            # 舊的、有問題的程式碼區塊
+            # 更新後的程式碼區塊，以匹配 api_server.py 的當前狀態
             search_block = """
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend(request: Request):
     \"\"\"根端點，提供前端操作介面。\"\"\"
-    html_file_path = STATIC_DIR / "mp3.html"
+    html_file_path = STATIC_DIR / "local_transcription.html"
     if not html_file_path.is_file():
         log.error(f"找不到前端檔案: {html_file_path}")
-        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (mp3.html)")
+        raise HTTPException(status_code=404, detail="找不到前端介面檔案 (local_transcription.html)")
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 """
             # 新的、正確的 SPA + 靜態檔案路由邏輯
             replace_block = """
 # --- 動態修復的路由 ---
-# 優先掛載 /static，確保對 /static/mp3.html 等的請求能被正確處理
+# 優先掛載 /static，確保對 /static/local_transcription.html 等的請求能被正確處理
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 掛載主應用程式 (SPA) 到根目錄
 # 使用 html=True 參數，FastAPI 會將所有未匹配到其他路由的請求
 # 都導向到 index.html，這是正確處理 SPA 路由的關鍵。
-# 我們假設主頁是 mp3.html，並將其作為 index.html 提供。
+# 我們假設主頁是 local_transcription.html，並將其作為 index.html 提供。
 class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         try:
@@ -94,7 +94,7 @@ class SPAStaticFiles(StaticFiles):
         except HTTPException as ex:
             if ex.status_code == 404:
                 # 如果是 404，則提供主 HTML 檔案
-                return await super().get_response('mp3.html', scope)
+                return await super().get_response('local_transcription.html', scope)
             raise ex
 
 app.mount("/", SPAStaticFiles(directory=STATIC_DIR, html=True), name="spa")

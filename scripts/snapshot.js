@@ -46,9 +46,10 @@ async function takeSnapshot() {
                 serverOutput += chunk;
                 console.log(`[伺服器日誌]: ${chunk.trim()}`);
                 resetWatchdog();
-                if (serverOutput.includes('✅✅✅')) {
-                    console.log('[DEBUG] 偵測到伺服器就緒訊息！準備解析 Promise...');
-                    resolve();
+                if (serverOutput.includes('Uvicorn running on')) {
+                    console.log('[DEBUG] 偵測到伺服器就緒訊息 (Uvicorn running)！準備解析 Promise...');
+                    // 給予一點額外時間確保所有路由都已掛載
+                    setTimeout(resolve, 500);
                 }
             });
 
