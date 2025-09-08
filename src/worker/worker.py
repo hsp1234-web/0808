@@ -13,6 +13,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
 from db.client import get_client
+from shared import constants
 
 # --- 日誌設定 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -73,20 +74,20 @@ def process_transcription_task(task: dict):
                 "transcript_path": media_url,
                 "output_path": media_url
             }
-            db_client.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
-            notify_api_server(task_id, 'completed', final_result_obj)
+            db_client.update_task_status(task_id, constants.STATUS_COMPLETED, json.dumps(final_result_obj))
+            notify_api_server(task_id, constants.STATUS_COMPLETED, final_result_obj)
         else:
             error_message = result.stderr or "轉錄失敗，無詳細錯誤訊息。"
             log.error(f"轉錄任務 {task_id} 失敗: {error_message}")
             error_payload = {'error': error_message}
-            db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
-            notify_api_server(task_id, 'failed', error_payload)
+            db_client.update_task_status(task_id, constants.STATUS_FAILED, json.dumps(error_payload))
+            notify_api_server(task_id, constants.STATUS_FAILED, error_payload)
 
     except Exception as e:
         log.error(f"處理轉錄任務 {task_id} 時發生嚴重錯誤: {e}", exc_info=True)
         error_payload = {'error': str(e)}
-        db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
-        notify_api_server(task_id, 'failed', error_payload)
+        db_client.update_task_status(task_id, constants.STATUS_FAILED, json.dumps(error_payload))
+        notify_api_server(task_id, constants.STATUS_FAILED, error_payload)
 
 
 def process_youtube_task(task: dict):
@@ -100,7 +101,7 @@ def process_youtube_task(task: dict):
         payload = json.loads(task['payload'])
 
         # --- 下載階段 ---
-        if task_type in ['youtube_download', 'youtube_download_only']:
+        if task_type in [constants.TASK_TYPE_YOUTUBE_DOWNLOAD, constants.TASK_TYPE_YOUTUBE_DOWNLOAD_ONLY]:
             url = payload['url']
             custom_filename = payload.get("custom_filename")
             download_type = payload.get("download_type", "audio")
@@ -124,35 +125,47 @@ def process_youtube_task(task: dict):
             # 將路徑轉換為 URL
             download_result['output_path'] = f"/media/{Path(download_result['output_path']).relative_to(UPLOADS_DIR).as_posix()}"
 
-            if task_type == 'youtube_download_only':
-                db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
-                notify_api_server(task_id, 'completed', download_result)
+            if task_type == constants.TASK_TYPE_YOUTUBE_DOWNLOAD_ONLY:
+                db_client.update_task_status(task_id, constants.STATUS_COMPLETED, json.dumps(download_result))
+                notify_api_server(task_id, constants.STATUS_COMPLETED, download_result)
                 return # 任務結束
 
             # 如果是鏈式任務，更新下載任務狀態，並觸發後續
-            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+            db_client.update_task_status(task_id, constants.STATUS_COMPLETED, json.dumps(download_result))
             # 注意：這裡不通知，因為鏈還沒結束
 
             dependent_task_id = db_client.find_dependent_task(task_id)
             if not dependent_task_id:
                 raise ValueError(f"找不到依賴於 {task_id} 的後續任務")
 
-            # 將後續任務的 payload 注入到下一個處理階段
+            # 從資料庫獲取後續任務的完整資訊
             process_task_info = db_client.get_task_status(dependent_task_id)
-            payload = json.loads(process_task_info['payload'])
-            payload['input_file'] = download_result['output_path'] # 使用 URL 化的路徑
-            payload['video_title'] = download_result.get('video_title', '無標題影片')
+            if not process_task_info:
+                raise ValueError(f"無法從資料庫獲取後續任務 {dependent_task_id} 的詳細資訊")
 
-            # JULES'S FINAL FIX: 更新資料庫中後續任務的 payload，這是先前遺漏的關鍵步驟
-            db_client.update_task_payload(dependent_task_id, json.dumps(payload))
+            # 更新其 payload
+            new_payload = json.loads(process_task_info['payload'])
+            new_payload['input_file'] = download_result['output_path'] # 使用 URL 化的路徑
+            new_payload['video_title'] = download_result.get('video_title', '無標題影片')
+
+            # 更新資料庫中後續任務的 payload
+            db_client.update_task_payload(dependent_task_id, json.dumps(new_payload))
             log.info(f"已成功將下載結果注入到後續任務 {dependent_task_id} 的 payload 中。")
 
-            task_id = dependent_task_id # 將當前 task_id 切換到分析任務
-            log.info(f"下載完成，繼續處理 AI 分析任務: {task_id}")
+            # [JULES'S CRITICAL FIX - 2025-09-08]
+            # 這是導致 AI 處理鏈中斷的根本原因。
+            # 我們必須用剛從資料庫獲取的、包含已更新 payload 的 `gemini_process` 任務，
+            # 來完全替換掉函式範圍內的 `task` 和 `payload` 變數。
+            # 這樣，接下來的 "AI 分析階段" 才能在正確的任務內容上操作。
+            task = process_task_info
+            task_id = dependent_task_id
+            payload = new_payload # 使用已更新的 payload
+            log.info(f"下載完成，已將執行緒切換至 AI 分析任務: {task_id}")
 
 
         # --- AI 分析階段 ---
-        if task['type'] == 'gemini_process':
+        # 經過上面的修正，這裡的 `task` 現在已經是正確的 gemini_process 任務了
+        if task.get('type') == constants.TASK_TYPE_GEMINI_PROCESS:
             model = payload['model']
             tasks_to_run = payload.get('tasks', 'summary,transcript')
             output_format = payload.get('output_format', 'html')
@@ -194,14 +207,14 @@ def process_youtube_task(task: dict):
                  if key in process_result and process_result[key]:
                     process_result[key] = f"/media/{Path(process_result[key]).relative_to(UPLOADS_DIR).as_posix()}"
 
-            db_client.update_task_status(task_id, 'completed', json.dumps(process_result))
-            notify_api_server(task_id, 'completed', process_result)
+            db_client.update_task_status(task_id, constants.STATUS_COMPLETED, json.dumps(process_result))
+            notify_api_server(task_id, constants.STATUS_COMPLETED, process_result)
 
     except Exception as e:
         log.error(f"處理 YouTube 任務 {task_id} 時發生嚴重錯誤: {e}", exc_info=True)
         error_payload = {'error': str(e)}
-        db_client.update_task_status(task_id, 'failed', json.dumps(error_payload))
-        notify_api_server(task_id, 'failed', error_payload)
+        db_client.update_task_status(task_id, constants.STATUS_FAILED, json.dumps(error_payload))
+        notify_api_server(task_id, constants.STATUS_FAILED, error_payload)
 
 
 def notify_api_server(task_id: str, status: str, result: dict = None):
@@ -227,20 +240,27 @@ def main_loop():
         if task:
             try:
                 log.info(f"領取到新任務: {task['task_id']}, 類型: {task['type']}")
-                if task['type'] == 'transcribe':
+                if task['type'] == constants.TASK_TYPE_TRANSCRIBE:
                     process_transcription_task(task)
-                elif task['type'] in ['youtube_download', 'gemini_process', 'youtube_download_only']:
+                elif task['type'] in [constants.TASK_TYPE_YOUTUBE_DOWNLOAD, constants.TASK_TYPE_YOUTUBE_DOWNLOAD_ONLY]:
                     process_youtube_task(task)
+                elif task['type'] == constants.TASK_TYPE_GEMINI_PROCESS:
+                    # 如果因為某些原因仍然取得了 gemini_process 任務，記錄日誌並將其狀態重設為 pending，
+                    # 等待其依賴的下載任務完成後再由鏈式調用處理。
+                    log.warning(f"Worker 主迴圈不應直接處理 gemini_process 任務 (ID: {task['task_id']})。可能是其依賴的下載任務尚未完成。將解鎖任務以便後續重試。")
+                    db_client.unlock_task(task['task_id'])
+                    # 短暫休眠，避免立即再次取得同一個任務
+                    time.sleep(5)
                 else:
                     log.warning(f"未知的任務類型: {task['type']}，任務 {task['task_id']} 將被忽略。")
-                    db_client.update_task_status(task['task_id'], 'failed', json.dumps({'error': f"未知的任務類型: {task['type']}"}))
-                    notify_api_server(task['task_id'], 'failed', {'error': f"未知的任務類型: {task['type']}"})
+                    db_client.update_task_status(task['task_id'], constants.STATUS_FAILED, json.dumps({'error': f"未知的任務類型: {task['type']}"}))
+                    notify_api_server(task['task_id'], constants.STATUS_FAILED, {'error': f"未知的任務類型: {task['type']}"})
 
             except Exception as e:
                 log.error(f"處理任務 {task['task_id']} 時發生未預期的錯誤: {e}", exc_info=True)
                 error_payload = {'error': f'Worker error: {e}'}
-                db_client.update_task_status(task['task_id'], 'failed', json.dumps(error_payload))
-                notify_api_server(task['task_id'], 'failed', error_payload)
+                db_client.update_task_status(task['task_id'], constants.STATUS_FAILED, json.dumps(error_payload))
+                notify_api_server(task['task_id'], constants.STATUS_FAILED, error_payload)
         else:
             # 如果佇列為空，等待一段時間
             time.sleep(2)
