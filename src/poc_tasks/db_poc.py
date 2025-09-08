@@ -17,8 +17,8 @@ def get_db_connection():
 def initialize_database():
     """
     初始化資料庫。如果資料表不存在，則建立它。
+    這個函數是冪等的，可以安全地多次執行。
     """
-    # 為了冪等性，即使檔案存在也執行 CREATE TABLE IF NOT EXISTS
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -39,7 +39,9 @@ def initialize_database():
 
     conn.commit()
     conn.close()
+    # 使用 print 而非 logger，因為這可能在 logger 設定前被呼叫
     print("資料庫和 'tasks' 資料表已成功初始化。")
+
 
 def create_task(task_id: str, url: str, created_at: str) -> None:
     """在資料庫中建立一個新任務。"""
