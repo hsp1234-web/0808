@@ -17,8 +17,8 @@ test.describe('POC 系統端對端測試', () => {
     test.setTimeout(300000); // 5 分鐘
 
     // 1. 導航到測試頁面
-    // baseURL 在 playwright.config.js 中設定，但我們用的是本地啟動的伺服器，所以用絕對 URL
-    await page.goto('http://127.0.0.1:8000/');
+    // baseURL 由 playwright.config.js 提供，因此我們使用相對路徑
+    await page.goto('/');
 
     // 驗證頁面標題
     await expect(page).toHaveTitle(/後端 POC 測試介面/);

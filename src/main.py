@@ -87,6 +87,13 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+@app.get("/health")
+async def health_check():
+    """
+    提供給 Playwright 使用的簡單健康檢查端點。
+    """
+    return {"status": "ok"}
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """

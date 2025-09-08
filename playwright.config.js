@@ -22,12 +22,12 @@ export default defineConfig({
   // 使用 Circus 進行程序管理，以及優雅的信號處理和關閉機制。
   // 這將從根本上解決服務啟動不穩定和掛起的問題。
   webServer: {
-    command: 'python scripts/run_server_for_playwright.py',
-    url: 'http://127.0.0.1:42649/api/health',
+    // 指向新的 FastAPI POC 伺服器
+    command: 'uvicorn src.main:app --host 0.0.0.0 --port 42649',
+    // 使用一個新的健康檢查端點
+    url: 'http://127.0.0.1:42649/health',
     reuseExistingServer: !process.env.CI,
-    // 我們的 Python 腳本內部有 60 秒的超時，這裡設定一個稍長的時間
-    timeout: 70 * 1000,
-    // 新腳本透過信號處理來進行優雅關閉，不再需要 killTimeout
+    timeout: 120 * 1000,
   },
 
   use: {
