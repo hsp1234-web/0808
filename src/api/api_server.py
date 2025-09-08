@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from contextlib import asynccontextmanager
 from urllib.parse import unquote, quote
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import psutil
 
 # --- 修正模組匯入路徑 ---
@@ -26,6 +26,8 @@ SRC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
 from db.client import get_client
+from shared import constants
+import inspect
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -88,10 +90,30 @@ class ConnectionManager:
             await connection.send_text(message)
 
     async def broadcast_json(self, data: dict):
-        for connection in self.active_connections:
-            await connection.send_json(data)
+        # 層級三：後端資料驗證
+        try:
+            # 在廣播前，使用 Pydantic 模型驗證資料結構
+            validated_message = WebSocketMessage(**data)
+            message_to_send = validated_message.model_dump_json()
+            for connection in self.active_connections:
+                await connection.send_text(message_to_send)
+        except ValidationError as e:
+            # 如果資料格式不符，則在後端記錄嚴重錯誤，而不是發送格式錯誤的資料
+            log.error(f"準備廣播的 WebSocket 訊息格式無效: {e}\n原始資料: {data}")
+
 
 manager = ConnectionManager()
+
+# --- Pydantic 模型定義 (資料契約) ---
+
+class TaskPayload(BaseModel):
+    # 這個模型可以根據需要變得更具體，但目前允許任意欄位
+    class Config:
+        extra = 'allow'
+
+class WebSocketMessage(BaseModel):
+    type: str
+    payload: dict # 為了保持彈性，暫時設為 dict
 
 
 # --- DB 客戶端 ---
@@ -206,11 +228,40 @@ async def serve_downloader(request: Request):
 
 @app.get("/youtube", response_class=HTMLResponse)
 async def serve_youtube(request: Request):
-    """提供 YouTube 報告頁面。"""
+    """
+    提供 YouTube 報告頁面，並將後端常數注入為 JavaScript 物件。
+    """
     html_file_path = STATIC_DIR / "mpa" / "youtube.html"
     if not html_file_path.is_file():
         log.error(f"找不到 YouTube 報告檔案: {html_file_path}")
         raise HTTPException(status_code=404, detail="找不到 YouTube 報告介面檔案 (youtube.html)")
+
+    # 從 shared.constants 模組中提取所有大寫的常數
+    task_constants = {name: value for name, value in inspect.getmembers(constants) if name.isupper()}
+    constants_json = json.dumps(task_constants)
+
+    html_content = html_file_path.read_text(encoding="utf-8")
+
+    # 將常數作為一個 JavaScript 物件注入到 <head> 區塊中
+    injection_script = f"<script>window.TASK_CONSTANTS = {constants_json};</script>"
+    modified_html = html_content.replace("</head>", f"{injection_script}\n</head>")
+
+    return HTMLResponse(content=modified_html, status_code=200)
+
+@app.get("/simple_test", response_class=HTMLResponse)
+async def serve_simple_test(request: Request):
+    """提供一個極簡的 HTML 頁面，用於隔離測試前端事件監聽器。"""
+    html_file_path = STATIC_DIR / "simple_test.html"
+    if not html_file_path.is_file():
+        raise HTTPException(status_code=404, detail="找不到 simple_test.html")
+    return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
+
+@app.get("/websocket_test", response_class=HTMLResponse)
+async def serve_websocket_test(request: Request):
+    """提供一個極簡的 HTML 頁面，用於除錯 WebSocket 原始訊息。"""
+    html_file_path = STATIC_DIR / "mpa" / "websocket_test.html"
+    if not html_file_path.is_file():
+        raise HTTPException(status_code=404, detail="找不到 websocket_test.html")
     return HTMLResponse(content=html_file_path.read_text(encoding="utf-8"), status_code=200)
 
 
@@ -780,12 +831,11 @@ async def get_youtube_models(payload: ApiKeyPayload):
         raise HTTPException(status_code=500, detail="無法獲取 Gemini 模型列表。")
 
 
-@app.post("/api/youtube/process", status_code=202)
-async def process_youtube_urls(request: Request):
+async def _create_processing_tasks(payload: dict):
     """
-    接收 YouTube URL，並根據前端傳來的參數，建立對應的下載和 AI 分析任務。
+    [JULES'S REFACTOR - 2025-09-08]
+    將建立任務的核心邏輯提取到此輔助函式中，以供多個 API 端點重複使用。
     """
-    payload = await request.json()
     requests_list = payload.get("requests", [])
 
     # JULES'S FIX: 為了相容舊的 local_run.py 測試腳本
@@ -793,23 +843,20 @@ async def process_youtube_urls(request: Request):
         log.warning("偵測到舊版的 'urls' 負載格式，正在進行相容處理。")
         requests_list = [{"url": url, "filename": None} for url in payload.get("urls", [])]
 
-
     # 新的彈性參數
     model = payload.get("model")
-    tasks_to_run = payload.get("tasks", "summary,transcript") # e.g., "summary,transcript,translate"
-    output_format = payload.get("output_format", "html") # "html" or "txt"
+    tasks_to_run = payload.get("tasks", "summary,transcript")
+    output_format = payload.get("output_format", "html")
     download_only = payload.get("download_only", False)
-    download_type = payload.get("download_type", "audio") # JULES'S NEW FEATURE
-    api_key = payload.get("api_key") # 實現無狀態，從請求中直接獲取金鑰
+    download_type = payload.get("download_type", "audio")
+    api_key = payload.get("api_key")
 
     if not requests_list:
-        # 在加入相容性邏輯後，更新錯誤訊息
         raise HTTPException(status_code=400, detail="請求中必須包含 'requests' 或 'urls'。")
     if not download_only and not model:
         raise HTTPException(status_code=400, detail="執行 AI 分析時必須提供 'model'。")
     if not download_only and not api_key:
         raise HTTPException(status_code=401, detail="執行 AI 分析時必須提供 'api_key'。")
-
 
     tasks_created = []
     for req_item in requests_list:
@@ -831,7 +878,7 @@ async def process_youtube_urls(request: Request):
             download_task_id = task_id
             process_task_id = str(uuid.uuid4())
 
-            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": download_type}
+            download_payload = {"url": url, "output_dir": str(UPLOADS_DIR), "custom_filename": filename, "download_type": "audio"}
             process_payload = {
                 "model": model,
                 "tasks": tasks_to_run,
@@ -839,54 +886,54 @@ async def process_youtube_urls(request: Request):
                 "api_key": api_key
             }
 
-            # JULES'S FIX (2025-09-05): The frontend should only be notified of the final `gemini_process` task,
-            # not the intermediate `youtube_download` task. Broadcasting both creates duplicate entries in the UI.
-            # We will create the download task silently and only broadcast the main AI task.
             if db_client.add_task(download_task_id, json.dumps(download_payload), task_type='youtube_download'):
                 dl_task_info = {"url": url, "task_id": download_task_id, "type": "youtube_download", "payload": download_payload}
                 tasks_created.append(dl_task_info)
-                # --- BROADCAST REMOVED ---
-                # await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**dl_task_info, "status": "pending"}})
 
                 if db_client.add_task(process_task_id, json.dumps(process_payload), task_type='gemini_process', depends_on=download_task_id):
-                    # We should, however, rename the task_id in the broadcast to the parent task id,
-                    # so the frontend can track the entire chain with one ID.
-                    # Let's use the final task's payload but the initial task's ID for the UI.
                     proc_task_info = {
                         "url": url,
-                        "task_id": download_task_id, # Use the initial task ID for UI tracking
-                        "final_task_id": process_task_id, # Keep track of the final task
-                        "type": "gemini_process", # Show it as a Gemini process
+                        "task_id": download_task_id,
+                        "final_task_id": process_task_id,
+                        "type": "gemini_process",
                         "depends_on": download_task_id,
                         "payload": process_payload
                     }
                     tasks_created.append(proc_task_info)
-                    # Only broadcast the final, user-facing task.
                     await manager.broadcast_json({"type": "NEW_TASK_CREATED", "payload": {**proc_task_info, "status": "pending"}})
 
-                    # JULES'S FIX (2025-09-04): FINAL ATTEMPT. Synchronous mock processing.
-                    if os.environ.get("API_MODE") == "mock":
-                        log.info(f"[SYNC MOCK] Simulating completion for task {process_task_id}")
-                        # 1. Mark download as complete
-                        download_result = {"output_path": "/media/mock_audio.mp3", "video_title": "Mock Video"}
-                        db_client.update_task_status(download_task_id, "已完成", json.dumps(download_result))
-                        await manager.broadcast_json({"type": "YOUTUBE_STATUS", "payload": db_client.get_task_status(download_task_id)})
-
-                        # 2. Mark AI task as complete
-                        mock_report_path = "/static/mpa/mock_report.html"
-                        ai_result = {
-                            "video_title": "模擬報告 - 完整流程測試",
-                            "output_path": mock_report_path,
-                            "total_tokens_used": 1234,
-                            "processing_duration_seconds": 0.1
-                        }
-                        db_client.update_task_status(process_task_id, "已完成", json.dumps(ai_result))
-                        # 3. Broadcast final update
-                        final_task_status = db_client.get_task_status(process_task_id)
-                        await manager.broadcast_json({"type": "YOUTUBE_STATUS", "payload": final_task_status})
-                        log.info(f"[SYNC MOCK] Broadcasted final completion for {process_task_id}")
-
     return JSONResponse(content={"message": f"已為 {len(requests_list)} 個 URL 建立 {len(tasks_created)} 個處理任務。", "tasks": tasks_created})
+
+
+@app.post("/api/download/start", status_code=202)
+async def start_download_task(request: Request):
+    """
+    [JULES'S FIX - 2025-09-08]
+    根據分析報告，新增此端點以處理前端發送的 POST /api/download/start 請求 (405 錯誤)。
+    此端點會將請求轉換並呼叫共用的任務建立邏輯。
+    """
+    log.info("接收到來自 /api/download/start 的舊版下載請求，正在進行轉發處理...")
+    payload = await request.json()
+    urls = payload.get("urls", [])
+    if not urls:
+        raise HTTPException(status_code=400, detail="請求中必須包含 'urls' 列表。")
+
+    compatible_payload = {
+        "requests": [{"url": url, "filename": ""} for url in urls],
+        "download_only": True,
+        "download_type": payload.get("download_type", "audio"),
+    }
+    return await _create_processing_tasks(compatible_payload)
+
+
+@app.post("/api/youtube/process", status_code=202)
+async def process_youtube_urls(request: Request):
+    """
+    接收 YouTube URL，並根據前端傳來的參數，建立對應的下載和 AI 分析任務。
+    現在這個函式只是一個包裝器，核心邏輯在 _create_processing_tasks 中。
+    """
+    payload = await request.json()
+    return await _create_processing_tasks(payload)
 
 
 @app.post("/api/debug/clear_tasks", status_code=200)

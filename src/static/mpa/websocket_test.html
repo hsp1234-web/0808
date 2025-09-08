@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket 原始訊息測試</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        #log-container {
+            width: 100%;
+            height: 90vh;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: scroll;
+            background-color: #f5f5f5;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket 原始訊息日誌</h1>
+    <p>正在連線至 <strong>/api/ws</strong>... <span id="status"></span></p>
+    <div id="log-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const logContainer = document.getElementById('log-container');
+            const statusSpan = document.getElementById('status');
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/ws`);
+
+            const logMessage = (message) => {
+                const timestamp = new Date().toLocaleTimeString();
+                const p = document.createElement('p');
+                p.style.borderBottom = '1px dashed #aaa';
+                p.style.paddingBottom = '10px';
+                p.style.marginBottom = '10px';
+                p.textContent = `[${timestamp}] ${message}`;
+                logContainer.appendChild(p);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            };
+
+            socket.onopen = () => {
+                statusSpan.textContent = '連線成功！';
+                statusSpan.style.color = 'green';
+                logMessage('--- WebSocket 連線已建立 ---');
+            };
+
+            socket.onmessage = (event) => {
+                logMessage(`收到訊息: ${event.data}`);
+                try {
+                    // 格式化 JSON 以方便閱讀
+                    const parsed = JSON.parse(event.data);
+                    const formattedJson = JSON.stringify(parsed, null, 2);
+                    logMessage(`解析後的 JSON:\n${formattedJson}`);
+                } catch (e) {
+                    // 不是 JSON，就只記錄原始字串
+                }
+            };
+
+            socket.onclose = () => {
+                statusSpan.textContent = '連線已關閉。';
+                statusSpan.style.color = 'red';
+                logMessage('--- WebSocket 連線已關閉 ---');
+            };
+
+            socket.onerror = (error) => {
+                statusSpan.textContent = '連線錯誤！';
+                statusSpan.style.color = 'red';
+                logMessage(`--- WebSocket 錯誤: ${JSON.stringify(error)} ---`);
+            };
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Test</title>
+</head>
+<body>
+    <h1>Simple Event Listener Test</h1>
+    <p id="message">Waiting for button click...</p>
+    <button id="test-button">Click Me</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("Simple test page: DOMContentLoaded fired.");
+            const button = document.getElementById('test-button');
+            const message = document.getElementById('message');
+
+            if (button && message) {
+                console.log("Simple test page: Button and message elements found.");
+                button.addEventListener('click', () => {
+                    console.log("Simple test page: Button clicked!");
+                    message.textContent = 'Success! The event listener is working.';
+                });
+            } else {
+                console.error("Simple test page: Could not find button or message element.");
+            }
+        });
+    </script>
+</body>
+</html>

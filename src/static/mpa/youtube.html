@@ -345,7 +345,7 @@
 <script>
     // 監聽 DOMContentLoaded 事件，確保所有 DOM 元素都已載入。
     document.addEventListener('DOMContentLoaded', () => {
-        console.log("DOM fully loaded. Initializing script with WebSocket logic.");
+        console.log("[JULES DEBUG] DOMContentLoaded event fired. Initializing script...");
 
         let socket;
         const taskElements = new Map(); // 用於追蹤正在進行中的任務元素
@@ -540,30 +540,57 @@
         const handleYoutubeStatus = (payload) => {
             if (!payload || !payload.task_id) return;
 
-            const isFinalReport = payload.status === '已完成' && payload.task_type === 'gemini_process';
+            const C = window.TASK_CONSTANTS;
+            const status = payload.status;
+            const type = payload.type;
             const trackingId = payload.depends_on || payload.task_id;
-
             let taskElement = taskElements.get(trackingId);
 
-            if (isFinalReport) {
-                if (taskElement) {
-                    taskElement.remove();
-                    taskElements.delete(trackingId);
-                }
-                addYoutubeReportToList(payload);
-            } else {
-                if (!taskElement) {
-                    const displayName = payload.url || payload.task_id;
-                    taskElement = document.createElement('div');
-                    taskElement.className = 'task-item';
-                    taskElement.innerHTML = `<span class="task-filename">${displayName}</span><span class="task-status">${payload.message || payload.status}</span>`;
+            switch (status) {
+                case C.STATUS_COMPLETED:
+                    if (type === C.TASK_TYPE_GEMINI_PROCESS) {
+                        if (taskElement) {
+                            taskElement.remove();
+                            taskElements.delete(trackingId);
+                        }
+                        addYoutubeReportToList(payload);
+                    } else {
+                        // Handle other completed tasks if necessary, e.g., just a download
+                        if (taskElement) {
+                             taskElement.querySelector('.task-status').textContent = '下載完成';
+                        }
+                    }
+                    break;
 
-                    dom.ongoingTasksContainer.querySelector('#no-ongoing-task-msg')?.remove();
-                    dom.ongoingTasksContainer.appendChild(taskElement);
-                    taskElements.set(trackingId, taskElement);
-                } else {
-                    taskElement.querySelector('.task-status').textContent = payload.message || payload.status;
-                }
+                case C.STATUS_PROCESSING:
+                case C.STATUS_PENDING:
+                    if (!taskElement) {
+                        const displayName = payload.url || payload.task_id;
+                        taskElement = document.createElement('div');
+                        taskElement.className = 'task-item';
+                        taskElement.innerHTML = `<span class="task-filename">${displayName}</span><span class="task-status">${payload.message || status}</span>`;
+
+                        dom.ongoingTasksContainer.querySelector('#no-ongoing-task-msg')?.remove();
+                        dom.ongoingTasksContainer.appendChild(taskElement);
+                        taskElements.set(trackingId, taskElement);
+                    } else {
+                        taskElement.querySelector('.task-status').textContent = payload.message || status;
+                    }
+                    break;
+
+                case C.STATUS_FAILED:
+                    if (taskElement) {
+                        taskElement.querySelector('.task-status').textContent = `❌ 失敗: ${payload.result?.error || '未知錯誤'}`;
+                        taskElement.style.backgroundColor = '#f8d7da';
+                    }
+                    break;
+
+                default:
+                    // Log any status that we don't explicitly handle.
+                    console.error('收到未知的任務狀態:', status, '完整訊息:', payload);
+                    if (taskElement) {
+                         taskElement.querySelector('.task-status').textContent = `未知狀態: ${status}`;
+                    }
             }
         };
 
@@ -571,9 +598,10 @@
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/ws`);
             socket.onmessage = (event) => {
-                console.log("WebSocket message received:", event.data);
+                console.log("[JULES DEBUG] WebSocket message received:", event.data);
                 const message = JSON.parse(event.data);
                  if (message.type === 'YOUTUBE_STATUS' || (message.type === 'NEW_TASK_CREATED' && (message.payload.type.includes('youtube') || message.payload.type.includes('gemini')))) {
+                    console.log("[JULES DEBUG] Handling YOUTUBE_STATUS message with payload:", JSON.stringify(message.payload));
                     handleYoutubeStatus(message.payload);
                 }
             };
@@ -611,11 +639,13 @@
         attachListener(dom.startYoutubeProcessingBtn, 'click', () => processYoutubeRequest(false));
         attachListener(dom.downloadAudioOnlyBtn, 'click', () => processYoutubeRequest(true));
         attachListener(dom.zoomInBtn, 'click', () => {
+            console.log("[JULES DEBUG] Zoom In button clicked.");
             currentFontSize = Math.min(200, currentFontSize + 10);
             document.body.style.fontSize = `${currentFontSize}%`;
             dom.fontSizeDisplay.textContent = `${currentFontSize}%`;
         });
         attachListener(dom.zoomOutBtn, 'click', () => {
+            console.log("[JULES DEBUG] Zoom Out button clicked.");
             currentFontSize = Math.max(50, currentFontSize - 10);
             document.body.style.fontSize = `${currentFontSize}%`;
             dom.fontSizeDisplay.textContent = `${currentFontSize}%`;
