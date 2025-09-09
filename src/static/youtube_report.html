@@ -202,7 +202,6 @@
 
         // --- 狀態變數 ---
         let currentFontSize = 100;
-        let socket;
         const taskElements = new Map();
 
         // --- 核心函式 ---
@@ -215,20 +214,46 @@
             }).catch(err => console.error('logAction failed:', err));
         };
 
-        const setupWebSocket = () => {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
-            socket = new WebSocket(wsUrl);
-            socket.onopen = () => console.log('WebSocket 連線成功');
-            socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
-            socket.onclose = () => setTimeout(setupWebSocket, 3000);
+        const setupSSE = () => {
+            console.log('正在建立 SSE 連線...');
+            const eventSource = new EventSource('/api/status-stream');
+
+            eventSource.onmessage = (event) => {
+                if (event.data.startsWith(':')) {
+                    console.debug('收到 SSE 心跳');
+                    return;
+                }
+
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('收到 SSE 訊息:', message);
+                    if (message.type === 'YOUTUBE_TASK_UPDATE' && message.payload) {
+                        const { task_id, html } = message.payload;
+                        updateTaskItem(task_id, html);
+                    }
+                } catch (e) {
+                    console.error('解析 SSE 訊息失敗:', e, '原始資料:', event.data);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.error('SSE 連線發生錯誤，將在3秒後嘗試重新連線。', err);
+                eventSource.close();
+                setTimeout(setupSSE, 3000);
+            };
+
+            console.log('SSE 事件監聽器已設定。');
         };
 
-        const handleWebSocketMessage = (message) => {
-            if (message.type === 'YOUTUBE_STATUS') {
-                handleYoutubeStatus(message.payload);
-            }
-        };
+        // 使用事件委派來處理動態新增的預覽按鈕
+        youtubeTasksContainer.addEventListener('click', (e) => {
+            const previewBtn = e.target.closest('.btn-preview');
+            if (!previewBtn) return;
+
+            e.preventDefault();
+            const { url, title, type, taskId } = previewBtn.dataset;
+            openPreviewModal(url, title, type, taskId);
+        });
 
         // --- 字體縮放 ---
         const updateFontSize = () => {
@@ -363,6 +388,9 @@
                 return;
             }
 
+            // --- 按鈕狀態機 ---
+            const originalButtonText = '🚀 分析影片 (Gemini)';
+            const originalButtonBg = startYoutubeProcessingBtn.style.backgroundColor;
             startYoutubeProcessingBtn.disabled = true;
             startYoutubeProcessingBtn.textContent = '正在建立任務...';
 
@@ -382,66 +410,49 @@
                 });
                 if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
 
+                // 成功狀態
+                startYoutubeProcessingBtn.style.backgroundColor = 'var(--status-green)';
+                startYoutubeProcessingBtn.textContent = '✅ 任務已建立';
+                showStatusMessage('任務建立成功！請在下方查看進度。', false, 3000);
+
                 // 清空輸入框
                 youtubeLinkList.querySelectorAll('.youtube-link-row').forEach((row, index) => {
                     if (index === 0) row.querySelectorAll('input').forEach(input => input.value = '');
                     else row.remove();
                 });
+
+                setTimeout(() => {
+                    startYoutubeProcessingBtn.disabled = false;
+                    startYoutubeProcessingBtn.style.backgroundColor = originalButtonBg;
+                    startYoutubeProcessingBtn.textContent = originalButtonText;
+                }, 2000);
+
             } catch (error) {
-                showStatusMessage(`處理任務時發生錯誤: ${error.message}`, true);
-            } finally {
-                startYoutubeProcessingBtn.disabled = false;
-                startYoutubeProcessingBtn.textContent = '🚀 分析影片 (Gemini)';
+                // 失敗狀態
+                startYoutubeProcessingBtn.style.backgroundColor = 'var(--status-red)';
+                startYoutubeProcessingBtn.textContent = '❌ 建立失敗';
+                showStatusMessage(`處理任務時發生錯誤: ${error.message}`, true, 6000);
+
+                setTimeout(() => {
+                    startYoutubeProcessingBtn.disabled = false;
+                    startYoutubeProcessingBtn.style.backgroundColor = originalButtonBg;
+                    startYoutubeProcessingBtn.textContent = originalButtonText;
+                }, 3000);
             }
         });
 
-        const handleYoutubeStatus = (payload) => {
-            if (!payload || !payload.task_id) return;
+        const updateTaskItem = (taskId, html) => {
+            if (!taskId || !html) {
+                console.error("updateTaskItem: 無效的 taskId 或 html");
+                return;
+            }
             noYoutubeTaskMsg.style.display = 'none';
 
-            let taskElement = taskElements.get(payload.task_id);
-            if (!taskElement) {
-                taskElement = document.createElement('div');
-                taskElement.className = 'task-item';
-                taskElement.dataset.taskId = payload.task_id;
-                taskElement.innerHTML = `<span class="task-filename">處理中...</span><span class="task-status"></span>`;
-                youtubeTasksContainer.prepend(taskElement);
-                taskElements.set(payload.task_id, taskElement);
-            }
-
-            const filenameSpan = taskElement.querySelector('.task-filename');
-            const statusSpan = taskElement.querySelector('.task-status');
-            const videoTitle = payload.result?.video_title || payload.filename || filenameSpan.textContent;
-            filenameSpan.textContent = videoTitle;
-
-            updateTaskStatusClass(statusSpan, payload.message || payload.status);
-
-            if (payload.status === 'completed') {
-                statusSpan.innerHTML = '';
-                const previewBtn = document.createElement('a');
-                previewBtn.href = '#';
-                previewBtn.className = 'btn-preview';
-                previewBtn.textContent = '預覽';
-                previewBtn.dataset.testid = 'view-report-button';
-                previewBtn.onclick = (e) => {
-                    e.preventDefault();
-                    const result = payload.result;
-                    const fileType = result.output_path.includes('.html') ? 'text/html' : 'text/plain';
-                    openPreviewModal(result.output_path, result.video_title, fileType, payload.task_id);
-                };
-                statusSpan.appendChild(previewBtn);
+            const existingElement = document.querySelector(`.task-item[data-task-id="${taskId}"]`);
+            if (existingElement) {
+                existingElement.outerHTML = html;
             } else {
-                statusSpan.textContent = payload.message || payload.status;
-            }
-        };
-
-        const updateTaskStatusClass = (statusSpan, statusMessage) => {
-            statusSpan.classList.remove('status-downloading', 'status-processing');
-            const lowerCaseMessage = (statusMessage || '').toLowerCase();
-            if (lowerCaseMessage.includes('downloading') || lowerCaseMessage.includes('下載中')) {
-                statusSpan.classList.add('status-downloading');
-            } else if (lowerCaseMessage.includes('processing') || lowerCaseMessage.includes('分析中')) {
-                statusSpan.classList.add('status-processing');
+                youtubeTasksContainer.insertAdjacentHTML('afterbegin', html);
             }
         };
 
@@ -473,7 +484,7 @@
 
         // --- 初始化 ---
         const initializePage = () => {
-            setupWebSocket();
+            setupSSE();
             const storedApiKey = localStorage.getItem('googleApiKey');
             if (storedApiKey) {
                 apiKeyInput.value = storedApiKey;

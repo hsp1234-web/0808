@@ -122,27 +122,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- 全域狀態訊息處理 ---
-        const statusMessageArea = document.getElementById('status-message-area');
-        const statusMessageText = document.getElementById('status-message-text');
-        const showStatusMessage = (message, isError = false, duration = 5000) => {
-            if (!statusMessageArea || !statusMessageText) return;
-            statusMessageText.textContent = message;
-            statusMessageArea.style.display = 'block';
-            statusMessageArea.style.backgroundColor = isError ? '#f8d7da' : '#d4edda';
-            statusMessageArea.style.borderColor = isError ? '#f5c6cb' : '#c3e6cb';
-            statusMessageText.style.color = isError ? '#721c24' : '#155724';
-            if (duration > 0) {
-                setTimeout(() => {
-                    if (statusMessageText.textContent === message) statusMessageArea.style.display = 'none';
-                }, duration);
-            }
-        };
-
-        // --- DOM 元素 ---
-        const zoomInBtn = document.getElementById('zoom-in-btn');
-        const zoomOutBtn = document.getElementById('zoom-out-btn');
-        const fontSizeDisplay = document.getElementById('font-size-display');
+        // --- DOM Elements ---
         const downloaderUrlsInput = document.getElementById('downloader-urls-input');
         const startDownloadBtn = document.getElementById('start-download-btn');
         const downloaderTasksContainer = document.getElementById('downloader-tasks');
@@ -150,66 +130,46 @@
         const previewModal = document.getElementById('preview-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
         const modalTitle = document.getElementById('modal-title');
+        const modalBody = previewModal.querySelector('.modal-body');
         const modalDownloadBtn = document.getElementById('modal-download-btn');
 
-        // --- 狀態變數 ---
-        let currentFontSize = 100;
-        let socket;
-        const taskElements = new Map();
-
-        // --- 核心函式 ---
-        const logAction = (action, value = null) => {
-            const message = value !== null ? `${action}: ${value}` : action;
-            fetch('/api/log/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: message })
-            }).catch(err => console.error('logAction failed:', err));
+        // --- SSE Setup ---
+        const setupSSE = () => {
+            const eventSource = new EventSource('/api/status-stream');
+            eventSource.onmessage = (event) => {
+                if (event.data.startsWith(':')) return;
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'YOUTUBE_TASK_UPDATE' && message.payload.html) {
+                        updateTaskItem(message.payload.task_id, message.payload.html);
+                    }
+                } catch (e) {
+                    console.error('SSE Error:', e);
+                }
+            };
+            eventSource.onerror = () => {
+                console.error('SSE connection failed. Retrying in 3 seconds.');
+                eventSource.close();
+                setTimeout(setupSSE, 3000);
+            };
         };
 
-        const setupWebSocket = () => {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
-            socket = new WebSocket(wsUrl);
-            socket.onopen = () => console.log('WebSocket 連線成功');
-            socket.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
-            socket.onclose = () => setTimeout(setupWebSocket, 3000);
-        };
-
-        const handleWebSocketMessage = (message) => {
-            if (message.type === 'YOUTUBE_STATUS') {
-                handleDownloadStatus(message.payload);
+        // --- UI Update Logic ---
+        const updateTaskItem = (taskId, html) => {
+            if (!taskId || !html) return;
+            noDownloaderTaskMsg.style.display = 'none';
+            const existingElement = downloaderTasksContainer.querySelector(`[data-task-id="${taskId}"]`);
+            if (existingElement) {
+                existingElement.outerHTML = html;
+            } else {
+                downloaderTasksContainer.insertAdjacentHTML('afterbegin', html);
             }
         };
 
-        // --- 字體縮放 ---
-        const updateFontSize = () => {
-            document.body.style.fontSize = `${currentFontSize}%`;
-            fontSizeDisplay.textContent = `${currentFontSize}%`;
-        };
-        zoomInBtn.addEventListener('click', () => {
-            if (currentFontSize < 150) {
-                currentFontSize += 10;
-                updateFontSize();
-                logAction('click-zoom-in');
-            }
-        });
-        zoomOutBtn.addEventListener('click', () => {
-            if (currentFontSize > 70) {
-                currentFontSize -= 10;
-                updateFontSize();
-                logAction('click-zoom-out');
-            }
-        });
-
-        // --- 下載器邏輯 ---
+        // --- Event Handlers ---
         startDownloadBtn.addEventListener('click', async () => {
-            logAction('click-start-download');
             const urls = downloaderUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u);
-            if (urls.length === 0) {
-                showStatusMessage('請輸入至少一個網址。', true);
-                return;
-            }
+            if (urls.length === 0) return;
 
             const requests = urls.map(url => ({ url, filename: '' }));
             const downloadType = document.querySelector('input[name="download-type"]:checked').value;
@@ -217,12 +177,11 @@
                 requests,
                 download_only: true,
                 download_type: downloadType,
-                model: null,
             };
 
             startDownloadBtn.disabled = true;
             startDownloadBtn.textContent = '正在建立任務...';
-
+            const originalButtonText = '開始下載';
             try {
                 const response = await fetch('/api/youtube/process', {
                     method: 'POST',
@@ -231,95 +190,35 @@
                 });
                 if (!response.ok) throw new Error((await response.json()).detail || '建立任務失敗');
                 downloaderUrlsInput.value = '';
+                startDownloadBtn.textContent = '✅ 任務已建立';
+                setTimeout(() => {
+                    startDownloadBtn.disabled = false;
+                    startDownloadBtn.textContent = originalButtonText;
+                }, 2000);
             } catch (error) {
-                showStatusMessage(`處理下載任務時發生錯誤: ${error.message}`, true);
-            } finally {
-                startDownloadBtn.disabled = false;
-                startDownloadBtn.textContent = '開始下載';
+                console.error('Download request failed:', error);
+                startDownloadBtn.textContent = '❌ 建立失敗';
+                 setTimeout(() => {
+                    startDownloadBtn.disabled = false;
+                    startDownloadBtn.textContent = originalButtonText;
+                }, 3000);
             }
         });
 
-        const handleDownloadStatus = (payload) => {
-            if (!payload || !payload.task_id) return;
-            noDownloaderTaskMsg.style.display = 'none';
+        // Event delegation for preview buttons
+        downloaderTasksContainer.addEventListener('click', (e) => {
+            const previewBtn = e.target.closest('.btn-preview');
+            if (!previewBtn) return;
+            e.preventDefault();
+            const { url, title, type, taskId } = previewBtn.dataset;
+            openPreviewModal(url, title, type, taskId);
+        });
 
-            let taskElement = taskElements.get(payload.task_id);
-            if (!taskElement) {
-                const taskType = `僅下載${payload.download_type === 'video' ? '影片' : '音訊'}`;
-                taskElement = createNewTaskElement(payload.url || payload.task_id, payload.task_id, taskType);
-            }
-
-            const filenameSpan = taskElement.querySelector('.task-filename');
-            const statusSpan = taskElement.querySelector('.task-status');
-            const videoTitle = payload.result?.video_title || payload.filename || filenameSpan.textContent.split(' (')[0];
-            filenameSpan.textContent = `${videoTitle} (${taskElement.dataset.taskType})`;
-
-            statusSpan.textContent = payload.message || payload.status;
-            updateTaskStatusClass(statusSpan, payload.message || payload.status);
-
-            if (payload.status === 'completed') {
-                statusSpan.innerHTML = '';
-                const buttonGroup = createActionButtons(payload.task_id, payload.result);
-                statusSpan.appendChild(buttonGroup);
-            }
-        };
-
-        const updateTaskStatusClass = (statusSpan, statusMessage) => {
-            statusSpan.classList.remove('status-downloading', 'status-processing');
-            const lowerCaseMessage = (statusMessage || '').toLowerCase();
-            if (lowerCaseMessage.includes('downloading') || lowerCaseMessage.includes('下載中')) {
-                statusSpan.classList.add('status-downloading');
-            }
-        };
-
-        const createNewTaskElement = (displayName, taskId, taskType) => {
-            const taskElement = document.createElement('div');
-            taskElement.className = 'task-item';
-            taskElement.dataset.taskId = taskId;
-            taskElement.dataset.taskType = taskType;
-            taskElement.innerHTML = `
-                <input type="checkbox" class="task-checkbox" value="${taskId}" style="margin-right: 15px;">
-                <span class="task-filename" title="${displayName}">${displayName} (${taskType})</span>
-                <span class="task-status" style="margin-left: auto;">已建立</span>`;
-            downloaderTasksContainer.prepend(taskElement);
-            taskElements.set(taskId, taskElement);
-            return taskElement;
-        };
-
-        const createActionButtons = (taskId, result) => {
-            const actions = document.createElement('div');
-            actions.className = 'task-actions';
-            const outputPath = result?.output_path;
-            if (!outputPath) return actions;
-
-            const fileType = outputPath.endsWith('.mp4') ? 'video/mp4' : 'audio/mpeg';
-
-            const previewBtn = document.createElement('a');
-            previewBtn.href = '#';
-            previewBtn.className = 'btn-preview';
-            previewBtn.textContent = '預覽';
-            previewBtn.onclick = (e) => {
-                e.preventDefault();
-                openPreviewModal(outputPath, result.video_title, fileType, taskId);
-            };
-            actions.appendChild(previewBtn);
-
-            const downloadBtn = document.createElement('a');
-            downloadBtn.href = `/api/download/${taskId}`;
-            downloadBtn.className = 'btn-download';
-            downloadBtn.textContent = '下載';
-            downloadBtn.download = result.video_title + (fileType.includes('video') ? '.mp4' : '.m4a');
-            actions.appendChild(downloadBtn);
-
-            return actions;
-        };
-
-        // --- 預覽 Modal ---
+        // --- Modal Logic ---
         const openPreviewModal = (url, title, type, taskId) => {
             modalTitle.textContent = `預覽: ${title}`;
-            const modalBody = previewModal.querySelector('.modal-body');
             modalBody.innerHTML = '';
-            const mediaElement = document.createElement(type.split('/')[0]);
+            const mediaElement = document.createElement(type.split('/')[0]); // 'video' or 'audio'
             mediaElement.src = url;
             mediaElement.controls = true;
             mediaElement.autoplay = true;
@@ -334,8 +233,8 @@
             if (e.target === previewModal) previewModal.style.display = 'none';
         });
 
-        // --- 初始化 ---
-        setupWebSocket();
+        // --- Init ---
+        setupSSE();
     });
     </script>
 </body>

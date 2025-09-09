@@ -9,7 +9,7 @@ import threading
 import asyncio
 import os
 import time
-from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,32 +72,7 @@ def setup_database_logging():
 # Frontend action logging is now handled by the centralized database logger.
 
 
-# --- WebSocket 連線管理器 ---
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        log.info(f"新用戶端連線。目前共 {len(self.active_connections)} 個連線。")
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-        log.info(f"一個用戶端離線。目前共 {len(self.active_connections)} 個連線。")
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
-    async def broadcast_json(self, data: dict):
-        for connection in self.active_connections:
-            await connection.send_json(data)
-
-manager = ConnectionManager()
+# WebSocket 相關程式碼已被移除，將由 SSE 取代
 
 
 # --- DB 客戶端 ---
@@ -797,6 +772,16 @@ async def process_youtube_urls(request: Request):
                 "task_type": "youtube_process_chain"
             })
 
+    # JULES'S FIX: After creating the tasks, we need to trigger the processing.
+    # This was previously handled by a separate WebSocket message from the client.
+    # Now, we trigger it directly from the API endpoint.
+    loop = asyncio.get_running_loop()
+    for task in tasks:
+        # We need to trigger based on the initial download task ID
+        if task.get("task_id"):
+             log.info(f"直接觸發 YouTube 處理流程，起始任務 ID: {task['task_id']}")
+             trigger_youtube_processing(task['task_id'], loop)
+
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
 
 
@@ -987,7 +972,7 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
     # 建立並啟動一個新執行緒，執行真正的處理流程
     thread = threading.Thread(
         target=run_youtube_pipeline,
-        args=(task_id, manager, loop, UPLOADS_DIR),
+        args=(task_id, loop, UPLOADS_DIR),
         name=f"YouTubePipelineThread-{task_id}"
     )
     thread.start()
@@ -1030,90 +1015,45 @@ async def get_latest_frontend_action_log():
         raise HTTPException(status_code=500, detail="查詢最新前端日誌時發生內部錯誤")
 
 
-@app.websocket("/api/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            log.info(f"從 WebSocket 收到訊息: {data}")
+# WebSocket 端點 `/api/ws` 已被移除，將由 SSE 端點取代
 
-            try:
-                message = json.loads(data)
-                msg_type = message.get("type")
-                payload = message.get("payload", {})
 
-                if msg_type == "DOWNLOAD_MODEL":
-                    model_size = payload.get("model")
-                    if model_size:
-                        log.info(f"收到下載 '{model_size}' 模型的請求。")
-                        await manager.broadcast_json({
-                            "type": "DOWNLOAD_STATUS",
-                            "payload": {"model": model_size, "status": "starting", "progress": 0}
-                        })
-                        loop = asyncio.get_running_loop()
-                        trigger_model_download(model_size, loop)
-                    else:
-                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少模型大小參數"})
+# --- Server-Sent Events (SSE) 端點 ---
+from starlette.responses import StreamingResponse
+from src.api.sse_manager import get_sse_broadcaster
 
-                elif msg_type == "START_TRANSCRIPTION":
-                    task_id = payload.get("task_id")
-                    if not task_id:
-                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
-                        continue
+@app.get("/api/status-stream")
+async def status_stream(request: Request):
+    """
+    提供 Server-Sent Events (SSE) 串流，用於向客戶端即時推送狀態更新。
+    """
+    sse_broadcaster = get_sse_broadcaster()
 
-                    task_info = db_client.get_task_status(task_id)
-                    if not task_info:
-                        await manager.broadcast_json({"type": "ERROR", "payload": f"找不到任務 {task_id}"})
-                        continue
+    async def event_generator():
+        """
+        一個非同步產生器，用於監聽廣播並產生 SSE 格式的訊息。
+        """
+        q = await sse_broadcaster.subscribe()
+        try:
+            while True:
+                # 檢查客戶端是否仍然連接
+                if await request.is_disconnected():
+                    log.info("SSE 客戶端已斷開連接 (由請求偵測)。")
+                    break
 
-                    try:
-                        task_payload = json.loads(task_info['payload'])
-                        file_path = task_payload.get("input_file")
-                        model_size = task_payload.get("model_size", "tiny")
-                        language = task_payload.get("language")
-                        beam_size = task_payload.get("beam_size", 5)
-                        original_filename = task_payload.get("original_filename") # JULES'S FIX
-                    except (json.JSONDecodeError, KeyError) as e:
-                        await manager.broadcast_json({"type": "ERROR", "payload": f"解析任務 {task_id} 的 payload 失敗: {e}"})
-                        continue
+                try:
+                    # 等待來自佇列的訊息，設定超時以定期檢查連接狀態
+                    message = await asyncio.wait_for(q.get(), timeout=1.0)
+                    # SSE 格式: "data: <json_string>\n\n"
+                    yield f"data: {json.dumps(message, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    # 沒有訊息，發送一個註解行作為心跳以保持連線
+                    yield ": heartbeat\n\n"
+                    continue
+        finally:
+            sse_broadcaster.unsubscribe(q)
 
-                    if not file_path:
-                        await manager.broadcast_json({"type": "ERROR", "payload": "任務 payload 中缺少檔案路徑"})
-                    else:
-                        display_name = original_filename or file_path
-                        log.info(f"收到開始轉錄 '{display_name}' 的請求 (來自任務 {task_id})。")
-                        loop = asyncio.get_running_loop()
-                        trigger_transcription(task_id, file_path, model_size, language, beam_size, loop, original_filename=original_filename)
-
-                elif msg_type == "START_YOUTUBE_PROCESSING":
-                    task_id = payload.get("task_id") # This is the download_task_id
-                    if not task_id:
-                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
-                        continue
-
-                    log.info(f"收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: {task_id})。")
-                    loop = asyncio.get_running_loop()
-                    trigger_youtube_processing(task_id, loop)
-
-                else:
-                    await manager.broadcast_json({
-                        "type": "ECHO",
-                        "payload": f"已收到未知類型的訊息: {msg_type}"
-                    })
-
-            except json.JSONDecodeError:
-                log.error("收到了非 JSON 格式的 WebSocket 訊息。")
-                await manager.broadcast_json({"type": "ERROR", "payload": "訊息必須是 JSON 格式"})
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        log.info("WebSocket 用戶端已離線。")
-    except Exception as e:
-        log.error(f"WebSocket 發生未預期錯誤: {e}", exc_info=True)
-        # 確保在發生錯誤時也中斷連線
-        if websocket in manager.active_connections:
-            manager.disconnect(websocket)
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/health")
@@ -1135,7 +1075,8 @@ async def set_app_state_endpoint(payload: AppStatePayload):
         success = db_client.set_app_state(payload.key, payload.value)
         if success:
             # 廣播狀態變更
-            await manager.broadcast_json({"type": "APP_STATE_UPDATE", "payload": {payload.key: payload.value}})
+            sse_broadcaster = get_sse_broadcaster()
+            await sse_broadcaster.broadcast({"type": "APP_STATE_UPDATE", "payload": {payload.key: payload.value}})
             return {"status": "success", "key": payload.key, "value": payload.value}
         else:
             raise HTTPException(status_code=500, detail="無法在資料庫中設定應用程式狀態。")
@@ -1193,7 +1134,8 @@ async def notify_task_update(payload: Dict):
             "task_type": task_type  # 將 task_type 也傳給前端
         }
     }
-    await manager.broadcast_json(message)
+    sse_broadcaster = get_sse_broadcaster()
+    await sse_broadcaster.broadcast(message)
     return {"status": "notification_sent"}
 
 
