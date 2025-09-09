@@ -2136,7 +2136,7 @@
                 // It intentionally ignores the 'downloader-tasks' list, which is managed separately by its own handler.
                 const parentId = taskElement.parentElement ? taskElement.parentElement.id : null;
                 if (parentId !== 'downloader-tasks' && parentId !== 'youtube-file-browser') {
-                    const isCompleted = payload.status === 'completed' || payload.status === 'failed';
+                    const isCompleted = payload.status === 'completed' || payload.status === '已完成' || payload.status === 'failed';
                     const correctContainer = isCompleted ? completedTasksContainer : ongoingTasksContainer;
                     if (taskElement.parentElement !== correctContainer) {
                         correctContainer.appendChild(taskElement);
