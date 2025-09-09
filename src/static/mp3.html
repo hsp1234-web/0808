@@ -1288,7 +1288,6 @@
                         const bar = progressContainer.querySelector('.task-progress-bar');
                         if (bar) bar.style.width = '50%'; // JULES'S NOTE: Maybe 50% is a good indicator
                     }
-                    return;
                 }
 
                 const message = payload.message || payload.status;
@@ -2136,10 +2135,19 @@
                 // It intentionally ignores the 'downloader-tasks' list, which is managed separately by its own handler.
                 const parentId = taskElement.parentElement ? taskElement.parentElement.id : null;
                 if (parentId !== 'downloader-tasks' && parentId !== 'youtube-file-browser') {
-                    const isCompleted = payload.status === 'completed' || payload.status === 'failed';
+                    const isCompleted = payload.status === 'completed' || payload.status === '已完成' || payload.status === 'failed';
                     const correctContainer = isCompleted ? completedTasksContainer : ongoingTasksContainer;
                     if (taskElement.parentElement !== correctContainer) {
                         correctContainer.appendChild(taskElement);
+                    }
+
+                    // 當任務完成或失敗時，停止並隱藏計時器
+                    if (isCompleted) {
+                        delete taskStartTimes[payload.task_id];
+                        const timerSpan = taskElement.querySelector('.timer');
+                        if (timerSpan) {
+                            timerSpan.style.display = 'none';
+                        }
                     }
                 }
             };
