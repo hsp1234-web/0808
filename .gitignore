@@ -40,6 +40,12 @@ __pycache__/
 # Test & Verification Artifacts
 /test-results/
 /temp_test_outputs/
+/downloads/
+/pipeline_downloads/
+/pipeline_images/
+/temp_test_downloads/
+/temp_test_images/
+/final_report.pdf
 frontend_verification.png
 dummy_audio.wav
 run_log.txt
