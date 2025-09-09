@@ -847,7 +847,7 @@ def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
                 log.info(f"✅ [執行緒] 模型 '{model_size}' 下載成功。")
                 message = {
                     "type": "DOWNLOAD_STATUS",
-                    "payload": {"model": model_size, "status": "已完成", "progress": 100}
+                    "payload": {"model": model_size, "status": "completed", "progress": 100}
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
@@ -946,12 +946,12 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
                     "transcript_path": convert_to_media_url(str(output_file_path)),
                     "output_path": convert_to_media_url(str(output_file_path)) # 增加一個通用的 output_path
                 }
-                db_client.update_task_status(task_id, '已完成', json.dumps(final_result_obj))
+                db_client.update_task_status(task_id, 'completed', json.dumps(final_result_obj))
                 log.info(f"✅ [執行緒] 已將任務 {task_id} 的狀態和結果更新至資料庫。")
 
                 final_message = {
                     "type": "TRANSCRIPTION_STATUS",
-                    "payload": {"task_id": task_id, "status": "已完成", "result": final_result_obj}
+                    "payload": {"task_id": task_id, "status": "completed", "result": final_result_obj}
                 }
             else:
                 stderr_output = process.stderr.read() if process.stderr else "N/A"
@@ -1055,15 +1055,15 @@ def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
             if task_type == 'youtube_download_only':
                 # 問題二：將檔案系統路徑轉換為可存取的 URL
                 download_result['output_path'] = convert_to_media_url(download_result['output_path'])
-                db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
+                db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
                 log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
                 asyncio.run_coroutine_threadsafe(manager.broadcast_json({
                     "type": "YOUTUBE_STATUS",
-                    "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
+                    "payload": {"task_id": task_id, "status": "completed", "result": download_result, "task_type": "download_only"}
                 }), loop)
                 return
 
-            db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
+            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
             dependent_task_id = db_client.find_dependent_task(task_id)
             if not dependent_task_id:
                 raise ValueError(f"找不到依賴於下載任務 {task_id} 的 gemini_process 任務")
