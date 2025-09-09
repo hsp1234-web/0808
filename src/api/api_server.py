@@ -673,6 +673,9 @@ async def validate_api_key(request: Request):
 class ApiKeyPayload(BaseModel):
     api_key: str
 
+class MP3DownloadRequest(BaseModel):
+    url: str
+
 @app.post("/api/youtube/models")
 async def get_youtube_models(payload: ApiKeyPayload):
     """
@@ -797,6 +800,103 @@ async def process_youtube_urls(request: Request):
             })
 
     return JSONResponse(content={"message": f"已為 {len(tasks)} 個 URL 建立處理任務。", "tasks": tasks})
+
+
+@app.post("/api/mp3", status_code=202)
+async def create_mp3_download_task(payload: MP3DownloadRequest):
+    """
+    接收 YouTube URL，建立一個 MP3 下載任務。
+    """
+    log.info(f"收到 MP3 下載請求，URL: {payload.url}")
+    task_id = str(uuid.uuid4())
+
+    task_payload = {
+        "url": payload.url,
+        "output_dir": str(UPLOADS_DIR / "mp3_files")
+    }
+
+    db_client.add_task(task_id, json.dumps(task_payload), task_type='mp3_download')
+
+    log.info(f"已建立 MP3 下載任務，ID: {task_id}")
+    # 前端將使用此 task_id 透過 WebSocket 啟動實際的下載
+    return {"message": "MP3 下載任務已建立", "task_id": task_id, "type": "mp3_download"}
+
+
+def trigger_mp3_download(task_id: str, url: str, loop: asyncio.AbstractEventLoop):
+    """
+    在一個單獨的執行緒中執行 MP3 下載，並透過 WebSocket 回報結果。
+    """
+    def _download_in_thread():
+        log.info(f"🧵 [執行緒] 開始處理 MP3 下載任務: {task_id}, URL: {url}")
+        output_dir = UPLOADS_DIR / "mp3_files"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            if url.startswith("mock://"):
+                tool_script_path = ROOT_DIR / "src" / "tools" / "mock_downloader_for_test.py"
+                # 模擬下載器需要 download_type 和 custom_filename 參數
+                cmd = [
+                    sys.executable,
+                    str(tool_script_path),
+                    "--url", url,
+                    "--output-dir", str(output_dir),
+                    "--download-type", "audio", # 模擬音訊下載
+                    "--custom-filename", task_id # 使用 task_id 作為檔名
+                ]
+            else:
+                tool_script_path = ROOT_DIR / "src" / "tools" / "mp3_downloader.py"
+                cmd = [
+                    sys.executable,
+                    str(tool_script_path),
+                    "--url", url,
+                    "--output-dir", str(output_dir),
+                    "--video-id", task_id
+                ]
+
+            # Notify frontend that download is starting
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
+                "type": "MP3_DOWNLOAD_STATUS",
+                "payload": {"task_id": task_id, "status": "starting", "message": f"準備下載: {url}"}
+            }), loop)
+
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                encoding='utf-8'
+            )
+
+            download_result = json.loads(process.stdout)
+
+            # Convert file path to accessible URL
+            download_result['output_path'] = convert_to_media_url(download_result['output_path'])
+
+            db_client.update_task_status(task_id, 'completed', json.dumps(download_result))
+            log.info(f"✅ [執行緒] MP3 下載任務 '{task_id}' 成功完成。")
+
+            final_message = {
+                "type": "MP3_DOWNLOAD_STATUS",
+                "payload": {"task_id": task_id, "status": "completed", "result": download_result}
+            }
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(final_message), loop)
+
+        except Exception as e:
+            log.error(f"❌ [執行緒] MP3 下載執行緒中發生嚴重錯誤: {e}", exc_info=True)
+            error_message = str(e)
+            if isinstance(e, subprocess.CalledProcessError):
+                error_message = e.stderr or str(e)
+
+            db_client.update_task_status(task_id, 'failed', json.dumps({"error": error_message}))
+
+            error_ws_message = {
+                "type": "MP3_DOWNLOAD_STATUS",
+                "payload": {"task_id": task_id, "status": "failed", "error": error_message}
+            }
+            asyncio.run_coroutine_threadsafe(manager.broadcast_json(error_ws_message), loop)
+
+    thread = threading.Thread(target=_download_in_thread)
+    thread.start()
 
 
 def trigger_model_download(model_size: str, loop: asyncio.AbstractEventLoop):
@@ -1267,6 +1367,28 @@ async def websocket_endpoint(websocket: WebSocket):
                     log.info(f"收到開始處理 YouTube 任務鏈的請求 (起始任務 ID: {task_id})。")
                     loop = asyncio.get_running_loop()
                     trigger_youtube_processing(task_id, loop)
+
+                elif msg_type == "START_MP3_DOWNLOAD":
+                    task_id = payload.get("task_id")
+                    if not task_id:
+                        await manager.broadcast_json({"type": "ERROR", "payload": "缺少 task_id 參數"})
+                        continue
+
+                    task_info = db_client.get_task_status(task_id)
+                    if not task_info:
+                        await manager.broadcast_json({"type": "ERROR", "payload": f"找不到任務 {task_id}"})
+                        continue
+
+                    task_payload = json.loads(task_info['payload'])
+                    url = task_payload.get("url")
+
+                    if not url:
+                         await manager.broadcast_json({"type": "ERROR", "payload": f"任務 {task_id} 的 payload 中缺少 url"})
+                         continue
+
+                    log.info(f"收到開始下載 MP3 的請求 (來自任務 {task_id})。")
+                    loop = asyncio.get_running_loop()
+                    trigger_mp3_download(task_id, url, loop)
 
                 else:
                     await manager.broadcast_json({

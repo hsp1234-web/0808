@@ -328,7 +328,10 @@
     <div id="app" class="container">
         <!-- 標題與控制項 -->
         <header class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-            <h1>音訊轉錄儀</h1>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="/" title="回到主頁" style="text-decoration: none; font-size: 1.5em; color: #007bff; font-weight: bold; line-height: 1;">&larr;</a>
+                <h1 style="margin: 0;">音訊轉錄儀</h1>
+            </div>
             <div>
                 <span>字體:</span>
                 <button id="zoom-out-btn" style="padding: 5px 10px;">-</button>
@@ -357,6 +360,23 @@
                  <div class="stat-item"><span>CPU:</span> <span id="cpu-label">--%</span></div>
                  <div class="stat-item"><span>RAM:</span> <span id="ram-label">--%</span></div>
                  <div class="stat-item"><span>GPU:</span> <span id="gpu-label">--%</span></div>
+            </div>
+        </div>
+
+        <!-- YouTube MP3 下載器 -->
+        <div class="card">
+            <h2>YouTube MP3 下載及播放</h2>
+            <div class="flex-col">
+                <div>
+                    <label for="mp3-url-input"><strong>YouTube 影片網址</strong></label>
+                    <input type="text" id="mp3-url-input" placeholder="貼上 YouTube 網址..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box;">
+                </div>
+                <button id="start-mp3-download-btn">下載 MP3</button>
+                <div id="mp3-status-area" style="margin-top: 10px; font-weight: 500;"></div>
+                <div id="mp3-player-area" class="hidden" style="margin-top: 15px;">
+                    <audio id="mp3-audio-player" controls style="width: 100%;"></audio>
+                    <a id="mp3-download-link" href="#" download="audio.mp3" class="button-like" style="display: none; margin-top: 10px; text-align: center; background-color: var(--success-color);">下載檔案</a>
+                </div>
             </div>
         </div>
 
@@ -759,6 +779,14 @@
             const detailsModalCloseBtn = document.getElementById('details-modal-close-btn');
             const detailsModalOkBtn = document.getElementById('details-modal-ok-btn');
 
+            // --- MP3 下載器元素 ---
+            const mp3UrlInput = document.getElementById('mp3-url-input');
+            const startMp3DownloadBtn = document.getElementById('start-mp3-download-btn');
+            const mp3StatusArea = document.getElementById('mp3-status-area');
+            const mp3PlayerArea = document.getElementById('mp3-player-area');
+            const mp3AudioPlayer = document.getElementById('mp3-audio-player');
+            const mp3DownloadLink = document.getElementById('mp3-download-link');
+
             // --- 媒體下載器元素 ---
             const downloaderUrlsInput = document.getElementById('downloader-urls-input');
             const startDownloadBtn = document.getElementById('start-download-btn');
@@ -1055,6 +1083,8 @@
                     handleTranscriptionUpdate(type, payload);
                 } else if (type === 'YOUTUBE_STATUS') {
                     handleYoutubeStatus(payload);
+                } else if (type === 'MP3_DOWNLOAD_STATUS') {
+                    handleMp3DownloadStatus(payload);
                 }
             };
 
@@ -1206,6 +1236,32 @@
                         transcriptOutput.prepend(p);
                         transcriptOutput.scrollTop = 0;
                     }
+                }
+            };
+
+            const handleMp3DownloadStatus = (payload) => {
+                if (!payload || !payload.task_id) return;
+
+                const statusMessage = payload.message || payload.status;
+                mp3StatusArea.textContent = statusMessage;
+
+                if (payload.status === 'completed') {
+                    const result = payload.result || {};
+                    const outputPath = result.output_path;
+                    const videoTitle = result.video_title || 'audio';
+
+                    if (outputPath) {
+                        mp3StatusArea.textContent = `下載完成: ${videoTitle}`;
+                        mp3PlayerArea.classList.remove('hidden');
+                        mp3AudioPlayer.src = outputPath;
+                        mp3DownloadLink.href = outputPath;
+                        mp3DownloadLink.download = `${videoTitle}.mp3`;
+                        mp3DownloadLink.style.display = 'block';
+                    } else {
+                        mp3StatusArea.textContent = '錯誤：下載完成，但找不到檔案路徑。';
+                    }
+                } else if (payload.status === 'failed') {
+                    mp3StatusArea.textContent = `下載失敗: ${payload.error}`;
                 }
             };
 
@@ -2271,6 +2327,52 @@
             audioFormatSelect.addEventListener('change', (e) => logAction('change-audio-format', e.target.value));
             videoQualitySelect.addEventListener('change', (e) => logAction('change-video-quality', e.target.value));
             removeSilenceCheckbox.addEventListener('change', (e) => logAction('toggle-remove-silence', e.target.checked));
+
+            // --- MP3 下載器邏輯 ---
+            startMp3DownloadBtn.addEventListener('click', async () => {
+                const url = mp3UrlInput.value.trim();
+                if (!url) {
+                    showStatusMessage('請輸入有效的 YouTube 網址。', true);
+                    return;
+                }
+
+                logAction('click-start-mp3-download', url);
+                startMp3DownloadBtn.disabled = true;
+                startMp3DownloadBtn.textContent = '正在建立任務...';
+                mp3StatusArea.textContent = '正在向伺服器請求建立下載任務...';
+
+                try {
+                    const response = await fetch('/api/mp3', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: url })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || '建立任務失敗');
+                    }
+
+                    const result = await response.json();
+                    const taskId = result.task_id;
+
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'START_MP3_DOWNLOAD', payload: { task_id: taskId } }));
+                        mp3StatusArea.textContent = `任務已建立 (ID: ${taskId.substring(0,8)}...)，等待下載開始...`;
+                    } else {
+                        showStatusMessage('WebSocket 未連線，無法啟動下載。', true);
+                        mp3StatusArea.textContent = '錯誤：無法連接到伺服器。';
+                    }
+
+                } catch (error) {
+                    console.error('建立 MP3 下載任務失敗:', error);
+                    showStatusMessage(`錯誤: ${error.message}`, true);
+                    mp3StatusArea.textContent = `錯誤: ${error.message}`;
+                } finally {
+                    startMp3DownloadBtn.disabled = false;
+                    startMp3DownloadBtn.textContent = '下載 MP3';
+                }
+            });
 
             // --- Timer Update Interval ---
             setInterval(() => {
