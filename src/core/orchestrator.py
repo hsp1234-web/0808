@@ -10,7 +10,14 @@ import sys
 import threading
 import time
 from pathlib import Path
+import json
+import asyncio
+from typing import Dict, Any
+
+import google.generativeai as genai
+
 from db.client import DBClient, get_client
+from tools import downloader, gemini_uploader, gemini_analyzer, report_storage
 
 # --- 路徑設定 ---
 # 將專案的根目錄 (本檔案的上兩層) 新增到 Python 的搜尋路徑中
@@ -186,6 +193,135 @@ def main():
                 t.join(timeout=2)
         log.info("✅ 所有子程序與執行緒已清理完畢。協調器已關閉。")
         sys.exit(1 if 'e' in locals() and not isinstance(e, KeyboardInterrupt) else 0)
+
+# --- 總指揮核心邏輯 ---
+
+def run_youtube_pipeline(
+    task_id: str,
+    websocket_manager: Any,
+    loop: asyncio.AbstractEventLoop,
+    uploads_dir: Path
+):
+    """
+    執行完整的 YouTube 處理流程，從下載到最終報告生成。
+    這取代了舊的 trigger_youtube_processing 函式中的子程序呼叫。
+    """
+    log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: {task_id}")
+    db_client = get_client()
+    dependent_task_id = None
+
+    # 廣播函式
+    def broadcast(payload: Dict[str, Any]):
+        message = {"type": "YOUTUBE_STATUS", "payload": payload}
+        asyncio.run_coroutine_threadsafe(websocket_manager.broadcast_json(message), loop)
+
+    try:
+        task_info = db_client.get_task_status(task_id)
+        if not task_info:
+            raise ValueError(f"找不到起始任務 {task_id}")
+
+        task_payload = json.loads(task_info['payload'])
+        url = task_payload['url']
+
+        # 1. 下載媒體
+        broadcast({"task_id": task_id, "status": "downloading", "message": f"正在下載: {url}", "task_type": task_info['type']})
+
+        download_result = downloader.download_media(
+            youtube_url=url,
+            output_dir=uploads_dir,
+            download_type=task_payload.get("download_type", "audio"),
+            custom_filename=task_payload.get("custom_filename"),
+            cookies_file=str(uploads_dir / "cookies.txt")
+        )
+
+        media_path = Path(download_result["output_path"])
+        video_title = download_result["video_title"]
+        log.info(f"✅ 媒體下載完成: {media_path}")
+
+        # 如果只是下載任務，到此結束
+        if task_info['type'] == 'youtube_download_only':
+            db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
+            broadcast({"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"})
+            return
+
+        # 2. 處理分析任務
+        db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
+        dependent_task_id = db_client.find_dependent_task(task_id)
+        if not dependent_task_id:
+            raise ValueError(f"找不到依賴於下載任務 {task_id} 的 gemini_process 任務")
+
+        process_task_info = db_client.get_task_status(dependent_task_id)
+        process_payload = json.loads(process_task_info['payload'])
+        model_name = process_payload['model']
+        api_key = process_payload['api_key']
+
+        # 設定環境變數以供模組使用
+        os.environ["GOOGLE_API_KEY"] = api_key
+
+        broadcast({"task_id": dependent_task_id, "status": "uploading", "message": "正在上傳音訊至 Gemini...", "task_type": "gemini_process"})
+
+        # 3. 上傳至 Gemini
+        gemini_file = gemini_uploader.upload_file(media_path)
+
+        try:
+            broadcast({"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model_name} 進行 AI 分析...", "task_type": "gemini_process"})
+
+            # 4. 執行 AI 分析
+            model = genai.GenerativeModel(model_name)
+            summary, transcript, tokens_used_analisys = gemini_analyzer.get_summary_and_transcript(
+                model=model,
+                gemini_file_resource=gemini_file,
+                video_title=video_title,
+                original_filename=media_path.name
+            )
+
+            # 5. 生成報告內容
+            html_content, tokens_used_html = gemini_analyzer.generate_html_report(
+                model=model,
+                summary=summary,
+                transcript=transcript,
+                video_title=video_title
+            )
+
+            # 6. 儲存報告
+            report_content = {
+                "summary": summary,
+                "transcript": transcript,
+                "html_content": html_content
+            }
+            report_path = report_storage.save_report(
+                content=report_content,
+                video_title=video_title,
+                output_dir=uploads_dir / "reports",
+                output_format=process_payload.get("output_format", "html")
+            )
+
+            # 7. 更新最終結果至資料庫
+            final_result = {
+                "output_path": str(report_path),
+                "video_title": video_title,
+                "total_tokens_used": tokens_used_analisys + tokens_used_html,
+            }
+            db_client.update_task_status(dependent_task_id, '已完成', json.dumps(final_result))
+            log.info(f"✅ Gemini AI 處理完成。")
+            broadcast({"task_id": dependent_task_id, "status": "completed", "result": final_result, "task_type": "gemini_process"})
+
+        finally:
+            # 確保即使分析或儲存失敗，也刪除已上傳的檔案
+            log.info(f"🗑️ 正在清理 Gemini 檔案: {gemini_file.name}")
+            try:
+                genai.delete_file(gemini_file.name)
+                log.info("✅ Gemini 檔案清理成功。")
+            except Exception as e:
+                log.error(f"🔴 清理 Gemini 檔案 '{gemini_file.name}' 時失敗: {e}", exc_info=True)
+
+    except Exception as e:
+        log.error(f"❌ YouTube 處理流程中發生錯誤: {e}", exc_info=True)
+        failed_task_id = dependent_task_id if dependent_task_id else task_id
+        error_payload = {"error": str(e)}
+        db_client.update_task_status(failed_task_id, 'failed', json.dumps(error_payload))
+        broadcast({"task_id": failed_task_id, "status": "failed", **error_payload})
+
 
 if __name__ == "__main__":
     main()

@@ -27,6 +27,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
 from db.client import get_client
+from core.orchestrator import run_youtube_pipeline
 
 # --- JULES 於 2025-08-09 的修改：設定應用程式全域時區 ---
 # 為了確保所有日誌和資料庫時間戳都使用一致的時區，我們在應用程式啟動的
@@ -976,192 +977,19 @@ def trigger_transcription(task_id: str, file_path: str, model_size: str, languag
 
 
 def trigger_youtube_processing(task_id: str, loop: asyncio.AbstractEventLoop):
-    """在一個單獨的執行緒中執行 YouTube 處理流程（已更新為彈性模式）。"""
-    def _process_in_thread():
-        log.info(f"🧵 [執行緒] 開始處理 YouTube 任務鏈，起始 ID: {task_id}")
+    """
+    [重構後]
+    在新執行緒中啟動 YouTube 處理流程的總指揮。
+    此函式現在只負責委派任務，核心邏輯已移至 orchestrator.py。
+    """
+    log.info(f"委派 YouTube 處理任務至總指揮 (Orchestrator)，起始任務 ID: {task_id}")
 
-        task_info = db_client.get_task_status(task_id)
-        if not task_info:
-            log.error(f"❌ [執行緒] 找不到起始任務 {task_id}")
-            return
-
-        task_type = task_info.get('type')
-        dependent_task_id = None
-
-        try:
-            payload = json.loads(task_info['payload'])
-            url = payload['url']
-            custom_filename = payload.get("custom_filename")
-            download_type = payload.get("download_type", "audio")
-
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": task_id, "status": "downloading", "message": f"正在下載 ({download_type}): {url}", "task_type": task_type}
-            }), loop)
-
-            # JULES DEBUG (2025-08-31): 為了 E2E 測試的穩定性，新增 mock URL 判斷
-            if url.startswith("mock://"):
-                downloader_script_path = ROOT_DIR / "src" / "tools" / "mock_downloader_for_test.py"
-            else:
-                downloader_script_path = ROOT_DIR / "src" / "tools" / ("mock_youtube_downloader.py" if IS_MOCK_MODE else "youtube_downloader.py")
-
-            cmd_dl = [sys.executable, str(downloader_script_path), "--url", url, "--output-dir", str(UPLOADS_DIR), "--download-type", download_type]
-            if custom_filename:
-                cmd_dl.extend(["--custom-filename", custom_filename])
-
-            cookies_path = UPLOADS_DIR / "cookies.txt"
-            if cookies_path.is_file():
-                log.info(f"發現 cookies.txt，將其用於下載。")
-                cmd_dl.extend(["--cookies-file", str(cookies_path)])
-
-            proc_env = os.environ.copy()
-            # JULES'S FIX (2025-08-30): 重構 I/O 處理以解決死鎖問題
-            # 舊的寫法是逐行讀取 stderr，但如果 stdout 的緩衝區被填滿，子程序會被阻塞，
-            # 而父程序卻在等待 stderr，從而導致死鎖。
-            #
-            # 新的寫法使用 communicate()，它會安全地讀取兩個流直到程序結束，
-            # 雖然會失去即時的進度回報，但能完全避免死鎖，確保任務能正確完成。
-            # 這是根據 POC 成功案例的模式進行的重構。
-            process_dl = subprocess.Popen(
-                cmd_dl,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8',
-                env=proc_env
-            )
-
-            # communicate() 會讀取所有輸出直到程序結束，並返回結果。
-            # 這能有效避免緩衝區填滿導致的死鎖。
-            stdout_output, stderr_output = process_dl.communicate()
-
-            # 在程序結束後，檢查返回碼
-            if process_dl.returncode != 0:
-                # 將 stderr 的內容包含在錯誤訊息中，以便除錯
-                log.error(f"❌ [執行緒] youtube_downloader.py 執行失敗。Stderr: {stderr_output}")
-                # 我們從 stdout 中解析 JSON，因為即使失敗，腳本也會輸出一個錯誤 JSON
-                # 但如果 stdout 是空的，就使用 stderr 作為錯誤訊息
-                if stdout_output:
-                    raise RuntimeError(stdout_output)
-                else:
-                    raise RuntimeError(f"youtube_downloader.py 執行失敗，返回碼 {process_dl.returncode}。錯誤: {stderr_output}")
-
-            # 如果成功，stdout 應該包含最終的 JSON 結果
-            download_result = json.loads(stdout_output)
-            media_file_path = download_result['output_path'] # This is an absolute path
-            video_title = download_result.get('video_title', '無標題影片')
-            log.info(f"✅ [執行緒] YouTube 媒體下載完成: {media_file_path}")
-
-            if task_type == 'youtube_download_only':
-                # 問題二：將檔案系統路徑轉換為可存取的 URL
-                download_result['output_path'] = convert_to_media_url(download_result['output_path'])
-                db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
-                log.info(f"✅ [執行緒] '僅下載媒體' 任務 {task_id} 完成。")
-                asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                    "type": "YOUTUBE_STATUS",
-                    "payload": {"task_id": task_id, "status": "已完成", "result": download_result, "task_type": "download_only"}
-                }), loop)
-                return
-
-            db_client.update_task_status(task_id, '已完成', json.dumps(download_result))
-            dependent_task_id = db_client.find_dependent_task(task_id)
-            if not dependent_task_id:
-                raise ValueError(f"找不到依賴於下載任務 {task_id} 的 gemini_process 任務")
-
-            process_task_info = db_client.get_task_status(dependent_task_id)
-            process_payload = json.loads(process_task_info['payload'])
-            model = process_payload['model']
-            tasks_to_run = process_payload.get('tasks', 'summary,transcript')
-            output_format = process_payload.get('output_format', 'html')
-            api_key = process_payload.get('api_key') # 從任務酬載中讀取金鑰
-
-            log.info(f"執行 Gemini 分析，任務: '{tasks_to_run}', 格式: '{output_format}'")
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": dependent_task_id, "status": "processing", "message": f"使用 {model} 進行 AI 分析...", "task_type": "gemini_process"}
-            }), loop)
-
-            processor_script_path = ROOT_DIR / "src" / "tools" / ("mock_gemini_processor.py" if IS_MOCK_MODE else "gemini_processor.py")
-            # 問題二：將報告也輸出到 uploads 目錄下
-            report_output_dir = UPLOADS_DIR / "reports"
-            report_output_dir.mkdir(parents=True, exist_ok=True)
-
-            cmd_process = [
-                sys.executable, str(processor_script_path),
-                "--command=process",
-                "--audio-file", media_file_path,
-                "--model", model,
-                "--output-dir", str(report_output_dir),
-                "--video-title", video_title,
-                "--tasks", tasks_to_run,
-                "--output-format", output_format
-            ]
-
-            proc_env = os.environ.copy()
-            if api_key:
-                proc_env["GOOGLE_API_KEY"] = api_key # 將金鑰設定到子程序的環境變數中
-
-            log.info(f"任務 {dependent_task_id}: 正要啟動 gemini_processor.py 子程序...")
-            process_gemini = subprocess.Popen(
-                cmd_process, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=proc_env
-            )
-
-            # JULES'S FIX (2025-09-01): Refactor I/O handling to prevent deadlocks.
-            # Reading stderr line-by-line while stdout buffer might fill up is a classic deadlock scenario.
-            # The safer approach is to use communicate() to get both streams after the process finishes.
-            # This sacrifices real-time progress updates for stability and correctness, which is the right trade-off here.
-            log.info(f"任務 {dependent_task_id}: 正在等待 gemini_processor.py 子程序完成...")
-            stdout_output, stderr_output = process_gemini.communicate()
-            log.info(f"任務 {dependent_task_id}: gemini_processor.py 子程序已結束。返回碼: {process_gemini.returncode}")
-
-            if process_gemini.returncode != 0:
-                # Log the full stderr for debugging purposes, then raise the error with stdout,
-                # as the tool is designed to put the final error JSON in stdout.
-                log.error(f"❌ [執行緒] gemini_processor.py 執行失敗。Stderr: {stderr_output}")
-                if stdout_output:
-                    raise RuntimeError(stdout_output)
-                else:
-                    raise RuntimeError(f"Gemini processor failed with exit code {process_gemini.returncode}. Stderr: {stderr_output}")
-
-            process_result = json.loads(stdout_output)
-            # 問題二：將結果中的所有檔案路徑轉換為 URL
-            for key in ["output_path", "html_report_path", "pdf_report_path"]:
-                 if key in process_result and process_result[key]:
-                    process_result[key] = convert_to_media_url(process_result[key])
-
-            db_client.update_task_status(dependent_task_id, '已完成', json.dumps(process_result))
-            log.info(f"✅ [執行緒] Gemini AI 處理完成。")
-
-            # JULES'S FIX (2025-08-31): 補上遺失的 WebSocket 廣播
-            final_payload = {
-                "task_id": dependent_task_id,
-                "status": "completed",
-                "task_type": "gemini_process",
-                "result": process_result
-            }
-            update_message = {"type": "YOUTUBE_STATUS", "payload": final_payload}
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json(update_message), loop)
-            log.info(f"✅ [執行緒] 已廣播 Gemini AI 任務完成訊息。")
-
-        except Exception as e:
-            log.error(f"❌ [執行緒] YouTube 處理鏈中發生錯誤: {e}", exc_info=True)
-            failed_task_id = dependent_task_id if dependent_task_id else task_id
-            error_payload = {"error": str(e)}
-            try:
-                error_json = json.loads(str(e))
-                if isinstance(error_json, dict):
-                    error_payload["error"] = error_json.get("error", str(e))
-                    if error_json.get("error_code") == "AUTH_REQUIRED":
-                        error_payload["error_type"] = "AUTH_REQUIRED"
-            except (json.JSONDecodeError, TypeError):
-                pass
-            db_client.update_task_status(failed_task_id, 'failed', json.dumps(error_payload))
-            asyncio.run_coroutine_threadsafe(manager.broadcast_json({
-                "type": "YOUTUBE_STATUS",
-                "payload": {"task_id": failed_task_id, "status": "failed", **error_payload}
-            }), loop)
-
-    thread = threading.Thread(target=_process_in_thread)
+    # 建立並啟動一個新執行緒，執行真正的處理流程
+    thread = threading.Thread(
+        target=run_youtube_pipeline,
+        args=(task_id, manager, loop, UPLOADS_DIR),
+        name=f"YouTubePipelineThread-{task_id}"
+    )
     thread.start()
 
 
