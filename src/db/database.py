@@ -111,7 +111,19 @@ def initialize_database():
             """)
             # --- END ---
 
-        log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state` 資料表已存在。")
+            # --- 新增 URL 提取功能資料表 ---
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS extracted_urls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                source_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_url ON extracted_urls (url)")
+            # --- 結束 ---
+
+        log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state`, `extracted_urls` 資料表已存在。")
     except sqlite3.Error as e:
         log.error(f"初始化資料庫時發生錯誤: {e}")
     finally:

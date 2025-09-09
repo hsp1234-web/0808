@@ -1,91 +1,105 @@
+# src/tests/test_api_server.py
+
 import pytest
-import requests
-import uvicorn
-import threading
-import time
-import shutil
+from fastapi.testclient import TestClient
+import sys
 from pathlib import Path
+import os
+import json
+import sqlite3
 
-# Import the FastAPI app instance and configuration from the main server file
-from api.api_server import app, UPLOADS_DIR, ROOT_DIR
+# --- 路徑設定 ---
+SRC_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SRC_DIR))
 
-# --- Test Configuration ---
-TEST_HOST = "127.0.0.1"
-TEST_PORT = 8010 # Choose a non-standard port to avoid conflicts
-BASE_URL = f"http://{TEST_HOST}:{TEST_PORT}"
+# --- 環境變數設定 ---
+os.environ["API_MODE"] = "mock"
 
-# --- Fixtures ---
+# --- 匯入待測目標 ---
+from api.api_server import app, UPLOADS_DIR
+from db.database import get_db_connection, initialize_database
 
-@pytest.fixture(scope="session")
-def server():
-    """Fixture to run the FastAPI server in a background thread."""
-    config = uvicorn.Config(app, host=TEST_HOST, port=TEST_PORT, log_level="info")
-    server = uvicorn.Server(config)
 
-    # Run the server in a separate thread
-    thread = threading.Thread(target=server.run)
-    thread.daemon = True
-    thread.start()
+# --- Pytest Fixtures ---
 
-    # Give the server a moment to start up
-    time.sleep(2)
-
-    yield
-
-    # The server will be shut down when the test session ends because of the daemon thread.
-
-@pytest.fixture
-def temporary_media_file():
+@pytest.fixture(scope="module")
+def client():
     """
-    Fixture to prepare a test audio file in the uploads directory
-    and clean it up after the test.
+    為所有測試提供一個 TestClient 實例。
     """
-    # --- Setup ---
-    source_file = ROOT_DIR / "src" / "tests" / "fixtures" / "test_audio.mp3"
-    target_dir = UPLOADS_DIR
-    target_dir.mkdir(exist_ok=True) # Ensure uploads directory exists
-    target_file = target_dir / "test_audio.mp3"
+    initialize_database()
 
-    if not source_file.exists():
-        pytest.fail(f"Test fixture not found: {source_file}. Please run setup for Step 1 first.")
+    # 清理 uploads 目錄中的舊檔案
+    if UPLOADS_DIR.exists():
+        for f in UPLOADS_DIR.glob("*"):
+            if f.is_file() and f.name != ".gitkeep":
+                f.unlink()
 
-    shutil.copy(source_file, target_file)
+    with TestClient(app) as c:
+        yield c
 
-    yield target_file # Provide the path to the test function
 
-    # --- Teardown ---
-    if target_file.exists():
-        target_file.unlink()
+# --- 測試案例 ---
 
-# --- Test Cases ---
-
-def test_health_check(server):
-    """Test the basic health check endpoint to ensure the server is running."""
-    response = requests.get(f"{BASE_URL}/api/health")
+def test_health_check(client: TestClient):
+    """
+    測試 `/api/health` 端點是否正常運作。
+    """
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "message": "API Server is running."}
 
-def test_serve_media_file_success(server, temporary_media_file):
+
+def test_extract_urls_endpoint(client: TestClient):
     """
-    Tests if the server can correctly serve a media file from the /media/ endpoint.
-    This simulates the MP3 preview scenario.
+    測試 /api/extract_urls 端點的完整流程。
     """
-    # --- 1. Prepare ---
-    # The `temporary_media_file` fixture has already copied the file.
-    # The URL should correspond to the file's name under the /media/ mount.
-    file_url = f"{BASE_URL}/media/test_audio.mp3"
+    # --- 準備 ---
+    # 1. 清理資料庫中的舊資料
+    conn = get_db_connection()
+    if not conn:
+        pytest.fail("無法建立測試資料庫連線。")
 
-    # --- 2. Execute ---
-    response = requests.get(file_url)
+    try:
+        with conn:
+            # 確保 extracted_urls 資料表存在
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS extracted_urls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                source_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            conn.execute("DELETE FROM extracted_urls")
+    finally:
+        conn.close()
 
-    # --- 3. Assert ---
-    # Assert successful response
-    assert response.status_code == 200, f"Expected 200 OK, but got {response.status_code}. Response: {response.text}"
+    # 2. 準備測試資料
+    test_text = "這是一個測試，包含兩個網址: https://first.com/path 和 http://second.com"
+    payload = {"text": test_text}
 
-    # Assert correct content type for an MP3 file
-    # FastAPI's StaticFiles should correctly identify the mime type as audio/mpeg.
-    assert response.headers.get("Content-Type") == "audio/mpeg"
+    # --- 執行 ---
+    response = client.post("/api/extract_urls", json=payload)
 
-    # Assert that the content is what we expect (the dummy file content)
-    source_content = (ROOT_DIR / "src" / "tests" / "fixtures" / "test_audio.mp3").read_bytes()
-    assert response.content == source_content
+    # --- 驗證 API 回應 ---
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["message"] == "網址提取與儲存成功。"
+    assert response_data["urls_found_count"] == 2
+
+    # --- 驗證資料庫 ---
+    conn = get_db_connection()
+    if not conn:
+        pytest.fail("無法建立測試資料庫連線以進行驗證。")
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT url FROM extracted_urls ORDER BY url")
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    assert len(rows) == 2
+    assert rows[0]["url"] == "http://second.com"
+    assert rows[1]["url"] == "https://first.com/path"
