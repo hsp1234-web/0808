@@ -52,6 +52,10 @@ def main():
             "42649"
         ]
 
+        if os.environ.get("API_MODE") == "mock":
+            log.info("--- [WebServer] 偵測到 API_MODE=mock，將以模擬模式啟動伺服器。 ---")
+            server_cmd.append("--mock")
+
         server_proc = subprocess.Popen(server_cmd, stdout=sys.stdout, stderr=sys.stderr, env=env)
 
         log.info(f"--- [WebServer] Orchestrator 已啟動 (PID: {server_proc.pid}) ---")
