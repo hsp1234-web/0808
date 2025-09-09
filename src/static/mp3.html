@@ -1079,6 +1079,20 @@
                 }
             };
 
+            const updateOngoingTasksVisibility = () => {
+                const ongoingTasksContainer = document.getElementById('ongoing-tasks');
+                const ongoingTasksCard = ongoingTasksContainer.closest('.card');
+                // A task item exists if a selector finds one. This is more robust than child count.
+                const hasTasks = ongoingTasksContainer.querySelector('.task-item') !== null;
+
+                if (ongoingTasksCard) {
+                    // Show the card if there are tasks, hide it if not.
+                    ongoingTasksCard.style.display = hasTasks ? 'block' : 'none';
+                }
+                 // The 'no ongoing task' message is inside the list, so we don't need to manage it separately.
+                 // The list itself will be hidden.
+            };
+
             const getIconForFile = (outputPath) => {
                 if (!outputPath || typeof outputPath !== 'string') return '📁';
                 if (outputPath.endsWith('.mp4')) return '🎥';
@@ -1165,6 +1179,7 @@
                         statusSpan.dataset.testid = 'task-status-badge-completed';
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
+                        updateOngoingTasksVisibility();
 
                         if (!taskElement.querySelector('.task-checkbox')) {
                             const checkbox = document.createElement('input');
@@ -1190,6 +1205,7 @@
                         if(timerSpan) timerSpan.style.display = 'none';
                         if (progressContainer) progressContainer.style.display = 'none';
                         if (statusTextLabel) statusTextLabel.textContent = `❌ 失敗: ${payload.error}`;
+                        updateOngoingTasksVisibility();
                     }
                 }
 
@@ -1265,6 +1281,7 @@
                         taskElement.remove();
                         taskElements.delete(payload.task_id);
                     }
+                    updateOngoingTasksVisibility();
                     return;
                 }
 
@@ -1350,6 +1367,7 @@
                         completedTasksContainer.appendChild(taskElement);
                         if (noCompletedTaskMsg.style.display !== 'none') noCompletedTaskMsg.style.display = 'none';
                     }
+                    updateOngoingTasksVisibility();
                     if (!taskElement.querySelector('.task-checkbox')) {
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
@@ -1385,6 +1403,7 @@
                         taskElement.appendChild(errorDetails);
                     }
                     errorDetails.textContent = payload.error || '未提供具體錯誤訊息。';
+                    updateOngoingTasksVisibility();
                 }
             };
 
@@ -1539,6 +1558,10 @@
                 }
                 container.appendChild(taskElement);
                 taskElements.set(taskId, taskElement);
+                // If we add a task to the ongoing container, ensure the container is visible.
+                if (container === ongoingTasksContainer) {
+                    updateOngoingTasksVisibility();
+                }
                 return taskElement;
             };
 
@@ -2140,6 +2163,7 @@
                     const correctContainer = isCompleted ? completedTasksContainer : ongoingTasksContainer;
                     if (taskElement.parentElement !== correctContainer) {
                         correctContainer.appendChild(taskElement);
+                        updateOngoingTasksVisibility();
                     }
                 }
             };
