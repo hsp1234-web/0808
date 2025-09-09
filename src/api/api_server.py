@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import threading
+import re
 import asyncio
 import os
 import time
@@ -1292,6 +1293,54 @@ async def websocket_endpoint(websocket: WebSocket):
 async def health_check():
     """提供一個簡單的健康檢查端點。"""
     return {"status": "ok", "message": "API Server is running."}
+
+
+class UrlExtractionRequest(BaseModel):
+    text: str
+
+@app.post("/api/extract_urls", status_code=200)
+async def extract_urls_endpoint(payload: UrlExtractionRequest):
+    """
+    接收文字，提取其中的網址，並將其存入資料庫。
+    """
+    source_text = payload.text
+    if not source_text.strip():
+        raise HTTPException(status_code=400, detail="提供的文字不可為空。")
+
+    log.info(f"收到提取網址的請求，文字長度: {len(source_text)}")
+
+    try:
+        # 呼叫我們在步驟二建立的獨立工具腳本
+        tool_script_path = ROOT_DIR / "src" / "tools" / "url_extractor.py"
+        process = subprocess.run(
+            [sys.executable, str(tool_script_path), source_text],
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding='utf-8'
+        )
+
+        # 為了回傳提取到的數量，我們在這裡也計算一次
+        # (另一種做法是解析工具的日誌輸出，但直接計算更簡單)
+        url_pattern = re.compile(r'https?://\S+')
+        urls_found = url_pattern.findall(source_text)
+        count = len(urls_found)
+
+        log.info(f"url_extractor.py 腳本執行成功。 stdout: {process.stdout}")
+        return JSONResponse(
+            content={
+                "message": "網址提取與儲存成功。",
+                "urls_found_count": count
+            }
+        )
+
+    except subprocess.CalledProcessError as e:
+        log.error(f"執行 url_extractor.py 腳本時發生錯誤。返回碼: {e.returncode}")
+        log.error(f"Stderr: {e.stderr}")
+        raise HTTPException(status_code=500, detail=f"執行網址提取工具時失敗: {e.stderr}")
+    except Exception as e:
+        log.error(f"處理網址提取請求時發生未預期錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="伺服器發生內部錯誤。")
 
 
 class AppStatePayload(BaseModel):
