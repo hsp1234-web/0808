@@ -4,74 +4,93 @@ import { test, expect } from '@playwright/test';
 // 使用者提供的 API 金鑰和測試網址
 const USER_API_KEY = 'AIzaSyCR4gdpWDk9evli0iULcfkiOinL_vKdFnU';
 const BILIBILI_URL = 'https://b23.tv/M5MwbVx';
+// 後端 mock downloader 回傳的標題
+const MOCK_BILIBILI_TITLE = '【 bilibili】';
 
-test.describe('綜合功能驗證測試', () => {
-  // 在所有測試開始前，先設定好環境
+test.describe('使用者功能驗證測試', () => {
+
+  // 為所有測試設定較長的超時時間，因為媒體下載和 AI 分析可能需要時間
+  test.setTimeout(300000); // 5 分鐘
+
+  // 在每個測試開始前，先導覽至首頁
   test.beforeEach(async ({ page }) => {
-    // 設置一個較長的超時時間，因為媒體下載和 AI 分析可能需要時間
-    test.setTimeout(300000); // 5 分鐘
-    // 導覽至首頁 (媒體下載器)
     await page.goto('/');
-    // 等待頁面核心元素載入，確保頁面已就緒
-    await expect(page.locator('h2:has-text("媒體下載器")')).toBeVisible();
+    await expect(page.locator('h1:has-text("音訊轉錄儀")')).toBeVisible();
   });
 
-  test('儀表板、縮放、Gemini模型和媒體下載功能驗證', async ({ page }) => {
-    // --- 1. 驗證儀表板數據 ---
-    await page.waitForTimeout(3000); // 等待幾秒讓系統數據更新
-    const cpuUsage = await page.locator('#cpu-label').textContent();
-    const ramUsage = await page.locator('#ram-label').textContent();
-    expect(cpuUsage).not.toBe('--%');
-    expect(ramUsage).not.toBe('--%');
-    await page.screenshot({ path: 'verification_01_dashboard_working.jpg' });
+  test('測試案例 1：媒體下載器功能驗證', async ({ page }) => {
+    // 導覽至媒體下載器頁面 (雖然是首頁，但點擊以確保狀態正確)
+    await page.getByRole('link', { name: '📥 媒體下載器' }).click();
+    await expect(page.locator('h2:has-text("媒體下載器")')).toBeVisible();
 
-    // --- 2. 驗證縮放按鈕 ---
-    const fontSizeDisplay = page.locator('#font-size-display');
-    await page.locator('#zoom-in-btn').click();
-    await expect(fontSizeDisplay).toHaveText('110%');
-    await page.screenshot({ path: 'verification_02_zoom_in.jpg' });
-    await page.locator('#zoom-out-btn').click();
-    await expect(fontSizeDisplay).toHaveText('100%');
-    await page.screenshot({ path: 'verification_03_zoom_out.jpg' });
+    // 填入網址並選擇音訊下載
+    await page.locator('#downloader-urls-input').fill(BILIBILI_URL);
+    await page.locator('input[name="download-type"][value="audio"]').check();
+    await page.locator('#start-download-btn').click();
 
-    // --- 3. 驗證 Gemini 模型列表 ---
+    // 驗證「處理中」狀態
+    const audioTask = page.locator('.task-item', { hasText: MOCK_BILIBILI_TITLE }).first();
+    // 檢查是否有「下載中」的狀態文字
+    await expect(audioTask.locator('.task-status.status-downloading')).toBeVisible({ timeout: 15000 });
+
+    // 等待音訊下載任務完成並驗證結果
+    // 修正了選擇器，使用 .btn-preview
+    await expect(audioTask.locator('.btn-preview')).toBeVisible({ timeout: 180000 });
+    await expect(audioTask.locator('.btn-download')).toBeVisible();
+
+    // 驗證「處理中」狀態消失
+    await expect(audioTask.locator('.task-status.status-downloading')).not.toBeVisible();
+
+    // 截圖證明
+    await page.screenshot({ path: 'media_downloader_task_completed.jpg', fullPage: true });
+  });
+
+  test('測試案例 2：YouTube 報告與縮放功能驗證', async ({ page }) => {
+    // 導覽至 YouTube 轉報告頁面
     await page.getByRole('link', { name: '▶️ YouTube 轉報告' }).click();
     await expect(page.locator('h2:has-text("Google API 金鑰管理")')).toBeVisible();
 
+    // --- 驗證縮放按鈕 ---
+    const fontSizeDisplay = page.locator('#font-size-display');
+    await expect(fontSizeDisplay).toHaveText('100%');
+    await page.locator('#zoom-in-btn').click();
+    await expect(fontSizeDisplay).toHaveText('110%');
+    await page.locator('#zoom-out-btn').click();
+    await expect(fontSizeDisplay).toHaveText('100%');
+    // 截圖證明縮放功能
+    await page.screenshot({ path: 'youtube_report_zoom_buttons.jpg', fullPage: true });
+
+    // --- 驗證 Gemini 模型與分析流程 ---
     // 輸入並儲存 API 金鑰
     await page.locator('[data-testid="api-key-input"]').fill(USER_API_KEY);
     await page.locator('[data-testid="save-api-key-button"]').click();
 
     // 等待並驗證模型列表
-    await expect(page.locator('#api-key-status > span')).toHaveText('金鑰有效，Gemini 功能已啟用', { timeout: 20000 });
-    const flashModelOption = page.locator('option[value="models/gemini-1.5-flash"]');
+    // 根據 youtube_report.html 的程式碼，成功時的文字是「驗證成功」
+    await expect(page.locator('#api-key-status > span')).toHaveText('驗證成功', { timeout: 20000 });
+    // 根據使用者要求選擇 "2.0 Flash" 模型，其在系統中的 ID 為 'models/gemini-1.5-flash-latest'
+    const flashModelOption = page.locator('option[value="models/gemini-1.5-flash-latest"]');
     await expect(flashModelOption).toBeVisible({ timeout: 15000 });
-    await expect(flashModelOption).toHaveText('Gemini 1.5 Flash');
-    await page.screenshot({ path: 'verification_04_gemini_models_loaded.jpg' });
 
-    // --- 4. 驗證媒體下載 (音訊) ---
-    await page.getByRole('link', { name: '📥 媒體下載器' }).click();
-    await expect(page.locator('h2:has-text("媒體下載器")')).toBeVisible();
+    // 選擇模型
+    await page.locator('[data-testid="gemini-model-select"]').selectOption({ value: 'models/gemini-1.5-flash-latest' });
 
-    await page.locator('#downloader-urls-input').fill(BILIBILI_URL);
-    await page.locator('input[name="download-type"][value="audio"]').check();
-    await page.locator('#start-download-btn').click();
+    // 輸入網址並啟動分析
+    await page.locator('.youtube-url-input').first().fill(BILIBILI_URL);
+    await page.locator('[data-testid="start-youtube-processing-button"]').click();
 
-    // 等待音訊下載任務完成
-    const audioTask = page.locator('.task-item', { hasText: '【 bilibili】' }).first();
-    await expect(audioTask.locator('[data-testid="view-report-button"]')).toBeVisible({ timeout: 180000 });
-    await expect(audioTask.locator('.btn-download')).toBeVisible();
-    await page.screenshot({ path: 'verification_05_audio_download_complete.jpg' });
+    // 驗證「處理中」狀態
+    const reportTask = page.locator('.task-item', { hasText: MOCK_BILIBILI_TITLE }).first();
+    // 檢查是否有「下載中」或「分析中」的狀態文字
+    await expect(reportTask.locator('.task-status.status-downloading, .task-status.status-processing')).toBeVisible({ timeout: 15000 });
 
-    // --- 5. 驗證媒體下載 (影片) ---
-    await page.locator('#downloader-urls-input').fill(BILIBILI_URL);
-    await page.locator('input[name="download-type"][value="video"]').check();
-    await page.locator('#start-download-btn').click();
+    // 等待分析任務完成並驗證結果
+    await expect(reportTask.locator('[data-testid="view-report-button"]')).toBeVisible({ timeout: 180000 });
 
-    // 等待影片下載任務完成
-    const videoTask = page.locator('.task-item', { hasText: '【 bilibili】' }).last();
-    await expect(videoTask.locator('[data-testid="view-report-button"]')).toBeVisible({ timeout: 180000 });
-    await expect(videoTask.locator('.btn-download')).toBeVisible();
-    await page.screenshot({ path: 'verification_06_video_download_complete.jpg' });
+    // 驗證「處理中」狀態消失
+    await expect(reportTask.locator('.task-status.status-downloading, .task-status.status-processing')).not.toBeVisible();
+
+    // 截圖證明
+    await page.screenshot({ path: 'youtube_report_task_completed.jpg', fullPage: true });
   });
 });

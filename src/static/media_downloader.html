@@ -91,8 +91,6 @@
                         <label><input type="radio" name="download-type" value="audio" checked> 純音訊</label>
                         <label><input type="radio" name="download-type" value="video"> 影片</label>
                     </div>
-                    <button id="upload-cookies-btn" style="background-color: #6c757d;">上傳 cookies.txt</button>
-                    <input type="file" id="cookies-input" class="hidden" accept=".txt">
                 </div>
             </div>
         </div>
@@ -101,7 +99,6 @@
         <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <h2>📋 下載佇列與歷史紀錄</h2>
-                <button id="zip-download-btn" disabled style="background-color: var(--success-color);">打包下載選定項目 (.zip)</button>
             </div>
             <div id="downloader-tasks" class="task-list" style="margin-top: 16px;">
                 <p id="no-downloader-task-msg">暫無下載任務</p>
@@ -150,9 +147,6 @@
         const startDownloadBtn = document.getElementById('start-download-btn');
         const downloaderTasksContainer = document.getElementById('downloader-tasks');
         const noDownloaderTaskMsg = document.getElementById('no-downloader-task-msg');
-        const zipDownloadBtn = document.getElementById('zip-download-btn');
-        const uploadCookiesBtn = document.getElementById('upload-cookies-btn');
-        const cookiesInput = document.getElementById('cookies-input');
         const previewModal = document.getElementById('preview-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
         const modalTitle = document.getElementById('modal-title');
@@ -267,7 +261,6 @@
                 statusSpan.innerHTML = '';
                 const buttonGroup = createActionButtons(payload.task_id, payload.result);
                 statusSpan.appendChild(buttonGroup);
-                zipDownloadBtn.disabled = false;
             }
         };
 
@@ -320,35 +313,6 @@
 
             return actions;
         };
-
-        // --- ZIP & Cookies ---
-        zipDownloadBtn.addEventListener('click', () => {
-            logAction('click-zip-download');
-            const checkedBoxes = document.querySelectorAll('#downloader-tasks .task-checkbox:checked');
-            if (checkedBoxes.length === 0) {
-                showStatusMessage('請至少選擇一個要打包的項目', true);
-                return;
-            }
-            const taskIds = Array.from(checkedBoxes).map(cb => cb.value);
-            window.location.href = `/api/zip_download?task_ids=${taskIds.join(',')}`;
-        });
-
-        uploadCookiesBtn.addEventListener('click', () => cookiesInput.click());
-        cookiesInput.addEventListener('change', async (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-            logAction('upload-cookies-file');
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-                const response = await fetch('/api/upload_cookies', { method: 'POST', body: formData });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.detail || '上傳失敗');
-                showStatusMessage('Cookies 檔案上傳成功！');
-            } catch (error) {
-                showStatusMessage(`上傳失敗: ${error.message}`, true);
-            }
-        });
 
         // --- 預覽 Modal ---
         const openPreviewModal = (url, title, type, taskId) => {
