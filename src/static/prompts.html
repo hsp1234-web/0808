@@ -94,22 +94,18 @@
             resize: vertical;
         }
         .controls { text-align: right; margin-top: 24px; }
-        .status-message {
-            display: none;
-            padding: 12px;
+        button {
+            padding: 10px 20px;
+            border: none;
             border-radius: 8px;
-            margin-top: 16px;
-            text-align: center;
+            cursor: pointer;
+            background-color: var(--button-bg-color);
+            color: white;
             font-weight: 500;
+            transition: all 0.2s;
         }
-        .status-message.success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .status-message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
+        button:hover:not(:disabled) { background-color: var(--button-hover-bg-color); transform: translateY(-1px); }
+        button:disabled { background-color: var(--disabled-bg-color); cursor: not-allowed; transform: none; }
     </style>
 </head>
 <body>
@@ -124,6 +120,11 @@
                 <button id="zoom-in-btn" style="padding: 5px 10px;">+</button>
             </div>
         </header>
+
+        <!-- 全域狀態訊息區域 -->
+        <div id="status-message-area" class="card" style="display: none; padding: 12px; border-width: 2px;">
+            <div id="status-message-text" style="margin: 0; font-weight: 500; text-align: center; white-space: pre-wrap; word-wrap: break-word;"></div>
+        </div>
 
         <!-- MPA 導覽列 -->
         <div class="card">
@@ -143,39 +144,87 @@
                 <p>正在從伺服器載入提示詞...</p>
             </div>
             <div class="controls">
-                <button id="save-btn" disabled>儲存變更</button>
+                <button id="save-btn" data-testid="save-prompts-button" disabled>儲存變更</button>
             </div>
-            <div id="status-area" class="status-message"></div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- 全域元素 ---
+            // --- 全域狀態訊息處理 ---
+            const statusMessageArea = document.getElementById('status-message-area');
+            const statusMessageText = document.getElementById('status-message-text');
+
+            const translateErrorMessage = (message) => {
+                if (typeof message !== 'string') return '發生未知錯誤。';
+                // 未來可在此處擴充錯誤訊息翻譯
+                return message;
+            };
+
+            const showStatusMessage = (message, isError = false, duration = 5000) => {
+                if (!statusMessageArea || !statusMessageText) return;
+                const displayMessage = isError ? translateErrorMessage(message) : message;
+                statusMessageText.textContent = displayMessage;
+                statusMessageArea.style.display = 'block';
+                if (isError) {
+                    statusMessageArea.style.backgroundColor = '#f8d7da';
+                    statusMessageArea.style.borderColor = '#f5c6cb';
+                    statusMessageText.style.color = '#721c24';
+                } else {
+                    statusMessageArea.style.backgroundColor = '#d4edda';
+                    statusMessageArea.style.borderColor = '#c3e6cb';
+                    statusMessageText.style.color = '#155724';
+                }
+                if (duration > 0) {
+                    setTimeout(() => {
+                        // 確保只有當訊息未被更新時才隱藏
+                        if (statusMessageText.textContent === displayMessage) {
+                            statusMessageArea.style.display = 'none';
+                        }
+                    }, duration);
+                }
+            };
+
+            // --- DOM 元素宣告 ---
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
             const fontSizeDisplay = document.getElementById('font-size-display');
-            let currentFontSize = 100;
-
-            // --- 提示詞頁面專用元素 ---
             const promptsContainer = document.getElementById('prompts-container');
             const saveBtn = document.getElementById('save-btn');
-            const statusArea = document.getElementById('status-area');
+
+            // --- 全域狀態變數 ---
+            let currentFontSize = 100;
             let originalPrompts = {};
 
-            // --- 提示詞頁面專用函式 ---
+            // --- 核心應用邏輯 ---
+            const logAction = (action, value = null) => {
+                const message = value !== null ? `${action}: ${value}` : action;
+                console.log(`記錄操作: ${message}`);
+                fetch('/api/log/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: message })
+                }).catch(err => console.error('logAction failed:', err));
+            };
+
+            // --- 頁面專用函式 ---
             const fetchPrompts = async () => {
+                logAction('fetch-prompts-start');
                 try {
                     const response = await fetch('/api/prompts');
                     if (!response.ok) {
-                        throw new Error(`伺服器錯誤: ${response.statusText}`);
+                        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                        throw new Error(errorData.detail || `伺服器錯誤: ${response.status}`);
                     }
                     const prompts = await response.json();
                     originalPrompts = prompts;
                     renderPrompts(prompts);
                     saveBtn.disabled = false;
+                    logAction('fetch-prompts-success');
                 } catch (error) {
                     promptsContainer.innerHTML = `<p style="color: red;">載入提示詞失敗: ${error.message}</p>`;
+                    showStatusMessage(`載入提示詞失敗: ${error.message}`, true);
+                    logAction('fetch-prompts-error', error.message);
                 }
             };
 
@@ -203,16 +252,8 @@
                 }
             };
 
-            const showPromptStatusMessage = (message, isError = false) => {
-                statusArea.textContent = message;
-                statusArea.className = `status-message ${isError ? 'error' : 'success'}`;
-                statusArea.style.display = 'block';
-                setTimeout(() => {
-                    statusArea.style.display = 'none';
-                }, 5000);
-            };
-
-            saveBtn.addEventListener('click', async () => {
+            const savePrompts = async () => {
+                logAction('click-save-prompts');
                 saveBtn.disabled = true;
                 saveBtn.textContent = '儲存中...';
                 const newPrompts = {};
@@ -228,38 +269,50 @@
                     });
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.detail || '儲存失敗');
-                    showPromptStatusMessage(result.message || '儲存成功！');
+                    showStatusMessage(result.message || '儲存成功！');
                     originalPrompts = newPrompts;
+                    logAction('save-prompts-success');
                 } catch (error) {
-                    showPromptStatusMessage(`儲存失敗: ${error.message}`, true);
+                    showStatusMessage(`儲存失敗: ${error.message}`, true);
+                    logAction('save-prompts-error', error.message);
                 } finally {
                     saveBtn.disabled = false;
                     saveBtn.textContent = '儲存變更';
                 }
-            });
-
-            // --- 全域函式 (縮放) ---
-            const updateFontSize = () => {
-                document.body.style.fontSize = `${currentFontSize}%`;
-                fontSizeDisplay.textContent = `${currentFontSize}%`;
             };
 
-            zoomInBtn.addEventListener('click', () => {
-                if (currentFontSize < 150) {
-                    currentFontSize += 10;
-                    updateFontSize();
-                }
-            });
+            // --- 初始化 & 事件監聽 ---
+            const initializePage = () => {
+                // 縮放功能
+                const updateFontSize = () => {
+                    document.body.style.fontSize = `${currentFontSize}%`;
+                    fontSizeDisplay.textContent = `${currentFontSize}%`;
+                };
 
-            zoomOutBtn.addEventListener('click', () => {
-                 if (currentFontSize > 70) {
-                    currentFontSize -= 10;
-                    updateFontSize();
-                }
-            });
+                zoomInBtn.addEventListener('click', () => {
+                    logAction('click-zoom-in');
+                    if (currentFontSize < 150) {
+                        currentFontSize += 10;
+                        updateFontSize();
+                    }
+                });
 
-            // --- 初始化 ---
-            fetchPrompts();
+                zoomOutBtn.addEventListener('click', () => {
+                    logAction('click-zoom-out');
+                    if (currentFontSize > 70) {
+                        currentFontSize -= 10;
+                        updateFontSize();
+                    }
+                });
+
+                // 儲存按鈕
+                saveBtn.addEventListener('click', savePrompts);
+
+                // 初始載入
+                fetchPrompts();
+            };
+
+            initializePage();
         });
     </script>
 </body>
