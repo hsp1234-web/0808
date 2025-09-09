@@ -17,9 +17,12 @@ if not handler_log.handlers:
 DB_FILE = Path(__file__).parent / "tasks.db"
 
 class DatabaseLogHandler(logging.Handler):
-    def __init__(self, source: str):
+    # JULES'S FIX: Allow passing a db_path for testing purposes
+    def __init__(self, source: str, db_path: str = None):
         super().__init__()
         self.source = source
+        # JULES'S FIX: Use the provided db_path or the default
+        self.db_file = Path(db_path) if db_path else DB_FILE
         self.log_queue = Queue(-1)
 
         self.db_writer_thread = threading.Thread(
@@ -77,7 +80,8 @@ class DatabaseLogHandler(logging.Handler):
     def _get_db_connection_with_retry(self):
         for i in range(10):
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                # JULES'S FIX: Use the instance's db_file attribute
+                conn = sqlite3.connect(self.db_file, timeout=10)
                 conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute("PRAGMA synchronous=NORMAL;")
                 return conn

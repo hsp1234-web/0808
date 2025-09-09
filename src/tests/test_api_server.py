@@ -1,4 +1,10 @@
 import pytest
+import sys
+from pathlib import Path
+
+# HACK: 為了確保測試在任何環境下都能穩定執行，手動將 'src' 目錄加入系統路徑
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import requests
 import uvicorn
 import threading

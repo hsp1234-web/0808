@@ -237,3 +237,148 @@ def test_mock_youtube_downloader_script(tmp_path):
     content = output_path.read_text(encoding='utf-8')
     # JULES'S FIX: 使用 .strip() 來移除潛在的尾隨換行符，使斷言更可靠
     assert content.strip() == "這是一個模擬的音訊檔案。"
+
+
+# ==================================================================
+# ===== 新增針對 src/tools/downloader.py 模組的單元測試 =====
+# ==================================================================
+
+# 為了避免與上面的整合測試衝突，我們需要重新匯入新的 downloader 模組
+# 並且在測試中使用它
+from tools import downloader
+
+@pytest.fixture
+def mock_subprocess_run(mocker):
+    """模擬 subprocess.run 函式。"""
+    return mocker.patch('subprocess.run')
+
+@pytest.fixture
+def mock_path_exists(mocker):
+    """模擬 Path.exists() 方法。"""
+    return mocker.patch('pathlib.Path.exists', return_value=True)
+
+@pytest.mark.parametrize("download_type, expected_suffix", [("audio", ".mp3"), ("video", ".mp4")])
+def test_download_media_success(
+    mock_subprocess_run,
+    mock_path_exists,
+    tmp_path,
+    download_type,
+    expected_suffix
+):
+    """
+    測試 download_media 函式在成功情境下的行為 (音訊和影片)。
+    """
+    # --- 準備 ---
+    url = "http://fake.youtube.com/watch?v=123"
+    output_dir = tmp_path
+    mock_video_title = "測試標題"
+    expected_output_path = output_dir / f"{mock_video_title}{expected_suffix}"
+
+    # 設定模擬的 subprocess.run 的回傳值
+    mock_result = MagicMock()
+    mock_result.stdout = json.dumps({
+        "_filename": str(expected_output_path),
+        "title": mock_video_title,
+        "duration": 120
+    })
+    mock_subprocess_run.return_value = mock_result
+
+    # --- 執行 ---
+    result = downloader.download_media(url, output_dir, download_type=download_type)
+
+    # --- 斷言 ---
+    assert result["video_title"] == mock_video_title
+    assert Path(result["output_path"]).name == expected_output_path.name
+    mock_path_exists.assert_called_once()
+
+
+def test_download_media_subprocess_error(mock_subprocess_run, tmp_path):
+    """
+    測試當 yt-dlp 執行失敗 (拋出 CalledProcessError) 時，download_media 是否能正確處理。
+    """
+    # --- 準備 ---
+    url = "http://fake.youtube.com/watch?v=invalid"
+    output_dir = tmp_path
+    # 模擬 subprocess.run 拋出異常
+    mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+        returncode=1,
+        cmd="yt-dlp",
+        stderr="This video is unavailable."
+    )
+
+    # --- 執行 & 斷言 ---
+    with pytest.raises(downloader.DownloaderException) as excinfo:
+        downloader.download_media(url, output_dir)
+
+    assert "This video is unavailable." in str(excinfo.value)
+
+def test_download_media_file_not_found_after_download(
+    mock_subprocess_run,
+    mocker, # 需要 mocker 來 patch Path.exists
+    tmp_path
+):
+    """
+    測試 yt-dlp 成功執行，但最終檔案在檔案系統中找不到的情境。
+    """
+    # --- 準備 ---
+    url = "http://fake.youtube.com/watch?v=123"
+    output_dir = tmp_path
+    # 讓 Path.exists() 永遠回傳 False
+    mocker.patch('pathlib.Path.exists', return_value=False)
+    mocker.patch('pathlib.Path.glob', return_value=[]) # 確保 glob 也找不到檔案
+
+    mock_result = MagicMock()
+    mock_result.stdout = json.dumps({
+        "_filename": str(tmp_path / "some_file.mp3"),
+        "title": "Some Title"
+    })
+    mock_subprocess_run.return_value = mock_result
+
+    # --- 執行 & 斷言 ---
+    with pytest.raises(downloader.DownloaderException, match="下載後找不到對應的檔案"):
+        downloader.download_media(url, output_dir)
+
+
+def test_download_media_command_generation(mock_subprocess_run, mock_path_exists, tmp_path):
+    """
+    測試 download_media 是否能根據參數產生正確的 yt-dlp 指令。
+    """
+    # --- 準備 ---
+    url = "http://fake.youtube.com/watch?v=custom"
+    output_dir = tmp_path
+    custom_filename = "我的自訂影片"
+    cookies_file = tmp_path / "cookies.txt"
+    cookies_file.touch()
+
+    # JULES'S FIX: 為了防止後續的 json.loads 失敗，必須提供一個模擬的回傳值。
+    mock_result = MagicMock()
+    mock_result.stdout = json.dumps({
+        "_filename": str(tmp_path / "ignored.mp4"),
+        "title": "ignored title",
+        "duration": 0
+    })
+    mock_subprocess_run.return_value = mock_result
+
+    # --- 執行 ---
+    downloader.download_media(
+        url,
+        output_dir,
+        download_type="video",
+        custom_filename=custom_filename,
+        cookies_file=str(cookies_file)
+    )
+
+    # --- 斷言 ---
+    # 獲取傳遞給 subprocess.run 的參數
+    called_args, _ = mock_subprocess_run.call_args
+    command_list = called_args[0]
+
+    # 檢查指令是否包含所有預期的部分
+    assert "yt-dlp" in command_list
+    assert "--merge-output-format" in command_list
+    assert "mp4" in command_list
+    assert "--cookies" in command_list
+    assert str(cookies_file) in command_list
+    # 檢查輸出模板是否使用了自訂檔名
+    output_template_arg_index = command_list.index("-o") + 1
+    assert custom_filename in command_list[output_template_arg_index]

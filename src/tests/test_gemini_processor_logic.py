@@ -55,7 +55,7 @@ def test_process_audio_file_handles_title_correctly(mock_file_system, mock_succe
     # Act
     gemini_processor.process_audio_file(
         audio_path=test_audio_path,
-        model="gemini-pro-mock",
+        model_name="gemini-pro-mock",
         video_title=expected_title,
         output_dir=output_dir,
         tasks="summary,transcript",
@@ -66,8 +66,9 @@ def test_process_audio_file_handles_title_correctly(mock_file_system, mock_succe
     # Assert that our HTML generation function was called with the correct title
     mock_get_html.assert_called_once()
     args, kwargs = mock_get_html.call_args
-    # `video_title` is the 5th positional argument (index 4)
-    passed_title = args[4]
+    # JULES'S FIX: The signature is (summary, transcript, model, video_title).
+    # `video_title` is the 4th positional argument, which is at index 3.
+    passed_title = args[3]
     assert passed_title == expected_title
 
 def test_process_audio_file_handles_timeout(mock_file_system, tmp_path, mocker):
@@ -88,7 +89,7 @@ def test_process_audio_file_handles_timeout(mock_file_system, tmp_path, mocker):
     with pytest.raises(Exception, match="Simulated API Timeout"):
         gemini_processor.process_audio_file(
             audio_path=test_audio_path,
-            model="gemini-pro-mock",
+            model_name="gemini-pro-mock",
             video_title="A title",
             output_dir=output_dir,
             tasks="summary,transcript",
