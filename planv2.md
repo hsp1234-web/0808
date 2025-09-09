@@ -118,3 +118,19 @@
 3.  在 `main.html` 中新增一個指向 `/static/document_analyzer.html` 的按鈕。
 
 這個計畫旨在提供一個清晰、低風險且可持續擴充的開發路徑，完全符合使用者的最終要求。
+
+---
+
+## 5. 實施狀態 (Implementation Status)
+
+**驗證時間**: 2025-09-09
+**驗證者**: Jules (AI 代理)
+
+**驗證結論**:
+根據對 `src/static/main.html`, `src/static/mp3.html` 和 `src/api/api_server.py` 的程式碼審查，本計畫中描述的「主頁-功能頁」基礎導航架構已被確認**完全實作**。
+
+*   **步驟一 (建立主頁)**: `main.html` 已存在且功能正確。
+*   **步驟二 (修改 mp3.html)**: `mp3.html` 中已包含返回主頁的連結。
+*   **步驟三 (更新路由)**: `api_server.py` 已將根路由 (`/`) 指向 `main.html`。
+
+此基礎架構已生效，後續開發可基於此進行。
