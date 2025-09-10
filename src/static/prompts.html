@@ -102,7 +102,8 @@
 </head>
 <body>
     <div class="container">
-        <a href="/static/mp3.html" class="back-link">&larr; 返回主操作介面</a>
+        <a href="/page4" class="back-link">&larr; 返回 AI 分析頁面</a>
+        <p style="margin-top: 1em;"><a href="/history">查看歷史報告</a></p>
         <h1>提示詞管理</h1>
         <p>在這裡，您可以檢視和修改系統用於與 AI 溝通的各種提示詞 (Prompts)。修改後請務必儲存。</p>
 
@@ -125,7 +126,7 @@
 
             const fetchPrompts = async () => {
                 try {
-                    const response = await fetch('/api/prompts');
+                    const response = await fetch('/api/analyzer/prompts');
                     if (!response.ok) {
                         throw new Error(`伺服器錯誤: ${response.statusText}`);
                     }
@@ -182,7 +183,7 @@
                 });
 
                 try {
-                    const response = await fetch('/api/prompts', {
+                    const response = await fetch('/api/analyzer/prompts', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

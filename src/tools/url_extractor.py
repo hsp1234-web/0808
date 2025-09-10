@@ -70,7 +70,7 @@ def save_urls_to_db(urls: list[str], source_text: str):
             data_to_insert = [(url, source_text) for url in urls]
             # 使用 executemany 來高效地插入多筆記錄
             cursor.executemany(
-                "INSERT INTO extracted_urls (url, source_text) VALUES (?, ?)",
+                "INSERT INTO extracted_urls (url, source_text, status) VALUES (?, ?, 'pending')",
                 data_to_insert
             )
         log.info(f"成功將 {len(urls)} 個網址儲存到資料庫。")

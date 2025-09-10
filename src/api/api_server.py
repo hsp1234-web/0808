@@ -127,18 +127,34 @@ app.add_middleware(
     allow_headers=["*"],  # 允許所有標頭
 )
 
+# --- 整合模組化路由 ---
+from api.routes import ui, page1_ingestion, page2_downloader, page3_processor, page4_analyzer, page5_backup
+
+# UI 路由 (提供 HTML 頁面)
+app.include_router(ui.router, tags=["UI"])
+
+# API 路由 (提供資料介面)
+app.include_router(page1_ingestion.router, prefix="/api/ingestion", tags=["API: 網址提取"])
+app.include_router(page2_downloader.router, prefix="/api/downloader", tags=["API: 批次下載"])
+app.include_router(page3_processor.router, prefix="/api/processor", tags=["API: 檔案處理"])
+app.include_router(page4_analyzer.router, prefix="/api/analyzer", tags=["API: AI 分析與提示詞"])
+app.include_router(page5_backup.router, prefix="/api/backup", tags=["API: 備份管理"])
+
 # --- 路徑設定 ---
 # 新的上傳檔案儲存目錄
 UPLOADS_DIR = ROOT_DIR / "uploads"
+REPORTS_DIR = ROOT_DIR / "reports"
 # 靜態檔案目錄
 STATIC_DIR = ROOT_DIR / "src" / "static"
 
 # 確保目錄存在
 UPLOADS_DIR.mkdir(exist_ok=True)
+REPORTS_DIR.mkdir(exist_ok=True)
 if not STATIC_DIR.exists():
     log.warning(f"靜態檔案目錄 {STATIC_DIR} 不存在，前端頁面可能無法載入。")
 else:
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
     # JULES'S FIX (2025-08-13): 移除有問題的 StaticFiles 掛載，改用自訂端點
 
 # JULES'S FIX (2025-08-13): 根據計畫，新增此端點來處理複雜檔名
@@ -568,42 +584,6 @@ async def rename_task_file(task_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {e}")
 
 
-# --- 提示詞管理 API ---
-PROMPTS_FILE_PATH = ROOT_DIR / "src" / "prompts" / "default_prompts.json"
-
-@app.get("/api/prompts")
-async def get_prompts():
-    """讀取並回傳 prompts/default_prompts.json 的內容。"""
-    if not PROMPTS_FILE_PATH.is_file():
-        log.error(f"提示詞檔案遺失: {PROMPTS_FILE_PATH}")
-        raise HTTPException(status_code=404, detail="提示詞設定檔 (default_prompts.json) 找不到。")
-    try:
-        with open(PROMPTS_FILE_PATH, 'r', encoding='utf-8') as f:
-            prompts = json.load(f)
-        return JSONResponse(content=prompts)
-    except Exception as e:
-        log.error(f"讀取或解析提示詞檔案時發生錯誤: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="無法讀取或解析提示詞檔案。")
-
-@app.post("/api/prompts")
-async def save_prompts(request: Request):
-    """接收前端傳來的 JSON 並儲存至 prompts/default_prompts.json。"""
-    try:
-        new_prompts = await request.json()
-        # 進行基本的驗證，確保它是一個字典
-        if not isinstance(new_prompts, dict):
-            raise HTTPException(status_code=400, detail="無效的資料格式，應為 JSON 物件。")
-
-        with open(PROMPTS_FILE_PATH, 'w', encoding='utf-8') as f:
-            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
-
-        log.info(f"✅ 提示詞已成功儲存至: {PROMPTS_FILE_PATH}")
-        return {"status": "success", "message": "提示詞已成功更新。"}
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="請求內容不是有效的 JSON 格式。")
-    except Exception as e:
-        log.error(f"儲存提示詞檔案時發生錯誤: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"儲存提示詞檔案時發生伺服器內部錯誤: {e}")
 
 
 @app.post("/api/upload_cookies", status_code=200)
@@ -1295,52 +1275,6 @@ async def health_check():
     return {"status": "ok", "message": "API Server is running."}
 
 
-class UrlExtractionRequest(BaseModel):
-    text: str
-
-@app.post("/api/extract_urls", status_code=200)
-async def extract_urls_endpoint(payload: UrlExtractionRequest):
-    """
-    接收文字，提取其中的網址，並將其存入資料庫。
-    """
-    source_text = payload.text
-    if not source_text.strip():
-        raise HTTPException(status_code=400, detail="提供的文字不可為空。")
-
-    log.info(f"收到提取網址的請求，文字長度: {len(source_text)}")
-
-    try:
-        # 呼叫我們在步驟二建立的獨立工具腳本
-        tool_script_path = ROOT_DIR / "src" / "tools" / "url_extractor.py"
-        process = subprocess.run(
-            [sys.executable, str(tool_script_path), source_text],
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding='utf-8'
-        )
-
-        # 為了回傳提取到的數量，我們在這裡也計算一次
-        # (另一種做法是解析工具的日誌輸出，但直接計算更簡單)
-        url_pattern = re.compile(r'https?://\S+')
-        urls_found = url_pattern.findall(source_text)
-        count = len(urls_found)
-
-        log.info(f"url_extractor.py 腳本執行成功。 stdout: {process.stdout}")
-        return JSONResponse(
-            content={
-                "message": "網址提取與儲存成功。",
-                "urls_found_count": count
-            }
-        )
-
-    except subprocess.CalledProcessError as e:
-        log.error(f"執行 url_extractor.py 腳本時發生錯誤。返回碼: {e.returncode}")
-        log.error(f"Stderr: {e.stderr}")
-        raise HTTPException(status_code=500, detail=f"執行網址提取工具時失敗: {e.stderr}")
-    except Exception as e:
-        log.error(f"處理網址提取請求時發生未預期錯誤: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="伺服器發生內部錯誤。")
 
 
 class AppStatePayload(BaseModel):

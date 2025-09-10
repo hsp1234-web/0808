@@ -117,10 +117,47 @@ def initialize_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT NOT NULL,
                 source_text TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'pending',
+                status_message TEXT,
+                local_path TEXT,
+                file_hash TEXT,
+                extracted_image_paths TEXT
             )
             ''')
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_url ON extracted_urls (url)")
+
+            # --- 新增 AI 分析報告歷史紀錄資料表 ---
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_url_id INTEGER,
+                prompt_key TEXT,
+                report_path TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (source_url_id) REFERENCES extracted_urls (id)
+            )
+            ''')
+            # --- 結束 ---
+
+            # --- 為 extracted_urls 進行簡易遷移，新增狀態相關欄位 ---
+            url_migrations = {
+                "status": "TEXT DEFAULT 'pending'",
+                "status_message": "TEXT",
+                "local_path": "TEXT",
+                "file_hash": "TEXT",
+                "extracted_image_paths": "TEXT"
+            }
+            for col, col_type in url_migrations.items():
+                try:
+                    cursor.execute(f"ALTER TABLE extracted_urls ADD COLUMN {col} {col_type}")
+                    log.info(f"欄位 '{col}' 已成功新增至 'extracted_urls' 資料表。")
+                except sqlite3.OperationalError as e:
+                    # 如果欄位已存在，忽略此錯誤，繼續執行
+                    if "duplicate column name" in str(e):
+                        pass
+                    else:
+                        raise # 對於其他錯誤，則重新引發
             # --- 結束 ---
 
         log.info("✅ 資料庫初始化完成。`tasks`, `system_logs`, `app_state`, `extracted_urls` 資料表已存在。")
